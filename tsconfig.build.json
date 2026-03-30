@@ -1,0 +1,21 @@
+{
+    "extends": "./tsconfig.json",
+    "compilerOptions": {
+        "outDir": "dist",
+        "rootDir": ".",
+        "declaration": true,
+        "declarationMap": true,
+        "sourceMap": true,
+        "removeComments": false
+    },
+    "include": [
+        "src/**/*",
+        "cli/**/*"
+    ],
+    "exclude": [
+        "node_modules",
+        "dist",
+        "examples",
+        "cli/templates"
+    ]
+}

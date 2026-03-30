@@ -1,0 +1,64 @@
+{
+    "name": "nova-http",
+    "version": "0.1.0",
+    "description": "零依赖、高性能、全链路可控的 Node.js HTTP 框架，基于 net 模块手写 HTTP/1.1 解析器",
+    "main": "dist/src/index.js",
+    "types": "dist/src/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/src/index.d.ts",
+            "require": "./dist/src/index.js",
+            "default": "./dist/src/index.js"
+        },
+        "./package.json": "./package.json"
+    },
+    "bin": {
+        "nova-http": "dist/cli/nova.js",
+        "create-nova-http": "dist/cli/create-nova.js"
+    },
+    "engines": {
+        "node": ">=18.0.0"
+    },
+    "files": [
+        "dist",
+        "LICENSE",
+        "README.md"
+    ],
+    "keywords": [
+        "http",
+        "framework",
+        "server",
+        "middleware",
+        "router",
+        "zero-dependency",
+        "net",
+        "typescript"
+    ],
+    "author": "",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/nova-http/nova.git"
+    },
+    "bugs": {
+        "url": "https://github.com/nova-http/nova/issues"
+    },
+    "homepage": "https://github.com/nova-http/nova#readme",
+    "scripts": {
+        "build": "tsc -p tsconfig.build.json",
+        "postbuild": "node -e \"const fs=require('fs');fs.cpSync('cli/templates','dist/cli/templates',{recursive:true})\"",
+        "build:watch": "tsc -p tsconfig.build.json --watch",
+        "dev": "ts-node src/index.ts",
+        "typecheck": "tsc --noEmit",
+        "cli": "ts-node cli/nova.ts",
+        "cli:init": "ts-node cli/create-nova.ts",
+        "nova-http": "node dist/cli/nova.js",
+        "create:nova-http": "node dist/cli/create-nova.js",
+        "verify:create": "node scripts/verify-create.js",
+        "prepublishOnly": "npm run build"
+    },
+    "devDependencies": {
+        "typescript": "^5.4.0",
+        "@types/node": "^20.0.0"
+    }
+}
