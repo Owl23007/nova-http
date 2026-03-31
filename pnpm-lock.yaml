@@ -11,9 +11,6 @@ importers:
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.37
-      llhttp-wasm:
-        specifier: ^1.0.3
-        version: 1.0.3(typescript@5.9.3)
       typescript:
         specifier: ^5.4.0
         version: 5.9.3
@@ -22,11 +19,6 @@ packages:
 
   '@types/node@20.19.37':
     resolution: {integrity: sha512-8kzdPJ3FsNsVIurqBs7oodNnCEVbni9yUEkaHbgptDACOPW04jimGagZ51E6+lXUwJjgnBw+hyko/lkFWCldqw==}
-
-  llhttp-wasm@1.0.3:
-    resolution: {integrity: sha512-xCYrEdPRjOSEQJUFrXD/7ajc3p1zF5GpJP6LYwwqTGd4u2YE/M9zi4i6nNcYFaTdKSov0nmYT4bkS/N2MR2X8A==}
-    peerDependencies:
-      typescript: ^5.0.0
 
   typescript@5.9.3:
     resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
@@ -41,10 +33,6 @@ snapshots:
   '@types/node@20.19.37':
     dependencies:
       undici-types: 6.21.0
-
-  llhttp-wasm@1.0.3(typescript@5.9.3):
-    dependencies:
-      typescript: 5.9.3
 
   typescript@5.9.3: {}
 

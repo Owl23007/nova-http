@@ -2,4 +2,4 @@
 
 import { runCli } from './shared';
 
-runCli(process.argv.slice(2), 'command');
+void runCli(process.argv.slice(2), 'command');

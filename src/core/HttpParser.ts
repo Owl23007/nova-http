@@ -5,7 +5,7 @@
  *   IDLE → REQUEST_LINE → HEADERS → BODY_DETECT →
  *   BODY_FIXED → BODY_CHUNKED → CHUNK_SIZE → CHUNK_DATA → DONE
  *
- * 安全防护（内置）：
+ * 安全防护：
  *   - CL + TE 同时存在 → ParseError.CONFLICTING_HEADERS (400)
  *   - Header 行超过 MAX_HEADER_LINE_LENGTH (8192) → ParseError.HEADER_TOO_LONG (431)
  *   - Header 数量超过 MAX_HEADERS_COUNT (200) → ParseError.TOO_MANY_HEADERS (431)

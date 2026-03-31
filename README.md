@@ -369,10 +369,13 @@ npx nova-http create my-app
 # 创建完整 API 项目
 npx nova-http create my-api --template api
 
+# 创建 JavaScript 项目
+npx nova-http create my-app --lang js
+
 # 强制覆盖已存在目录
 npx nova-http create my-app --force
 
-# initializer 入口（为未来 npm create 接入做预演）
+# initializer 入口
 npx create-nova-http my-app
 ```
 
