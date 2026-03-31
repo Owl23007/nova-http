@@ -4,6 +4,9 @@
         "module": "CommonJS",
         "moduleResolution": "node",
         "baseUrl": ".",
+        "types": [
+            "node"
+        ],
         "paths": {
             "nova-http": [
                 "./src/index.ts"

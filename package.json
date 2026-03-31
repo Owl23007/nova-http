@@ -46,12 +46,9 @@
         "build": "tsc -p tsconfig.build.json",
         "postbuild": "node -e \"const fs=require('fs');fs.cpSync('cli/templates','dist/cli/templates',{recursive:true})\"",
         "build:watch": "tsc -p tsconfig.build.json --watch",
-        "dev": "ts-node src/index.ts",
         "typecheck": "tsc --noEmit",
         "cli": "ts-node cli/nova.ts",
         "cli:init": "ts-node cli/create-nova.ts",
-        "nova-http": "node dist/cli/nova.js",
-        "create:nova-http": "node dist/cli/create-nova.js",
         "bench": "node scripts/benchmark/benchmark.js",
         "bench:server": "node scripts/benchmark/benchmark-server.js",
         "bench:compare": "node scripts/benchmark/benchmark-compare.js",
@@ -60,7 +57,8 @@
         "bench:parser:native": "node scripts/benchmark/benchmark-parser-vs-node-native.js"
     },
     "devDependencies": {
-        "@types/node": "^20.0.0",
-        "typescript": "^5.4.0"
+        "@types/node": "^25.5.0",
+        "ts-node": "^10.9.2",
+        "typescript": "^6.0.2"
     }
 }

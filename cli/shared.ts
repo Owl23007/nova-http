@@ -270,9 +270,32 @@ async function runInteractive(mode: InvocationMode): Promise<CliOptions> {
     console.log('');
     printInteractiveSummary({ name, template, lang, force }, mode);
     return { name, template, lang, force };
+  } catch (error) {
+    if (isAbortError(error)) {
+      handleInteractiveAbort();
+    }
+    throw error;
   } finally {
     rl.close();
   }
+}
+
+function isAbortError(error: unknown): error is Error & { code?: string } {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const code = typeof error === 'object' && error !== null && 'code' in error
+    ? error.code
+    : undefined;
+
+  return error.name === 'AbortError' || code === 'ABORT_ERR';
+}
+
+function handleInteractiveAbort(): never {
+  console.log('');
+  log.warn('已取消创建');
+  process.exit();
 }
 
 async function askProjectName(rl: readline.Interface): Promise<string> {
