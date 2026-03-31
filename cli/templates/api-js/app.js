@@ -1,4 +1,6 @@
 const { bodyParser, createApp, createRequestTimer } = require('nova-http');
+const fs = require('fs');
+const path = require('path');
 const { usersRouter } = require('./routes/users');
 const { healthRouter } = require('./routes/health');
 const { authMiddleware } = require('./middlewares/auth');
@@ -8,6 +10,32 @@ const app = createApp({
   maxBodySize: 1 * 1024 * 1024,
   keepAliveTimeout: 65_000,
 });
+
+function readAppVersion() {
+  const candidates = [
+    path.resolve(__dirname, 'package.json'),
+    path.resolve(__dirname, '..', 'package.json'),
+  ];
+
+  for (const packageJsonPath of candidates) {
+    if (!fs.existsSync(packageJsonPath)) {
+      continue;
+    }
+
+    try {
+      const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+      if (packageJson.version) {
+        return packageJson.version;
+      }
+    } catch {
+      // Ignore unreadable package.json and keep searching.
+    }
+  }
+
+  return '{{projectVersion}}';
+}
+
+const APP_VERSION = readAppVersion();
 
 const timer = createRequestTimer();
 app.addHook('onRequest', timer.onRequest);
@@ -38,7 +66,7 @@ app.use('/health', healthRouter);
 app.get('/', (_req, res) => {
   res.json({
     name: '{{name}}',
-    version: '0.1.0',
+    version: APP_VERSION,
     status: 'running',
     docs: '/api/users （需要 Authorization 头）',
   });
@@ -54,4 +82,3 @@ app.use((err, _req, res, _next) => {
 
 const PORT = Number(process.env.PORT ?? 3000);
 app.listen(PORT, '0.0.0.0');
-

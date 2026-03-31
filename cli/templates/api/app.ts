@@ -6,6 +6,8 @@ import {
   type NovaRequest,
   type NovaResponse,
 } from 'nova-http';
+import * as fs from 'fs';
+import * as path from 'path';
 import { usersRouter } from './routes/users';
 import { healthRouter } from './routes/health';
 import { authMiddleware } from './middlewares/auth';
@@ -15,6 +17,32 @@ const app = createApp({
   maxBodySize: 1 * 1024 * 1024, // 1 MB
   keepAliveTimeout: 65_000,
 });
+
+function readAppVersion(): string {
+  const candidates = [
+    path.resolve(__dirname, 'package.json'),
+    path.resolve(__dirname, '..', 'package.json'),
+  ];
+
+  for (const packageJsonPath of candidates) {
+    if (!fs.existsSync(packageJsonPath)) {
+      continue;
+    }
+
+    try {
+      const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')) as { version?: string };
+      if (packageJson.version) {
+        return packageJson.version;
+      }
+    } catch {
+      // Ignore unreadable package.json and keep searching.
+    }
+  }
+
+  return '{{projectVersion}}';
+}
+
+const APP_VERSION = readAppVersion();
 
 // 全链路钩子
 const timer = createRequestTimer();
@@ -48,7 +76,7 @@ app.use('/health', healthRouter);
 app.get('/', (_req: NovaRequest, res: NovaResponse) => {
   res.json({
     name: '{{name}}',
-    version: '0.1.0',
+    version: APP_VERSION,
     status: 'running',
     docs: '/api/users （需要 Authorization 头）',
   });

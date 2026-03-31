@@ -1,6 +1,6 @@
 {
   "name": "{{name}}",
-  "version": "0.1.0",
+  "version": "{{projectVersion}}",
   "private": true,
   "description": "基于 Nova 框架的 Node.js 应用",
   "scripts": {
@@ -8,10 +8,9 @@
     "start": "node app.js"
   },
   "dependencies": {
-    "nova-http": "^0.1.0"
+    "nova-http": "{{frameworkVersionRange}}"
   },
   "engines": {
     "node": ">=18.0.0"
   }
 }
-

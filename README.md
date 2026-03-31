@@ -72,28 +72,15 @@ app.listen(3000, '0.0.0.0', () => {
 **依赖要求：**
 
 - Node.js >= 18.0.0
-- TypeScript >= 5.0（仅开发时）
+- TypeScript >= 5.0（dev）
 
 ```bash
 # npm
 npm install nova-http
 
-# 本地开发（克隆仓库后）
+# 本地开发
 npm install
 npm run build
-```
-
-**`package.json` 推荐配置：**
-
-```json
-{
-  "dependencies": { "nova-http": "^0.1.0" },
-  "devDependencies": {
-    "typescript": "^5.4.0",
-    "@types/node": "^20.0.0",
-    "ts-node": "^10.9.0"
-  }
-}
 ```
 
 ---

@@ -2,7 +2,38 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as readline from 'readline/promises';
 
-const VERSION = '0.1.0';
+interface PackageMeta {
+  name?: string;
+  version?: string;
+}
+
+function readPackageMeta(startDir: string): PackageMeta {
+  let currentDir = startDir;
+
+  while (true) {
+    const packageJsonPath = path.join(currentDir, 'package.json');
+    if (fs.existsSync(packageJsonPath)) {
+      try {
+        return JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')) as PackageMeta;
+      } catch {
+        // Ignore invalid package.json files outside the current package.
+      }
+    }
+
+    const parentDir = path.dirname(currentDir);
+    if (parentDir === currentDir) {
+      break;
+    }
+    currentDir = parentDir;
+  }
+
+  return {};
+}
+
+const PACKAGE_META = readPackageMeta(__dirname);
+const VERSION = PACKAGE_META.version ?? '0.1.0';
+const FRAMEWORK_VERSION_RANGE = VERSION === '0.1.0' ? '^0.1.0' : `^${VERSION}`;
+const DEFAULT_PROJECT_VERSION = '0.1.0';
 
 const colors = {
   reset: '\x1b[0m',
@@ -360,7 +391,11 @@ function createProject(
   fs.mkdirSync(targetDir, { recursive: true });
 
   try {
-    copyTemplate(templateDir, targetDir, { name });
+    copyTemplate(templateDir, targetDir, {
+      name,
+      frameworkVersionRange: FRAMEWORK_VERSION_RANGE,
+      projectVersion: DEFAULT_PROJECT_VERSION,
+    });
   } catch (err) {
     log.error(`复制模板时出错: ${(err as Error).message}`);
     process.exit(1);
@@ -394,6 +429,8 @@ function createProject(
 
 interface TemplateVars {
   name: string;
+  frameworkVersionRange: string;
+  projectVersion: string;
 }
 
 function copyTemplate(src: string, dest: string, vars: TemplateVars): void {
@@ -416,6 +453,8 @@ function copyTemplate(src: string, dest: string, vars: TemplateVars): void {
       if (textExtensions.has(path.extname(entry.name).toLowerCase())) {
         let content = fs.readFileSync(srcPath, 'utf8');
         content = content.replace(/\{\{name\}\}/g, vars.name);
+        content = content.replace(/\{\{frameworkVersionRange\}\}/g, vars.frameworkVersionRange);
+        content = content.replace(/\{\{projectVersion\}\}/g, vars.projectVersion);
         fs.writeFileSync(destPath, content, 'utf8');
       } else {
         fs.copyFileSync(srcPath, destPath);
