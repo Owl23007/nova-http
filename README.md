@@ -1,6 +1,6 @@
 # Nova
 
-> 零依赖、基于 `net` 模块手写 HTTP/1.1 解析的高性能 Node.js Web 框架。  
+> 基于 `net` 模块的高性能轻量 Node.js Web 框架。  
 > 全链路可控 · TypeScript 原生 · Express 风格 API
 
 ---
@@ -532,7 +532,7 @@ export function rateLimiter(maxRpm: number): Middleware {
 }
 ```
 
-### 插件模式（钩子组合）
+### 插件模式
 
 ```typescript
 import type { Nova } from 'nova-http';
@@ -569,4 +569,4 @@ app.use('/api/users', usersApp);
 
 ## 许可证
 
-MIT © Nova Contributors
+MIT © Owl23007

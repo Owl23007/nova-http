@@ -2,22 +2,22 @@
  * Nova HTTP 框架主入口
  *
  * 导出所有公共 API：
- *   - createApp()         创建应用实例（推荐方式）
- *   - Nova                应用类（用于继承或 instanceof 检查）
- *   - bodyParser()        请求体解析中间件
- *   - staticFiles()       静态文件服务中间件
+ *   - createApp()          创建应用实例
+ *   - Nova                 应用类
+ *   - bodyParser()         请求体解析中间件
+ *   - staticFiles()        静态文件服务中间件
  *   - createRequestTimer() 请求计时钩子工具
  *
- * 类型导出（TypeScript 用户）：
- *   - NovaConfig          配置接口
- *   - NovaRequest         请求对象类型
- *   - NovaResponse        响应对象类型
+ * 类型导出：
+ *   - NovaConfig           配置接口
+ *   - NovaRequest          请求对象类型
+ *   - NovaResponse         响应对象类型
  *   - Middleware           中间件函数类型
- *   - ErrorMiddleware     错误处理中间件类型
+ *   - ErrorMiddleware      错误处理中间件类型
  *   - NextFunction         next 函数类型
  *   - Handler              路由处理函数类型
  *   - HookName             钩子名称联合类型
- *   - HookHandler<K>      钩子处理函数类型
+ *   - HookHandler<K>       钩子处理函数类型
  *   - 各钩子 Context 类型
  */
 

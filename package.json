@@ -52,6 +52,10 @@
         "cli:init": "ts-node cli/create-nova.ts",
         "nova-http": "node dist/cli/nova.js",
         "create:nova-http": "node dist/cli/create-nova.js",
+        "bench": "node scripts/benchmark/benchmark.js",
+        "bench:server": "node scripts/benchmark/benchmark-server.js",
+        "bench:compare": "node scripts/benchmark/benchmark-compare.js",
+        "bench:compare:extended": "node scripts/benchmark/benchmark-compare-extended.js",
         "bench:parser": "node scripts/benchmark/benchmark-parser-vs-llhttp.js",
         "bench:parser:native": "node scripts/benchmark/benchmark-parser-vs-node-native.js"
     },

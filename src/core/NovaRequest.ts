@@ -15,7 +15,7 @@ import type { Socket } from 'net';
 import type { ParsedRequest } from './HttpParser';
 
 export class NovaRequest {
-  /** HTTP 方法（大写） */
+  /** HTTP 方法 */
   readonly method: string;
   /** 请求路径（含 query string） */
   readonly path: string;
@@ -36,11 +36,9 @@ export class NovaRequest {
   params: Record<string, string> = {};
 
   /** bodyParser 中间件注入的解析后请求体 */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   bodyParsed: any = undefined;
 
   /** 开发者自定义上下文（中间件间共享状态）*/
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   context: Record<string, any> = {};
 
   /** 内部：请求开始时间戳（ns），供钩子系统使用 */
@@ -65,7 +63,7 @@ export class NovaRequest {
     this.keepAlive = parsed.keepAlive;
     this.socket = socket;
 
-    // 解析 pathname（去掉 query string）
+    // 解析 pathname
     const qIdx = parsed.path.indexOf('?');
     this.pathname = qIdx === -1 ? parsed.path : parsed.path.substring(0, qIdx);
   }
