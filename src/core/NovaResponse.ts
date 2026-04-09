@@ -13,7 +13,7 @@
  */
 
 import { createReadStream, stat } from 'fs';
-import { extname, resolve, normalize } from 'path';
+import { extname } from 'path';
 import type { Socket } from 'net';
 import type { NovaRequest } from './NovaRequest';
 

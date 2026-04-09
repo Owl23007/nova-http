@@ -446,7 +446,7 @@ function createProject(
     console.log('');
   }
 
-  console.log(`  文档: ${blue('https://github.com/Owl23007/nova')}`);
+  console.log(`  文档: ${blue('https://github.com/Owl23007/nova-http')}`);
   console.log('');
 }
 

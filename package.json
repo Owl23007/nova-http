@@ -1,6 +1,6 @@
 {
     "name": "nova-http",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "description": "零依赖、高性能、全链路可控的 Node.js HTTP 框架",
     "main": "dist/src/index.js",
     "types": "dist/src/index.d.ts",
@@ -36,12 +36,12 @@
     "license": "MIT",
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/Owl23007/nova.git"
+        "url": "git+https://github.com/Owl23007/nova-http.git"
     },
     "bugs": {
-        "url": "https://github.com/Owl23007/nova/issues"
+        "url": "https://github.com/Owl23007/nova-http/issues"
     },
-    "homepage": "https://github.com/Owl23007/nova#readme",
+    "homepage": "https://github.com/Owl23007/nova-http#readme",
     "scripts": {
         "build": "tsc -p tsconfig.build.json",
         "postbuild": "node -e \"const fs=require('fs');fs.cpSync('cli/templates','dist/cli/templates',{recursive:true})\"",

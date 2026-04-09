@@ -1,0 +1,39 @@
+{
+    "name": "create-nova-http",
+    "version": "0.1.1",
+    "description": "Initializer for Nova HTTP projects",
+    "bin": {
+        "create-nova-http": "dist/cli/create-nova.js"
+    },
+    "files": [
+        "dist",
+        "README.md",
+        "LICENSE"
+    ],
+    "scripts": {
+        "prepare:dist": "node scripts/prepare-dist.cjs",
+        "prepack": "npm run prepare:dist"
+    },
+    "publishConfig": {
+        "access": "public",
+        "registry": "https://registry.npmjs.org/"
+    },
+    "engines": {
+        "node": ">=18.0.0"
+    },
+    "keywords": [
+        "nova-http",
+        "create",
+        "scaffold",
+        "initializer"
+    ],
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/Owl23007/nova-http.git"
+    },
+    "bugs": {
+        "url": "https://github.com/Owl23007/nova-http/issues"
+    },
+    "homepage": "https://github.com/Owl23007/nova-http#readme"
+}

@@ -1,9 +1,8 @@
 {
     "compilerOptions": {
         "target": "ES2022",
-        "module": "CommonJS",
-        "moduleResolution": "node",
-        "baseUrl": ".",
+        "module": "node16",
+        "moduleResolution": "node16",
         "types": [
             "node"
         ],
