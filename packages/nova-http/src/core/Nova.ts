@@ -137,7 +137,6 @@ export class Nova implements NovaApp {
   }
 
   //  路由快捷方法 
-
   get(path: string, ...handlers: (Middleware | Handler)[]): this {
     return this._addRoute('GET', path, handlers);
   }
