@@ -4,7 +4,7 @@ import {
   type ErrorMiddleware,
   type NovaRequest,
   type NovaResponse,
-} from 'nova-http';
+} from "nova-http";
 
 const app = createApp();
 
@@ -12,16 +12,16 @@ const app = createApp();
 app.use(bodyParser());
 
 // 路由
-app.get('/', (_req: NovaRequest, res: NovaResponse) => {
-  res.json({ message: 'Hello from {{name}}!', timestamp: Date.now() });
+app.get("/", (_req: NovaRequest, res: NovaResponse) => {
+  res.json({ message: "Hello from {{name}}!", timestamp: Date.now() });
 });
 
-app.get('/hello/:name', (req: NovaRequest, res: NovaResponse) => {
+app.get("/hello/:name", (req: NovaRequest, res: NovaResponse) => {
   const { name } = req.params;
   res.json({ greeting: `你好，${name}！` });
 });
 
-app.post('/echo', (req: NovaRequest, res: NovaResponse) => {
+app.post("/echo", (req: NovaRequest, res: NovaResponse) => {
   res.json({ received: req.bodyParsed });
 });
 
@@ -37,7 +37,7 @@ app.use(errorHandler);
 // 启动服务
 const PORT = Number(process.env.PORT ?? 3000);
 
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, "0.0.0.0", () => {
   console.log(`\n  {{name}} 已启动`);
   console.log(`  本地: http://localhost:${PORT}\n`);
 });

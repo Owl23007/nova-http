@@ -1,22 +1,19 @@
 {
-    "compilerOptions": {
-        "target": "ES2022",
-        "module": "CommonJS",
-        "lib": [
-            "ES2022"
-        ],
-        "strict": true,
-        "esModuleInterop": true,
-        "skipLibCheck": true,
-        "outDir": "dist",
-        "rootDir": ".",
-        "declaration": true
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "paths": {
+      "nova-http": ["../../../dist/src/index.d.ts", "./node_modules/nova-http"]
     },
-    "include": [
-        "./**/*.ts"
-    ],
-    "exclude": [
-        "node_modules",
-        "dist"
-    ]
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "outDir": "dist",
+    "rootDir": ".",
+    "declaration": true
+  },
+  "include": ["./**/*.ts"],
+  "exclude": ["node_modules", "dist"]
 }

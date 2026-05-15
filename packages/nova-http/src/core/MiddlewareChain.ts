@@ -1,5 +1,5 @@
-import type { NovaRequest } from './NovaRequest';
-import type { NovaResponse } from './NovaResponse';
+import type { NovaRequest } from "./NovaRequest";
+import type { NovaResponse } from "./NovaResponse";
 
 export type Middleware = (
   req: NovaRequest,
@@ -55,9 +55,7 @@ export class MiddlewareChain {
         called = true;
 
         if (err !== undefined && err !== null) {
-          this._runErrorHandlers(err, req, res, 0)
-            .then(resolve)
-            .catch(reject);
+          this._runErrorHandlers(err, req, res, 0).then(resolve).catch(reject);
           return;
         }
 
@@ -82,9 +80,7 @@ export class MiddlewareChain {
               .catch((asyncErr: unknown) => {
                 if (!called) {
                   called = true;
-                  this._runErrorHandlers(asyncErr, req, res, 0)
-                    .then(resolve)
-                    .catch(reject);
+                  this._runErrorHandlers(asyncErr, req, res, 0).then(resolve).catch(reject);
                 }
               });
             return;
@@ -97,9 +93,7 @@ export class MiddlewareChain {
         } catch (syncErr: unknown) {
           if (!called) {
             called = true;
-            this._runErrorHandlers(syncErr, req, res, 0)
-              .then(resolve)
-              .catch(reject);
+            this._runErrorHandlers(syncErr, req, res, 0).then(resolve).catch(reject);
           }
         }
       };
@@ -118,7 +112,7 @@ export class MiddlewareChain {
 
     if (startIndex >= handlers.length) {
       if (!res.headersSent) {
-        res.status(500).send('Internal Server Error');
+        res.status(500).send("Internal Server Error");
       }
       return Promise.resolve();
     }
@@ -137,7 +131,7 @@ export class MiddlewareChain {
 
         if (index >= handlers.length) {
           if (!res.headersSent) {
-            res.status(500).send('Internal Server Error');
+            res.status(500).send("Internal Server Error");
           }
           resolve();
           return;
@@ -160,7 +154,7 @@ export class MiddlewareChain {
                 if (!called) {
                   called = true;
                   if (!res.headersSent) {
-                    res.status(500).send('Internal Server Error');
+                    res.status(500).send("Internal Server Error");
                   }
                   resolve();
                 }
@@ -176,7 +170,7 @@ export class MiddlewareChain {
           if (!called) {
             called = true;
             if (!res.headersSent) {
-              res.status(500).send('Internal Server Error');
+              res.status(500).send("Internal Server Error");
             }
             resolve();
           }

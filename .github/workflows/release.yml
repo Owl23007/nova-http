@@ -5,6 +5,10 @@ on:
     branches:
       - main
 
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
   release:
     name: Release
@@ -25,7 +29,12 @@ jobs:
         uses: pnpm/action-setup@v4
 
       - name: Install Dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
+        env:
+          HUSKY: 0
+
+      - name: Build Packages
+        run: pnpm run build
 
       - name: Create Release Pull Request or Publish to npm
         id: changesets

@@ -20,9 +20,9 @@
  *   app.use(bodyParser({ types: ['json'] }))        // 仅解析 JSON
  */
 
-import type { NovaRequest } from '../core/NovaRequest';
-import type { NovaResponse } from '../core/NovaResponse';
-import type { NextFunction } from '../core/MiddlewareChain';
+import type { NovaRequest } from "../core/NovaRequest";
+import type { NovaResponse } from "../core/NovaResponse";
+import type { NextFunction } from "../core/MiddlewareChain";
 
 // == 配置项
 
@@ -30,7 +30,7 @@ export interface BodyParserOptions {
   /** 最大请求体大小（字节），默认 1MB = 1048576 */
   maxSize?: number;
   /** 允许解析的 Content-Type 类型列表，默认 ['json', 'urlencoded'] */
-  types?: Array<'json' | 'urlencoded'>;
+  types?: Array<"json" | "urlencoded">;
   /** urlencoded 最大参数数量，防 HPP，默认 100 */
   maxParams?: number;
   /** 是否严格模式：JSON 顶层必须是对象或数组（而非原始值），默认 true */
@@ -42,13 +42,11 @@ export interface BodyParserOptions {
 /**
  * 创建 bodyParser 中间件。
  */
-export function bodyParser(options: BodyParserOptions = {}): (
-  req: NovaRequest,
-  res: NovaResponse,
-  next: NextFunction,
-) => void {
+export function bodyParser(
+  options: BodyParserOptions = {},
+): (req: NovaRequest, res: NovaResponse, next: NextFunction) => void {
   const maxSize = options.maxSize ?? 1_048_576;
-  const types = new Set(options.types ?? ['json', 'urlencoded']);
+  const types = new Set(options.types ?? ["json", "urlencoded"]);
   const maxParams = options.maxParams ?? 100;
   const strict = options.strict ?? true;
 
@@ -67,20 +65,20 @@ export function bodyParser(options: BodyParserOptions = {}): (
 
     // 二次大小检查
     if (req.body.length > maxSize) {
-      res.status(413).send('Payload Too Large');
+      res.status(413).send("Payload Too Large");
       return;
     }
 
-    const contentType = (req.headers.get('content-type') ?? '').toLowerCase();
+    const contentType = (req.headers.get("content-type") ?? "").toLowerCase();
 
     // == JSON 解析
 
-    if (types.has('json') && contentType.includes('application/json')) {
+    if (types.has("json") && contentType.includes("application/json")) {
       let text: string;
       try {
-        text = req.body.toString('utf8');
+        text = req.body.toString("utf8");
       } catch {
-        res.status(400).send('Invalid request body encoding');
+        res.status(400).send("Invalid request body encoding");
         return;
       }
 
@@ -88,8 +86,8 @@ export function bodyParser(options: BodyParserOptions = {}): (
         const parsed = JSON.parse(text) as unknown;
 
         // 严格模式：顶层必须是对象或数组
-        if (strict && (typeof parsed !== 'object' || parsed === null)) {
-          res.status(400).send('JSON body must be an object or array');
+        if (strict && (typeof parsed !== "object" || parsed === null)) {
+          res.status(400).send("JSON body must be an object or array");
           return;
         }
 
@@ -97,19 +95,19 @@ export function bodyParser(options: BodyParserOptions = {}): (
         next();
         return;
       } catch {
-        res.status(400).send('Invalid JSON body');
+        res.status(400).send("Invalid JSON body");
         return;
       }
     }
 
     // == URL-encoded 解析
 
-    if (types.has('urlencoded') && contentType.includes('application/x-www-form-urlencoded')) {
+    if (types.has("urlencoded") && contentType.includes("application/x-www-form-urlencoded")) {
       let text: string;
       try {
-        text = req.body.toString('utf8');
+        text = req.body.toString("utf8");
       } catch {
-        res.status(400).send('Invalid request body encoding');
+        res.status(400).send("Invalid request body encoding");
         return;
       }
 
@@ -117,22 +115,22 @@ export function bodyParser(options: BodyParserOptions = {}): (
         const parsed: Record<string, string | string[]> = {};
         let paramCount = 0;
 
-        for (const pair of text.split('&')) {
+        for (const pair of text.split("&")) {
           if (!pair) continue;
 
           paramCount++;
           if (paramCount > maxParams) {
-            res.status(400).send('Too many form parameters');
+            res.status(400).send("Too many form parameters");
             return;
           }
 
-          const eqIdx = pair.indexOf('=');
+          const eqIdx = pair.indexOf("=");
           let key: string;
           let value: string;
 
           if (eqIdx === -1) {
             key = safeDecodeURIComponent(pair);
-            value = '';
+            value = "";
           } else {
             key = safeDecodeURIComponent(pair.substring(0, eqIdx));
             value = safeDecodeURIComponent(pair.substring(eqIdx + 1));
@@ -155,7 +153,7 @@ export function bodyParser(options: BodyParserOptions = {}): (
         next();
         return;
       } catch {
-        res.status(400).send('Invalid form body');
+        res.status(400).send("Invalid form body");
         return;
       }
     }
@@ -172,7 +170,7 @@ export function bodyParser(options: BodyParserOptions = {}): (
  */
 function safeDecodeURIComponent(str: string): string {
   try {
-    return decodeURIComponent(str.replace(/\+/g, ' '));
+    return decodeURIComponent(str.replace(/\+/g, " "));
   } catch {
     return str;
   }

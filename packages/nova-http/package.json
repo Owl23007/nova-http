@@ -1,66 +1,70 @@
 {
-    "name": "nova-http",
-    "version": "0.1.1",
-    "description": "零依赖、高性能、全链路可控的 Node.js HTTP 框架",
-    "main": "dist/src/index.js",
-    "types": "dist/src/index.d.ts",
-    "exports": {
-        ".": {
-            "types": "./dist/src/index.d.ts",
-            "require": "./dist/src/index.js",
-            "default": "./dist/src/index.js"
-        },
-        "./package.json": "./package.json"
+  "name": "nova-http",
+  "version": "0.1.1",
+  "description": "零依赖、高性能、全链路可控的 Node.js HTTP 框架",
+  "keywords": [
+    "framework",
+    "http",
+    "middleware",
+    "net",
+    "router",
+    "server"
+  ],
+  "homepage": "https://github.com/Owl23007/nova-http#readme",
+  "bugs": {
+    "url": "https://github.com/Owl23007/nova-http/issues"
+  },
+  "license": "MIT",
+  "author": "",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Owl23007/nova-http.git"
+  },
+  "bin": {
+    "create-nova-http": "dist/cli/create-nova.js",
+    "nova-http": "dist/cli/nova.js"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "require": "./dist/src/index.js",
+      "default": "./dist/src/index.js"
     },
-    "bin": {
-        "nova-http": "dist/cli/nova.js",
-        "create-nova-http": "dist/cli/create-nova.js"
-    },
-    "engines": {
-        "node": ">=18.0.0"
-    },
-    "files": [
-        "dist",
-        "LICENSE",
-        "README.md"
-    ],
-    "keywords": [
-        "http",
-        "framework",
-        "server",
-        "middleware",
-        "router",
-        "net"
-    ],
-    "author": "",
-    "license": "MIT",
-    "repository": {
-        "type": "git",
-        "url": "git+https://github.com/Owl23007/nova-http.git"
-    },
-    "bugs": {
-        "url": "https://github.com/Owl23007/nova-http/issues"
-    },
-    "homepage": "https://github.com/Owl23007/nova-http#readme",
-    "scripts": {
-        "build": "tsc -p tsconfig.build.json",
-        "postbuild": "node -e \"const fs=require('fs');fs.cpSync('cli/templates','dist/cli/templates',{recursive:true})\"",
-        "build:watch": "tsc -p tsconfig.build.json --watch",
-        "typecheck": "tsc --noEmit",
-        "cli": "ts-node cli/nova.ts",
-        "cli:init": "ts-node cli/create-nova.ts",
-        "bench": "node scripts/benchmark/benchmark.js",
-        "bench:server": "node scripts/benchmark/benchmark-server.js",
-        "bench:compare": "node scripts/benchmark/benchmark-compare.js",
-        "bench:compare:extended": "node scripts/benchmark/benchmark-compare-extended.js",
-        "bench:parser": "node scripts/benchmark/benchmark-parser-vs-llhttp.js",
-        "bench:parser:native": "node scripts/benchmark/benchmark-parser-vs-node-native.js"
-    },
-    "devDependencies": {
-        "@types/node": "^25.5.0",
-        "supertest": "^7.2.2",
-        "ts-node": "^10.9.2",
-        "typescript": "^6.0.2",
-        "vitest": "^4.1.6"
-    }
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "postbuild": "node -e \"const fs=require('fs');fs.cpSync('cli/templates','dist/cli/templates',{recursive:true})\"",
+    "build:watch": "tsc -p tsconfig.build.json --watch",
+    "typecheck": "tsc --noEmit",
+    "cli": "ts-node cli/nova.ts",
+    "cli:init": "ts-node cli/create-nova.ts",
+    "bench": "node scripts/benchmark/benchmark.js",
+    "bench:server": "node scripts/benchmark/benchmark-server.js",
+    "bench:compare": "node scripts/benchmark/benchmark-compare.js",
+    "bench:compare:extended": "node scripts/benchmark/benchmark-compare-extended.js",
+    "bench:parser": "node scripts/benchmark/benchmark-parser-vs-llhttp.js",
+    "bench:parser:native": "node scripts/benchmark/benchmark-parser-vs-node-native.js"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "supertest": "^7.2.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.6"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
 }

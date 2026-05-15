@@ -1,10 +1,10 @@
-const { createApp } = require('nova-http');
+const { createApp } = require("nova-http");
 
 const router = createApp();
 
-router.get('/', (_req, res) => {
+router.get("/", (_req, res) => {
   res.json({
-    status: 'ok',
+    status: "ok",
     uptime: Math.floor(process.uptime()),
     timestamp: new Date().toISOString(),
     memory: process.memoryUsage(),
@@ -13,4 +13,3 @@ router.get('/', (_req, res) => {
 });
 
 module.exports = { healthRouter: router };
-

@@ -25,10 +25,10 @@
  *   })
  */
 
-import { EventEmitter } from 'events';
-import type { Socket } from 'net';
-import type { NovaRequest } from './NovaRequest';
-import type { NovaResponse } from './NovaResponse';
+import { EventEmitter } from "events";
+import type { Socket } from "net";
+import type { NovaRequest } from "./NovaRequest";
+import type { NovaResponse } from "./NovaResponse";
 
 // == 钩子上下文类型
 
@@ -65,7 +65,7 @@ export interface BodyParsedContext {
 export interface ResponseContext {
   req: NovaRequest;
   res: NovaResponse;
-  /** 从请求完成到响应发送的耗时（毫秒），需配合 onRequest 设置 req._startAt */ 
+  /** 从请求完成到响应发送的耗时（毫秒），需配合 onRequest 设置 req._startAt */
   durationMs: number;
   statusCode: number;
 }
@@ -139,21 +139,23 @@ export class Hooks extends EventEmitter {
   callHook<K extends HookName>(name: K, ctx: HookEvents[K]): void {
     // EventEmitter.emit 同步调用所有监听器
     // 对于异步监听器，我们捕获 Promise 并不等待（fire-and-forget）
-    const listeners = this.rawListeners(name) as Array<(ctx: HookEvents[K]) => void | Promise<void>>;
+    const listeners = this.rawListeners(name) as Array<
+      (ctx: HookEvents[K]) => void | Promise<void>
+    >;
     for (const listener of listeners) {
       try {
         const result = listener(ctx);
         if (result instanceof Promise) {
           result.catch((err: unknown) => {
             // 钩子内部异常不影响主流程，但通过 onError 上报
-            if (name !== 'onError') {
-              this.callHook('onError', { error: err } as HookEvents['onError']);
+            if (name !== "onError") {
+              this.callHook("onError", { error: err } as HookEvents["onError"]);
             }
           });
         }
       } catch (err: unknown) {
-        if (name !== 'onError') {
-          this.callHook('onError', { error: err } as HookEvents['onError']);
+        if (name !== "onError") {
+          this.callHook("onError", { error: err } as HookEvents["onError"]);
         }
       }
     }
@@ -164,7 +166,9 @@ export class Hooks extends EventEmitter {
    * 用于需要等待钩子完成才继续的场景（如 onRequest 中的鉴权前置）。
    */
   async callHookAsync<K extends HookName>(name: K, ctx: HookEvents[K]): Promise<void> {
-    const listeners = this.rawListeners(name) as Array<(ctx: HookEvents[K]) => void | Promise<void>>;
+    const listeners = this.rawListeners(name) as Array<
+      (ctx: HookEvents[K]) => void | Promise<void>
+    >;
     for (const listener of listeners) {
       await listener(ctx);
     }
@@ -183,8 +187,8 @@ export class Hooks extends EventEmitter {
  * 注：该函数不是中间件，而是返回两个钩子处理器。
  */
 export function createRequestTimer(): {
-  onRequest: HookHandler<'onRequest'>;
-  onResponse: HookHandler<'onResponse'>;
+  onRequest: HookHandler<"onRequest">;
+  onResponse: HookHandler<"onResponse">;
 } {
   return {
     onRequest: ({ req }) => {
@@ -195,8 +199,10 @@ export function createRequestTimer(): {
         const durationNs = process.hrtime.bigint() - req._startAt;
         const durationMs = Number(durationNs) / 1_000_000;
         try {
-          res.setHeader('x-response-time', `${durationMs.toFixed(3)}ms`);
-        } catch { /* 响应可能已发送 */ }
+          res.setHeader("x-response-time", `${durationMs.toFixed(3)}ms`);
+        } catch {
+          /* 响应可能已发送 */
+        }
       }
     },
   };

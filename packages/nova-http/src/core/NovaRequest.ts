@@ -11,8 +11,8 @@
  * 允许开发者将自定义属性挂载到 `req.context`，保持类型安全。
  */
 
-import type { Socket } from 'net';
-import type { ParsedRequest } from './HttpParser';
+import type { Socket } from "net";
+import type { ParsedRequest } from "./HttpParser";
 
 export class NovaRequest {
   /** HTTP 方法 */
@@ -22,7 +22,7 @@ export class NovaRequest {
   /** 不含 query string 的纯路径 */
   readonly pathname: string;
   /** HTTP 版本 */
-  readonly httpVersion: '1.0' | '1.1';
+  readonly httpVersion: "1.0" | "1.1";
   /** 请求头（键全小写） */
   readonly headers: Map<string, string>;
   /** 原始请求体 Buffer */
@@ -64,7 +64,7 @@ export class NovaRequest {
     this.socket = socket;
 
     // 解析 pathname
-    const qIdx = parsed.path.indexOf('?');
+    const qIdx = parsed.path.indexOf("?");
     this.pathname = qIdx === -1 ? parsed.path : parsed.path.substring(0, qIdx);
   }
 
@@ -74,10 +74,9 @@ export class NovaRequest {
    */
   get query(): URLSearchParams {
     if (this._query === undefined) {
-      const qIdx = this.path.indexOf('?');
-      this._query = qIdx === -1
-        ? new URLSearchParams()
-        : new URLSearchParams(this.path.substring(qIdx + 1));
+      const qIdx = this.path.indexOf("?");
+      this._query =
+        qIdx === -1 ? new URLSearchParams() : new URLSearchParams(this.path.substring(qIdx + 1));
     }
     return this._query;
   }
@@ -89,10 +88,10 @@ export class NovaRequest {
   get cookies(): Record<string, string> {
     if (this._cookies === undefined) {
       this._cookies = {};
-      const cookieHeader = this.headers.get('cookie');
+      const cookieHeader = this.headers.get("cookie");
       if (cookieHeader) {
-        for (const pair of cookieHeader.split(';')) {
-          const eqIdx = pair.indexOf('=');
+        for (const pair of cookieHeader.split(";")) {
+          const eqIdx = pair.indexOf("=");
           if (eqIdx === -1) continue;
           const key = pair.substring(0, eqIdx).trim();
           const val = pair.substring(eqIdx + 1).trim();
@@ -117,22 +116,22 @@ export class NovaRequest {
   get ip(): string {
     if (this._ip === undefined) {
       if (this._trustProxy) {
-        const xForwardedFor = this.headers.get('x-forwarded-for');
+        const xForwardedFor = this.headers.get("x-forwarded-for");
         if (xForwardedFor) {
-          const firstIp = xForwardedFor.split(',')[0].trim();
+          const firstIp = xForwardedFor.split(",")[0].trim();
           if (firstIp) {
             this._ip = firstIp;
             return this._ip;
           }
         }
         // 尝试 X-Real-IP
-        const xRealIp = this.headers.get('x-real-ip');
+        const xRealIp = this.headers.get("x-real-ip");
         if (xRealIp) {
           this._ip = xRealIp.trim();
           return this._ip;
         }
       }
-      this._ip = this.socket.remoteAddress ?? '0.0.0.0';
+      this._ip = this.socket.remoteAddress ?? "0.0.0.0";
     }
     return this._ip;
   }
@@ -148,14 +147,14 @@ export class NovaRequest {
    * 判断请求是否为 JSON 请求体。
    */
   get isJson(): boolean {
-    return (this.headers.get('content-type') ?? '').includes('application/json');
+    return (this.headers.get("content-type") ?? "").includes("application/json");
   }
 
   /**
    * 判断请求是否为 form 请求体。
    */
   get isForm(): boolean {
-    return (this.headers.get('content-type') ?? '').includes('application/x-www-form-urlencoded');
+    return (this.headers.get("content-type") ?? "").includes("application/x-www-form-urlencoded");
   }
 
   /**

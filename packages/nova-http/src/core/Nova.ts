@@ -16,18 +16,18 @@
  *                             └ Hooks（全链路钩子事件）
  */
 
-import { createServer, Server, Socket } from 'net';
-import { Hooks } from './Hooks';
-import { Router } from './Router';
-import { MiddlewareChain } from './MiddlewareChain';
-import { ConnectionHandler, type NovaApp, type ConnectionConfig } from './ConnectionHandler';
-import type { NovaRequest } from './NovaRequest';
-import type { NovaResponse } from './NovaResponse';
-import type { Middleware, ErrorMiddleware, NextFunction } from './MiddlewareChain';
-import type { Handler } from './Router';
-import type { HookName, HookHandler } from './Hooks';
+import { createServer, Server, Socket } from "net";
+import { Hooks } from "./Hooks";
+import { Router } from "./Router";
+import { MiddlewareChain } from "./MiddlewareChain";
+import { ConnectionHandler, type NovaApp, type ConnectionConfig } from "./ConnectionHandler";
+import type { NovaRequest } from "./NovaRequest";
+import type { NovaResponse } from "./NovaResponse";
+import type { Middleware, ErrorMiddleware, NextFunction } from "./MiddlewareChain";
+import type { Handler } from "./Router";
+import type { HookName, HookHandler } from "./Hooks";
 
-//  类型定义 
+//  类型定义
 
 /** Nova 配置项 */
 export interface NovaConfig extends Partial<ConnectionConfig> {
@@ -51,7 +51,7 @@ export interface RouteBuilder {
   all(...handlers: (Middleware | Handler)[]): RouteBuilder;
 }
 
-//  Nova App 
+//  Nova App
 
 export class Nova implements NovaApp {
   /** 全链路钩子系统 */
@@ -78,7 +78,7 @@ export class Nova implements NovaApp {
   constructor(config: NovaConfig = {}) {
     this._fullConfig = {
       port: config.port ?? 3000,
-      host: config.host ?? '0.0.0.0',
+      host: config.host ?? "0.0.0.0",
       maxConnections: config.maxConnections ?? 0,
       headersTimeout: config.headersTimeout ?? 60_000,
       keepAliveTimeout: config.keepAliveTimeout ?? 65_000,
@@ -96,7 +96,7 @@ export class Nova implements NovaApp {
     };
   }
 
-  //  中间件注册 
+  //  中间件注册
 
   /**
    * 注册全局中间件。支持路径前缀过滤。
@@ -109,7 +109,7 @@ export class Nova implements NovaApp {
     pathOrMiddleware: string | Middleware | ErrorMiddleware | Nova,
     ...middlewares: (Middleware | ErrorMiddleware | Nova)[]
   ): this {
-    if (typeof pathOrMiddleware === 'string') {
+    if (typeof pathOrMiddleware === "string") {
       const prefix = pathOrMiddleware;
       for (const mw of middlewares) {
         if (this._isSubApp(mw)) {
@@ -121,13 +121,13 @@ export class Nova implements NovaApp {
       }
     } else {
       if (this._isSubApp(pathOrMiddleware)) {
-        this._chain.use(this._makeMountedMiddleware('/', pathOrMiddleware));
+        this._chain.use(this._makeMountedMiddleware("/", pathOrMiddleware));
       } else {
         this._chain.use(pathOrMiddleware);
       }
       for (const mw of middlewares) {
         if (this._isSubApp(mw)) {
-          this._chain.use(this._makeMountedMiddleware('/', mw));
+          this._chain.use(this._makeMountedMiddleware("/", mw));
         } else {
           this._chain.use(mw);
         }
@@ -136,40 +136,40 @@ export class Nova implements NovaApp {
     return this;
   }
 
-  //  路由快捷方法 
+  //  路由快捷方法
   get(path: string, ...handlers: (Middleware | Handler)[]): this {
-    return this._addRoute('GET', path, handlers);
+    return this._addRoute("GET", path, handlers);
   }
 
   post(path: string, ...handlers: (Middleware | Handler)[]): this {
-    return this._addRoute('POST', path, handlers);
+    return this._addRoute("POST", path, handlers);
   }
 
   put(path: string, ...handlers: (Middleware | Handler)[]): this {
-    return this._addRoute('PUT', path, handlers);
+    return this._addRoute("PUT", path, handlers);
   }
 
   patch(path: string, ...handlers: (Middleware | Handler)[]): this {
-    return this._addRoute('PATCH', path, handlers);
+    return this._addRoute("PATCH", path, handlers);
   }
 
   delete(path: string, ...handlers: (Middleware | Handler)[]): this {
-    return this._addRoute('DELETE', path, handlers);
+    return this._addRoute("DELETE", path, handlers);
   }
 
   head(path: string, ...handlers: (Middleware | Handler)[]): this {
-    return this._addRoute('HEAD', path, handlers);
+    return this._addRoute("HEAD", path, handlers);
   }
 
   options(path: string, ...handlers: (Middleware | Handler)[]): this {
-    return this._addRoute('OPTIONS', path, handlers);
+    return this._addRoute("OPTIONS", path, handlers);
   }
 
   /**
    * 为路径注册所有 HTTP 方法处理器。
    */
   all(path: string, ...handlers: (Middleware | Handler)[]): this {
-    const methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
+    const methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"];
     for (const method of methods) {
       this._addRoute(method, path, handlers);
     }
@@ -184,21 +184,44 @@ export class Nova implements NovaApp {
    *     .post(createUser)
    */
   route(path: string): RouteBuilder {
-    const self = this;
     const builder: RouteBuilder = {
-      get: (...h) => { self.get(path, ...h); return builder; },
-      post: (...h) => { self.post(path, ...h); return builder; },
-      put: (...h) => { self.put(path, ...h); return builder; },
-      patch: (...h) => { self.patch(path, ...h); return builder; },
-      delete: (...h) => { self.delete(path, ...h); return builder; },
-      head: (...h) => { self.head(path, ...h); return builder; },
-      options: (...h) => { self.options(path, ...h); return builder; },
-      all: (...h) => { self.all(path, ...h); return builder; },
+      get: (...h) => {
+        this.get(path, ...h);
+        return builder;
+      },
+      post: (...h) => {
+        this.post(path, ...h);
+        return builder;
+      },
+      put: (...h) => {
+        this.put(path, ...h);
+        return builder;
+      },
+      patch: (...h) => {
+        this.patch(path, ...h);
+        return builder;
+      },
+      delete: (...h) => {
+        this.delete(path, ...h);
+        return builder;
+      },
+      head: (...h) => {
+        this.head(path, ...h);
+        return builder;
+      },
+      options: (...h) => {
+        this.options(path, ...h);
+        return builder;
+      },
+      all: (...h) => {
+        this.all(path, ...h);
+        return builder;
+      },
     };
     return builder;
   }
 
-  //  钩子注册 
+  //  钩子注册
 
   /**
    * 注册生命周期钩子。
@@ -211,7 +234,7 @@ export class Nova implements NovaApp {
     return this;
   }
 
-  //  服务器控制 
+  //  服务器控制
 
   /**
    * 启动服务器，开始监听指定端口。
@@ -219,11 +242,7 @@ export class Nova implements NovaApp {
    * @param host 主机地址（可覆盖构造器配置）
    * @param callback 监听成功后的回调
    */
-  listen(
-    port?: number,
-    host?: string,
-    callback?: () => void,
-  ): Promise<void> {
+  listen(port?: number, host?: string, callback?: () => void): Promise<void> {
     const listenPort = port ?? this._fullConfig.port;
     const listenHost = host ?? this._fullConfig.host;
 
@@ -233,7 +252,7 @@ export class Nova implements NovaApp {
         this._connections.add(handler);
 
         // 连接关闭时从集合中移除（通过 socket close 事件）
-        socket.once('close', () => {
+        socket.once("close", () => {
           this._connections.delete(handler);
         });
       });
@@ -245,13 +264,13 @@ export class Nova implements NovaApp {
         server.maxConnections = this._fullConfig.maxConnections;
       }
 
-      server.on('error', (err: Error) => {
+      server.on("error", (err: Error) => {
         reject(err);
-        this.hooks.callHook('onError', { error: err });
+        this.hooks.callHook("onError", { error: err });
       });
 
       server.listen(listenPort, listenHost, () => {
-        this.hooks.callHook('onListen', { port: listenPort, host: listenHost });
+        this.hooks.callHook("onListen", { port: listenPort, host: listenHost });
         callback?.();
         resolve();
       });
@@ -275,7 +294,7 @@ export class Nova implements NovaApp {
       }
 
       this._server.close(() => {
-        this.hooks.callHook('onClose', undefined as void);
+        this.hooks.callHook("onClose", undefined as void);
         resolve();
       });
     });
@@ -302,7 +321,7 @@ export class Nova implements NovaApp {
     res: NovaResponse,
     fallthroughOnNotFound: boolean,
   ): Promise<boolean> {
-    this.hooks.callHook('onRequest', { req, res, timestamp: Date.now() });
+    this.hooks.callHook("onRequest", { req, res, timestamp: Date.now() });
 
     await this._chain.dispatch(req, res);
 
@@ -316,7 +335,7 @@ export class Nova implements NovaApp {
     if (match) {
       req.params = match.params;
 
-      this.hooks.callHook('onRoute', {
+      this.hooks.callHook("onRoute", {
         req,
         res,
         routePath: req.pathname,
@@ -326,9 +345,9 @@ export class Nova implements NovaApp {
       try {
         await match.handler(req, res);
       } catch (err: unknown) {
-        this.hooks.callHook('onError', { error: err, req, res });
+        this.hooks.callHook("onError", { error: err, req, res });
         if (!res.headersSent) {
-          res.status(500).send('Internal Server Error');
+          res.status(500).send("Internal Server Error");
         }
       }
 
@@ -338,8 +357,8 @@ export class Nova implements NovaApp {
 
     const allowedMethods = this._router.findAllowedMethods(req.pathname);
     if (allowedMethods.length > 0) {
-      res.setHeader('allow', allowedMethods.join(', '));
-      res.status(405).send('Method Not Allowed');
+      res.setHeader("allow", allowedMethods.join(", "));
+      res.status(405).send("Method Not Allowed");
       this._emitResponse(req, res);
       return true;
     }
@@ -348,9 +367,9 @@ export class Nova implements NovaApp {
       return false;
     }
 
-    this.hooks.callHook('onNotFound', { req, res });
+    this.hooks.callHook("onNotFound", { req, res });
     if (!res.headersSent) {
-      res.status(404).send('Not Found');
+      res.status(404).send("Not Found");
     }
 
     this._emitResponse(req, res);
@@ -358,18 +377,18 @@ export class Nova implements NovaApp {
   }
 
   _onConnect(socket: Socket): void {
-    this.hooks.callHook('onConnect', { socket, timestamp: Date.now() });
+    this.hooks.callHook("onConnect", { socket, timestamp: Date.now() });
   }
 
   _onClose(socket: Socket): void {
-    this.hooks.callHook('onDisconnect', { socket, timestamp: Date.now() });
+    this.hooks.callHook("onDisconnect", { socket, timestamp: Date.now() });
   }
 
   _onError(err: Error, socket: Socket): void {
-    this.hooks.callHook('onError', { error: err, socket });
+    this.hooks.callHook("onError", { error: err, socket });
   }
 
-  //  私有工具方法 
+  //  私有工具方法
 
   private _addRoute(method: string, path: string, handlers: (Middleware | Handler)[]): this {
     if (handlers.length === 0) return this;
@@ -399,7 +418,7 @@ export class Nova implements NovaApp {
     prefix: string,
     mw: Middleware | ErrorMiddleware,
   ): Middleware | ErrorMiddleware {
-    const normalizedPrefix = prefix.endsWith('/') ? prefix.slice(0, -1) : prefix;
+    const normalizedPrefix = prefix.endsWith("/") ? prefix.slice(0, -1) : prefix;
 
     if (mw.length === 4) {
       const errMw = mw as ErrorMiddleware;
@@ -446,16 +465,16 @@ export class Nova implements NovaApp {
     const durationMs = req._startAt
       ? Number(process.hrtime.bigint() - req._startAt) / 1_000_000
       : 0;
-    this.hooks.callHook('onResponse', {
+    this.hooks.callHook("onResponse", {
       req,
       res,
       durationMs,
-      statusCode: res.getHeader('status') ? parseInt(res.getHeader('status') as string) : 200,
+      statusCode: res.getHeader("status") ? parseInt(res.getHeader("status") as string) : 200,
     });
   }
 }
 
-//  工厂函数 
+//  工厂函数
 
 /**
  * 创建一个 Nova 应用实例。
@@ -467,23 +486,21 @@ export function createApp(config?: NovaConfig): Nova {
 }
 
 function normalizeMountPrefix(prefix: string): string {
-  if (!prefix || prefix === '/') return '/';
-  return prefix.endsWith('/') ? prefix.slice(0, -1) : prefix;
+  if (!prefix || prefix === "/") return "/";
+  return prefix.endsWith("/") ? prefix.slice(0, -1) : prefix;
 }
 
 function matchesMountPrefix(pathname: string, prefix: string): boolean {
-  if (prefix === '/') return true;
+  if (prefix === "/") return true;
   return pathname === prefix || pathname.startsWith(`${prefix}/`);
 }
 
 function createMountedRequest(req: NovaRequest, prefix: string): NovaRequest {
-  if (prefix === '/') {
+  if (prefix === "/") {
     return req;
   }
 
-  const mountedPathname = req.pathname === prefix
-    ? '/'
-    : req.pathname.slice(prefix.length);
+  const mountedPathname = req.pathname === prefix ? "/" : req.pathname.slice(prefix.length);
   const querySuffix = req.path.slice(req.pathname.length);
   const mountedPath = `${mountedPathname}${querySuffix}`;
   const mountedReq = Object.create(req) as NovaRequest;

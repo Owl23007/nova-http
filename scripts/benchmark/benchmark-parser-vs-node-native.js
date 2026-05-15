@@ -1,12 +1,12 @@
-'use strict';
+"use strict";
 
-const fs = require('fs');
-const path = require('path');
-const { AsyncResource } = require('async_hooks');
-const { HTTPParser, ConnectionsList } = process.binding('http_parser');
+const fs = require("fs");
+const path = require("path");
+const { AsyncResource } = require("async_hooks");
+const { HTTPParser, ConnectionsList } = process.binding("http_parser");
 
-const { HttpParser } = require(path.resolve(__dirname, '../../dist/src/core/HttpParser.js'));
-const { BufferReader } = require(path.resolve(__dirname, '../../dist/src/core/BufferReader.js'));
+const { HttpParser } = require(path.resolve(__dirname, "../../dist/src/core/HttpParser.js"));
+const { BufferReader } = require(path.resolve(__dirname, "../../dist/src/core/BufferReader.js"));
 
 const warmupIterations = Number(process.env.BENCH_PARSER_WARMUP || 50_000);
 const measureIterations = Number(process.env.BENCH_PARSER_ITERATIONS || 300_000);
@@ -14,59 +14,53 @@ const rounds = Number(process.env.BENCH_PARSER_ROUNDS || 3);
 
 const payloadObj = {
   id: 123,
-  name: 'nova',
+  name: "nova",
   enabled: true,
-  tags: ['bench', 'parser', 'native'],
-  data: 'x'.repeat(512),
+  tags: ["bench", "parser", "native"],
+  data: "x".repeat(512),
 };
 const payloadJson = JSON.stringify(payloadObj);
 
 const scenarios = [
   {
-    name: 'GET simple',
-    raw: [
-      'GET /health HTTP/1.1',
-      'Host: 127.0.0.1',
-      'Connection: keep-alive',
-      '',
-      '',
-    ].join('\r\n'),
+    name: "GET simple",
+    raw: ["GET /health HTTP/1.1", "Host: 127.0.0.1", "Connection: keep-alive", "", ""].join("\r\n"),
   },
   {
-    name: 'GET many-headers',
+    name: "GET many-headers",
     raw: [
-      'GET /api/v1/items?offset=10&limit=20 HTTP/1.1',
-      'Host: 127.0.0.1',
-      'User-Agent: benchmark-client/1.0',
-      'Accept: application/json',
-      'Accept-Encoding: gzip, deflate, br',
-      'Accept-Language: zh-CN,zh;q=0.9,en;q=0.8',
-      'Cache-Control: no-cache',
-      'Pragma: no-cache',
-      'X-Request-Id: abcdef1234567890',
-      'X-Trace-Id: trace1234567890',
-      'Connection: keep-alive',
-      '',
-      '',
-    ].join('\r\n'),
+      "GET /api/v1/items?offset=10&limit=20 HTTP/1.1",
+      "Host: 127.0.0.1",
+      "User-Agent: benchmark-client/1.0",
+      "Accept: application/json",
+      "Accept-Encoding: gzip, deflate, br",
+      "Accept-Language: zh-CN,zh;q=0.9,en;q=0.8",
+      "Cache-Control: no-cache",
+      "Pragma: no-cache",
+      "X-Request-Id: abcdef1234567890",
+      "X-Trace-Id: trace1234567890",
+      "Connection: keep-alive",
+      "",
+      "",
+    ].join("\r\n"),
   },
   {
-    name: 'POST json(512B)',
+    name: "POST json(512B)",
     raw: [
-      'POST /echo HTTP/1.1',
-      'Host: 127.0.0.1',
-      'Content-Type: application/json',
+      "POST /echo HTTP/1.1",
+      "Host: 127.0.0.1",
+      "Content-Type: application/json",
       `Content-Length: ${Buffer.byteLength(payloadJson)}`,
-      'Connection: keep-alive',
-      '',
+      "Connection: keep-alive",
+      "",
       payloadJson,
-    ].join('\r\n'),
+    ].join("\r\n"),
   },
 ];
 
 const feedModes = [
-  { name: 'contiguous', splitCount: 1 },
-  { name: 'split-3', splitCount: 3 },
+  { name: "contiguous", splitCount: 1 },
+  { name: "split-3", splitCount: 3 },
 ];
 
 function nsToSec(ns) {
@@ -74,12 +68,12 @@ function nsToSec(ns) {
 }
 
 function formatInt(n) {
-  if (!Number.isFinite(n)) return 'n/a';
-  return Math.round(n).toLocaleString('en-US');
+  if (!Number.isFinite(n)) return "n/a";
+  return Math.round(n).toLocaleString("en-US");
 }
 
 function formatNum(n, digits = 2) {
-  if (!Number.isFinite(n)) return 'n/a';
+  if (!Number.isFinite(n)) return "n/a";
   return n.toFixed(digits);
 }
 
@@ -100,7 +94,7 @@ function splitBuffer(buf, count) {
 function makeInputs() {
   const out = [];
   for (const scenario of scenarios) {
-    const full = Buffer.from(scenario.raw, 'latin1');
+    const full = Buffer.from(scenario.raw, "latin1");
     for (const mode of feedModes) {
       out.push({
         scenario: scenario.name,
@@ -129,7 +123,7 @@ function runNova(chunks, iterations) {
     }
 
     if (!result.done) {
-      throw new Error('[nova] parse did not complete');
+      throw new Error("[nova] parse did not complete");
     }
     if (result.error) {
       throw new Error(`[nova] parse error: ${result.error.code} ${result.error.message}`);
@@ -148,7 +142,7 @@ function runNova(chunks, iterations) {
 function createNodeNativeParser() {
   const parser = new HTTPParser();
   const connectionsList = new ConnectionsList();
-  const resource = new AsyncResource('BENCH_HTTP_PARSER');
+  const resource = new AsyncResource("BENCH_HTTP_PARSER");
   parser[HTTPParser.kOnHeadersComplete] = () => 0;
   parser[HTTPParser.kOnBody] = () => {};
   parser[HTTPParser.kOnMessageComplete] = () => {};
@@ -156,13 +150,7 @@ function createNodeNativeParser() {
   parser._benchResource = resource;
   parser._benchConnectionsList = connectionsList;
 
-  parser.initialize(
-    HTTPParser.REQUEST,
-    resource,
-    0,
-    HTTPParser.kLenientNone,
-    connectionsList,
-  );
+  parser.initialize(HTTPParser.REQUEST, resource, 0, HTTPParser.kLenientNone, connectionsList);
 
   return parser;
 }
@@ -177,7 +165,9 @@ function runNodeNative(chunks, iterations) {
       for (let c = 0; c < chunks.length; c += 1) {
         const ret = parser.execute(chunks[c]);
         if (ret instanceof Error) {
-          throw new Error(`[node-native] parse error: ${ret.code || ''} ${ret.reason || ret.message}`);
+          throw new Error(
+            `[node-native] parse error: ${ret.code || ""} ${ret.reason || ret.message}`,
+          );
         }
       }
       parsed += 1;
@@ -234,39 +224,39 @@ function averageResults(roundResults) {
 }
 
 function printSummary(summary) {
-  process.stdout.write('\nParser benchmark config (Node native llhttp)\n');
+  process.stdout.write("\nParser benchmark config (Node native llhttp)\n");
   process.stdout.write(`- warmup iterations: ${warmupIterations}\n`);
   process.stdout.write(`- measure iterations: ${measureIterations}\n`);
   process.stdout.write(`- rounds: ${rounds}\n\n`);
 
   const header = [
-    'Scenario'.padEnd(18, ' '),
-    'Mode'.padEnd(12, ' '),
-    'Bytes'.padEnd(8, ' '),
-    'Chunks'.padEnd(8, ' '),
-    'Nova req/s'.padEnd(14, ' '),
-    'Node req/s'.padEnd(14, ' '),
-    'Node/Nova',
-  ].join(' ');
+    "Scenario".padEnd(18, " "),
+    "Mode".padEnd(12, " "),
+    "Bytes".padEnd(8, " "),
+    "Chunks".padEnd(8, " "),
+    "Nova req/s".padEnd(14, " "),
+    "Node req/s".padEnd(14, " "),
+    "Node/Nova",
+  ].join(" ");
   process.stdout.write(`${header}\n`);
-  process.stdout.write(`${'-'.repeat(header.length)}\n`);
+  process.stdout.write(`${"-".repeat(header.length)}\n`);
 
   for (const item of summary) {
     const row = [
-      item.scenario.padEnd(18, ' '),
-      item.mode.padEnd(12, ' '),
-      formatInt(item.fullLength).padEnd(8, ' '),
-      formatInt(item.chunkCount).padEnd(8, ' '),
-      formatInt(item.novaReqPerSec).padEnd(14, ' '),
-      formatInt(item.nodeNativeReqPerSec).padEnd(14, ' '),
+      item.scenario.padEnd(18, " "),
+      item.mode.padEnd(12, " "),
+      formatInt(item.fullLength).padEnd(8, " "),
+      formatInt(item.chunkCount).padEnd(8, " "),
+      formatInt(item.novaReqPerSec).padEnd(14, " "),
+      formatInt(item.nodeNativeReqPerSec).padEnd(14, " "),
       `${formatNum(item.nodeNativeVsNova, 2)}x`,
-    ].join(' ');
+    ].join(" ");
     process.stdout.write(`${row}\n`);
   }
 }
 
 function writeRawFile(raw) {
-  const outputDir = path.resolve(__dirname, '../../.tmp');
+  const outputDir = path.resolve(__dirname, "../../.tmp");
   fs.mkdirSync(outputDir, { recursive: true });
   const outFile = path.join(outputDir, `benchmark-parser-vs-node-native-${Date.now()}.json`);
   fs.writeFileSync(outFile, JSON.stringify(raw, null, 2));
@@ -276,11 +266,11 @@ function writeRawFile(raw) {
 function main() {
   const inputs = makeInputs();
 
-  process.stdout.write('[benchmark] warmup start\n');
+  process.stdout.write("[benchmark] warmup start\n");
   for (const input of inputs) {
     benchOne(input, warmupIterations);
   }
-  process.stdout.write('[benchmark] warmup done\n');
+  process.stdout.write("[benchmark] warmup done\n");
 
   const grouped = new Map();
   const rawRounds = [];

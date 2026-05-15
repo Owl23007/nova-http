@@ -1,15 +1,15 @@
-const { createApp } = require('nova-http');
+const { createApp } = require("nova-http");
 
 let users = [
-  { id: 1, name: '张三', email: 'zhangsan@example.com', createdAt: new Date().toISOString() },
-  { id: 2, name: '李四', email: 'lisi@example.com', createdAt: new Date().toISOString() },
+  { id: 1, name: "张三", email: "zhangsan@example.com", createdAt: new Date().toISOString() },
+  { id: 2, name: "李四", email: "lisi@example.com", createdAt: new Date().toISOString() },
 ];
 
 let nextId = 3;
 
 function listUsers(req, res) {
-  const limit = Math.min(Number(req.query.get('limit') ?? 20), 100);
-  const offset = Number(req.query.get('offset') ?? 0);
+  const limit = Math.min(Number(req.query.get("limit") ?? 20), 100);
+  const offset = Number(req.query.get("offset") ?? 0);
 
   const page = users.slice(offset, offset + limit);
   res.json({
@@ -34,18 +34,18 @@ function getUser(req, res) {
 
 function createUser(req, res) {
   const body = req.bodyParsed;
-  if (!body || typeof body !== 'object') {
-    res.status(400).json({ error: '请求体必须为 JSON 对象' });
+  if (!body || typeof body !== "object") {
+    res.status(400).json({ error: "请求体必须为 JSON 对象" });
     return;
   }
 
   const { name, email } = body;
-  if (!name || typeof name !== 'string' || name.trim() === '') {
-    res.status(400).json({ error: 'name 字段不能为空' });
+  if (!name || typeof name !== "string" || name.trim() === "") {
+    res.status(400).json({ error: "name 字段不能为空" });
     return;
   }
-  if (!email || typeof email !== 'string' || !email.includes('@')) {
-    res.status(400).json({ error: 'email 格式无效' });
+  if (!email || typeof email !== "string" || !email.includes("@")) {
+    res.status(400).json({ error: "email 格式无效" });
     return;
   }
   if (users.some((item) => item.email === email)) {
@@ -74,23 +74,23 @@ function updateUser(req, res) {
   }
 
   const body = req.bodyParsed;
-  if (!body || typeof body !== 'object') {
-    res.status(400).json({ error: '请求体必须为 JSON 对象' });
+  if (!body || typeof body !== "object") {
+    res.status(400).json({ error: "请求体必须为 JSON 对象" });
     return;
   }
 
   const { name, email } = body;
   if (name !== undefined) {
-    if (typeof name !== 'string' || name.trim() === '') {
-      res.status(400).json({ error: 'name 不能为空字符串' });
+    if (typeof name !== "string" || name.trim() === "") {
+      res.status(400).json({ error: "name 不能为空字符串" });
       return;
     }
     users[idx].name = name.trim();
   }
 
   if (email !== undefined) {
-    if (typeof email !== 'string' || !email.includes('@')) {
-      res.status(400).json({ error: 'email 格式无效' });
+    if (typeof email !== "string" || !email.includes("@")) {
+      res.status(400).json({ error: "email 格式无效" });
       return;
     }
     const conflict = users.find((item) => item.email === email && item.id !== id);
@@ -118,11 +118,11 @@ function deleteUser(req, res) {
 }
 
 const router = createApp();
-router.get('/users', listUsers);
-router.post('/users', createUser);
-router.get('/users/:id', getUser);
-router.put('/users/:id', updateUser);
-router.delete('/users/:id', deleteUser);
+router.get("/users", listUsers);
+router.post("/users", createUser);
+router.get("/users/:id", getUser);
+router.put("/users/:id", updateUser);
+router.delete("/users/:id", deleteUser);
 
 module.exports = {
   usersRouter: router,

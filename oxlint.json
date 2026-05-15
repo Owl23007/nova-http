@@ -1,13 +1,19 @@
 {
-    "$schema": "https://raw.githubusercontent.com/oxc-project/oxc/main/crates/oxc_linter/oxlintrc.schema.json",
-    "categories": {
-        "correctness": "warn",
-        "suspicious": "warn",
-        "pedantic": "off",
-        "style": "off",
-        "nursery": "off"
-    },
-    "env": {
-        "node": true
-    }
+  "$schema": "https://raw.githubusercontent.com/oxc-project/oxc/main/crates/oxc_linter/oxlintrc.schema.json",
+  "categories": {
+    "correctness": "warn",
+    "suspicious": "warn",
+    "pedantic": "off",
+    "style": "off",
+    "nursery": "off"
+  },
+  "ignorePatterns": [
+    "**/dist/**",
+    "**/node_modules/**",
+    "docs/.vitepress/.temp/**",
+    "docs/.vitepress/cache/**"
+  ],
+  "env": {
+    "node": true
+  }
 }

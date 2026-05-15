@@ -18,8 +18,8 @@
  *   - 空间：O(n·k)，n = 路由总数
  */
 
-import type { NovaRequest } from './NovaRequest';
-import type { NovaResponse } from './NovaResponse';
+import type { NovaRequest } from "./NovaRequest";
+import type { NovaResponse } from "./NovaResponse";
 
 // == 类型定义
 
@@ -50,8 +50,8 @@ interface RadixNode {
 }
 
 function createNode(segment: string): RadixNode {
-  const isParam = segment.startsWith(':');
-  const isWildcard = segment === '*';
+  const isParam = segment.startsWith(":");
+  const isWildcard = segment === "*";
   return {
     segment,
     isParam,
@@ -65,7 +65,7 @@ function createNode(segment: string): RadixNode {
 // == Router
 
 export class Router {
-  private readonly _root: RadixNode = createNode('/');
+  private readonly _root: RadixNode = createNode("/");
   /** 记录已注册路由（用于调试和文档生成） */
   private readonly _routes: Array<{ method: string; path: string }> = [];
 
@@ -197,7 +197,7 @@ export class Router {
     // 3. 通配符节点（* 消耗剩余全部路径段）
     for (const child of node.children) {
       if (child.isWildcard) {
-        params['*'] = segments.slice(depth).map(decodeURIComponent).join('/');
+        params["*"] = segments.slice(depth).map(decodeURIComponent).join("/");
         if (child.handlers.size > 0) return child;
       }
     }
@@ -210,17 +210,17 @@ export class Router {
 
 /** 规范化路径：去掉末尾斜杠，确保以 / 开头 */
 function normalizePath(path: string): string {
-  if (!path || path === '/') return '/';
+  if (!path || path === "/") return "/";
   let p = path;
-  if (!p.startsWith('/')) p = '/' + p;
-  if (p.length > 1 && p.endsWith('/')) p = p.slice(0, -1);
+  if (!p.startsWith("/")) p = "/" + p;
+  if (p.length > 1 && p.endsWith("/")) p = p.slice(0, -1);
   return p;
 }
 
 /** 将路径拆分为段（过滤空字符串） */
 function splitPath(path: string): string[] {
-  if (path === '/') return [];
-  return path.split('/').filter(Boolean);
+  if (path === "/") return [];
+  return path.split("/").filter(Boolean);
 }
 
 /** 从节点的 children 中查找匹配的子节点（精确匹配） */

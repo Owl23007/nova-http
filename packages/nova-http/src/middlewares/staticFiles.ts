@@ -19,11 +19,11 @@
  *   防止 ../../etc/passwd 等路径遍历攻击。
  */
 
-import { stat } from 'fs';
-import { join, resolve, normalize, basename, sep } from 'path';
-import type { NovaRequest } from '../core/NovaRequest';
-import type { NovaResponse } from '../core/NovaResponse';
-import type { NextFunction } from '../core/MiddlewareChain';
+import { stat } from "fs";
+import { join, resolve, normalize, basename, sep } from "path";
+import type { NovaRequest } from "../core/NovaRequest";
+import type { NovaResponse } from "../core/NovaResponse";
+import type { NextFunction } from "../core/MiddlewareChain";
 
 // == 配置项
 
@@ -38,7 +38,7 @@ export interface StaticFilesOptions {
    *   - 'allow'：允许访问
    *   - 'deny'：返回 403
    */
-  dotFiles?: 'ignore' | 'allow' | 'deny';
+  dotFiles?: "ignore" | "allow" | "deny";
   /** 是否启用 ETag，默认 true */
   etag?: boolean;
   /** 是否启用 Last-Modified，默认 true */
@@ -59,12 +59,12 @@ export function staticFiles(
   const resolvedRoot = resolve(normalize(root));
 
   const maxAge = options.maxAge ?? 3600;
-  const indexFile = options.index === false ? false : (options.index ?? 'index.html');
-  const dotFiles = options.dotFiles ?? 'ignore';
+  const indexFile = options.index === false ? false : (options.index ?? "index.html");
+  const dotFiles = options.dotFiles ?? "ignore";
 
   return (req: NovaRequest, res: NovaResponse, next: NextFunction): void => {
     // 仅处理 GET 和 HEAD 请求
-    if (req.method !== 'GET' && req.method !== 'HEAD') {
+    if (req.method !== "GET" && req.method !== "HEAD") {
       next();
       return;
     }
@@ -84,24 +84,24 @@ export function staticFiles(
 
     // 防路径遍历：目标路径必须以 resolvedRoot + 分隔符 开头（或等于 resolvedRoot）
     if (!targetPath.startsWith(resolvedRoot + sep) && targetPath !== resolvedRoot) {
-      res.status(403).send('Forbidden');
+      res.status(403).send("Forbidden");
       return;
     }
 
     // == dotfile 策略
 
-    const segments = reqPath.split('/').filter(Boolean);
-    const hasDotSegment = segments.some((seg) => basename(seg).startsWith('.'));
+    const segments = reqPath.split("/").filter(Boolean);
+    const hasDotSegment = segments.some((seg) => basename(seg).startsWith("."));
 
     if (hasDotSegment) {
       switch (dotFiles) {
-        case 'deny':
-          res.status(403).send('Forbidden');
+        case "deny":
+          res.status(403).send("Forbidden");
           return;
-        case 'ignore':
+        case "ignore":
           next();
           return;
-        case 'allow':
+        case "allow":
           break;
       }
     }
@@ -110,9 +110,9 @@ export function staticFiles(
 
     function setCacheHeaders(): void {
       if (maxAge > 0) {
-        res.setHeader('cache-control', `public, max-age=${maxAge}`);
+        res.setHeader("cache-control", `public, max-age=${maxAge}`);
       } else {
-        res.setHeader('cache-control', 'no-cache');
+        res.setHeader("cache-control", "no-cache");
       }
     }
 
@@ -120,7 +120,7 @@ export function staticFiles(
 
     stat(targetPath, (err, stats) => {
       if (err) {
-        if (err.code === 'ENOENT' || err.code === 'ENOTDIR') {
+        if (err.code === "ENOENT" || err.code === "ENOTDIR") {
           next();
         } else {
           next(err);
@@ -141,7 +141,9 @@ export function staticFiles(
             return;
           }
           setCacheHeaders();
-          res.sendFile(indexPath).catch(() => { /* sendFile 内部已处理错误 */ });
+          res.sendFile(indexPath).catch(() => {
+            /* sendFile 内部已处理错误 */
+          });
         });
         return;
       }
@@ -152,7 +154,9 @@ export function staticFiles(
       }
 
       setCacheHeaders();
-      res.sendFile(targetPath).catch(() => { /* sendFile 内部已处理错误 */ });
+      res.sendFile(targetPath).catch(() => {
+        /* sendFile 内部已处理错误 */
+      });
     });
   };
 }

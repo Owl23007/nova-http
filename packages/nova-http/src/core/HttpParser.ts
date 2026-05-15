@@ -15,12 +15,12 @@
  * 支持 Keep-Alive：每次 DONE 后调用 reset()，可在同一连接上继续解析下一请求。
  */
 
-import { BufferReader } from './BufferReader';
+import { BufferReader } from "./BufferReader";
 
 // == 常量
 
 const MAX_REQUEST_LINE_LENGTH = 16384; // 16 KB
-const MAX_HEADER_LINE_LENGTH = 8192;   // 8 KB
+const MAX_HEADER_LINE_LENGTH = 8192; // 8 KB
 const MAX_HEADERS_COUNT = 200;
 const MAX_HEADERS_TOTAL_BYTES = 65536; // 64 KB
 
@@ -28,21 +28,28 @@ const MAX_HEADERS_TOTAL_BYTES = 65536; // 64 KB
 
 /** HTTP 方法枚举 */
 export type HttpMethod =
-  | 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
-  | 'HEAD' | 'OPTIONS' | 'TRACE' | 'CONNECT';
+  | "GET"
+  | "POST"
+  | "PUT"
+  | "PATCH"
+  | "DELETE"
+  | "HEAD"
+  | "OPTIONS"
+  | "TRACE"
+  | "CONNECT";
 
-/** 解析错误类型 */
-export const enum ParseErrorCode {
-  REQUEST_LINE_TOO_LONG = 400,
-  HEADER_TOO_LONG = 431,
-  HEADER_SECTION_TOO_LARGE = 431,
-  TOO_MANY_HEADERS = 431,
-  CONFLICTING_HEADERS = 400,
-  INVALID_CONTENT_LENGTH = 400,
-  INVALID_CHUNK = 400,
-  INVALID_REQUEST_LINE = 400,
-  INVALID_HEADER = 400,
-}
+/** 解析错误对应的 HTTP 状态码 */
+export const ParseErrorCode = {
+  REQUEST_LINE_TOO_LONG: 400,
+  HEADER_TOO_LONG: 431,
+  HEADER_SECTION_TOO_LARGE: 431,
+  TOO_MANY_HEADERS: 431,
+  CONFLICTING_HEADERS: 400,
+  INVALID_CONTENT_LENGTH: 400,
+  INVALID_CHUNK: 400,
+  INVALID_REQUEST_LINE: 400,
+  INVALID_HEADER: 400,
+} as const;
 
 /** 解析错误结构 */
 export interface ParseError {
@@ -54,7 +61,7 @@ export interface ParseError {
 export interface ParsedRequest {
   method: HttpMethod;
   path: string;
-  httpVersion: '1.0' | '1.1';
+  httpVersion: "1.0" | "1.1";
   /** 所有 Header，键已转换为小写 */
   headers: Map<string, string>;
   /** 原始请求体 Buffer */
@@ -66,7 +73,7 @@ export interface ParsedRequest {
 /** parse() 的返回结果 */
 export type ParseResult =
   | { done: true; request: ParsedRequest }
-  | { done: false }           // 需要更多数据
+  | { done: false } // 需要更多数据
   | { done: true; error: ParseError }; // 解析出错
 
 // == 解析器状态
@@ -90,15 +97,15 @@ export class HttpParser {
   private _state: State = State.IDLE;
 
   // 解析中间结果
-  private _method: HttpMethod = 'GET';
-  private _path: string = '/';
-  private _httpVersion: '1.0' | '1.1' = '1.1';
+  private _method: HttpMethod = "GET";
+  private _path: string = "/";
+  private _httpVersion: "1.0" | "1.1" = "1.1";
   private _headers: Map<string, string> = new Map();
   private _headerCount: number = 0;
   private _headerBytesTotal: number = 0;
   private _bodyChunks: Buffer[] = [];
   private _bodyBytesRemaining: number = 0; // Fixed body 剩余字节数
-  private _currentChunkSize: number = -1;   // Chunked body 当前块大小
+  private _currentChunkSize: number = -1; // Chunked body 当前块大小
 
   /**
    * 尝试从 BufferReader 中解析一个完整的 HTTP 请求。
@@ -120,10 +127,10 @@ export class HttpParser {
         case State.REQUEST_LINE: {
           const line = reader.readLine();
           if (line === null) return { done: false };
-          if (line === '') break; // 忽略请求前空行
+          if (line === "") break; // 忽略请求前空行
 
           if (line.length > MAX_REQUEST_LINE_LENGTH) {
-            return this._error(ParseErrorCode.REQUEST_LINE_TOO_LONG, '请求行超出长度限制');
+            return this._error(ParseErrorCode.REQUEST_LINE_TOO_LONG, "请求行超出长度限制");
           }
 
           const result = this._parseRequestLine(line);
@@ -138,23 +145,23 @@ export class HttpParser {
           if (line === null) return { done: false };
 
           if (line.length > MAX_HEADER_LINE_LENGTH) {
-            return this._error(ParseErrorCode.HEADER_TOO_LONG, 'Header 行超出长度限制');
+            return this._error(ParseErrorCode.HEADER_TOO_LONG, "Header 行超出长度限制");
           }
 
           this._headerBytesTotal += line.length + 2;
           if (this._headerBytesTotal > MAX_HEADERS_TOTAL_BYTES) {
-            return this._error(ParseErrorCode.HEADER_SECTION_TOO_LARGE, 'Header 总大小超出限制');
+            return this._error(ParseErrorCode.HEADER_SECTION_TOO_LARGE, "Header 总大小超出限制");
           }
 
           // 空行表示 Headers 结束
-          if (line === '') {
+          if (line === "") {
             this._state = State.BODY_DETECT;
             break;
           }
 
           this._headerCount++;
           if (this._headerCount > MAX_HEADERS_COUNT) {
-            return this._error(ParseErrorCode.TOO_MANY_HEADERS, 'Header 数量超出限制');
+            return this._error(ParseErrorCode.TOO_MANY_HEADERS, "Header 数量超出限制");
           }
 
           const result = this._parseHeaderLine(line);
@@ -165,13 +172,16 @@ export class HttpParser {
 
         case State.BODY_DETECT: {
           const headers = this._headers;
-          const contentLength = headers.get('content-length');
-          const transferEncoding = headers.get('transfer-encoding');
+          const contentLength = headers.get("content-length");
+          const transferEncoding = headers.get("transfer-encoding");
 
           if (transferEncoding !== undefined) {
             // 安全：禁止 CL + TE 并存（防请求走私）
             if (contentLength !== undefined) {
-              return this._error(ParseErrorCode.CONFLICTING_HEADERS, 'Content-Length 与 Transfer-Encoding 不可同时存在');
+              return this._error(
+                ParseErrorCode.CONFLICTING_HEADERS,
+                "Content-Length 与 Transfer-Encoding 不可同时存在",
+              );
             }
 
             const teResult = this._parseTransferEncoding(transferEncoding);
@@ -182,7 +192,7 @@ export class HttpParser {
           } else if (contentLength !== undefined) {
             const len = this._parseContentLength(contentLength);
             if (len === null) {
-              return this._error(ParseErrorCode.INVALID_CONTENT_LENGTH, '无效的 Content-Length');
+              return this._error(ParseErrorCode.INVALID_CONTENT_LENGTH, "无效的 Content-Length");
             }
             this._bodyBytesRemaining = len;
             this._state = len === 0 ? State.DONE : State.BODY_FIXED;
@@ -206,12 +216,12 @@ export class HttpParser {
           const line = reader.readLine();
           if (line === null) return { done: false };
           if (line.length > MAX_HEADER_LINE_LENGTH) {
-            return this._error(ParseErrorCode.HEADER_TOO_LONG, 'Chunk size 行超出长度限制');
+            return this._error(ParseErrorCode.HEADER_TOO_LONG, "Chunk size 行超出长度限制");
           }
 
           const size = this._parseChunkSize(line);
           if (size === null) {
-            return this._error(ParseErrorCode.INVALID_CHUNK, '无效的 chunk size');
+            return this._error(ParseErrorCode.INVALID_CHUNK, "无效的 chunk size");
           }
 
           if (size === 0) {
@@ -242,22 +252,22 @@ export class HttpParser {
           const line = reader.readLine();
           if (line === null) return { done: false };
           if (line.length > MAX_HEADER_LINE_LENGTH) {
-            return this._error(ParseErrorCode.HEADER_TOO_LONG, 'Trailer 行超出长度限制');
+            return this._error(ParseErrorCode.HEADER_TOO_LONG, "Trailer 行超出长度限制");
           }
 
           this._headerBytesTotal += line.length + 2;
           if (this._headerBytesTotal > MAX_HEADERS_TOTAL_BYTES) {
-            return this._error(ParseErrorCode.HEADER_SECTION_TOO_LARGE, 'Header 总大小超出限制');
+            return this._error(ParseErrorCode.HEADER_SECTION_TOO_LARGE, "Header 总大小超出限制");
           }
 
-          if (line === '') {
+          if (line === "") {
             this._state = State.DONE;
             break;
           }
 
           this._headerCount++;
           if (this._headerCount > MAX_HEADERS_COUNT) {
-            return this._error(ParseErrorCode.TOO_MANY_HEADERS, 'Header 数量超出限制');
+            return this._error(ParseErrorCode.TOO_MANY_HEADERS, "Header 数量超出限制");
           }
 
           const result = this._parseHeaderLine(line, false);
@@ -283,9 +293,9 @@ export class HttpParser {
    */
   reset(): void {
     this._state = State.IDLE;
-    this._method = 'GET';
-    this._path = '/';
-    this._httpVersion = '1.1';
+    this._method = "GET";
+    this._path = "/";
+    this._httpVersion = "1.1";
     this._headers = new Map();
     this._headerCount = 0;
     this._headerBytesTotal = 0;
@@ -298,11 +308,11 @@ export class HttpParser {
 
   private _parseRequestLine(line: string): ParseResult | null {
     // 格式：METHOD SP Request-URI SP HTTP-Version
-    const spaceIndex1 = line.indexOf(' ');
-    const spaceIndex2 = line.lastIndexOf(' ');
+    const spaceIndex1 = line.indexOf(" ");
+    const spaceIndex2 = line.lastIndexOf(" ");
 
     if (spaceIndex1 === -1 || spaceIndex1 === spaceIndex2) {
-      return this._error(ParseErrorCode.INVALID_REQUEST_LINE, '无效的请求行格式');
+      return this._error(ParseErrorCode.INVALID_REQUEST_LINE, "无效的请求行格式");
     }
 
     const method = line.substring(0, spaceIndex1).toUpperCase();
@@ -310,16 +320,19 @@ export class HttpParser {
     const versionStr = line.substring(spaceIndex2 + 1);
 
     if (!this._isToken(method)) {
-      return this._error(ParseErrorCode.INVALID_REQUEST_LINE, `非法的 HTTP 方法: ${method.substring(0, 20)}`);
+      return this._error(
+        ParseErrorCode.INVALID_REQUEST_LINE,
+        `非法的 HTTP 方法: ${method.substring(0, 20)}`,
+      );
     }
 
-    if (!path || path[0] !== '/') {
+    if (!path || path[0] !== "/") {
       // 允许 OPTIONS * 或 完整 URL（代理请求），此处简化处理
-      if (path !== '*') {
+      if (path !== "*") {
         // 尝试解析为完整 URL
         try {
           const url = new URL(path);
-          this._path = url.pathname + (url.search || '');
+          this._path = url.pathname + (url.search || "");
         } catch {
           this._path = path;
         }
@@ -332,10 +345,10 @@ export class HttpParser {
 
     this._method = method as HttpMethod;
 
-    if (versionStr === 'HTTP/1.1') {
-      this._httpVersion = '1.1';
-    } else if (versionStr === 'HTTP/1.0') {
-      this._httpVersion = '1.0';
+    if (versionStr === "HTTP/1.1") {
+      this._httpVersion = "1.1";
+    } else if (versionStr === "HTTP/1.0") {
+      this._httpVersion = "1.0";
     } else {
       return this._error(ParseErrorCode.INVALID_REQUEST_LINE, `不支持的 HTTP 版本: ${versionStr}`);
     }
@@ -344,9 +357,12 @@ export class HttpParser {
   }
 
   private _parseHeaderLine(line: string, store: boolean = true): ParseResult | null {
-    const colonIndex = line.indexOf(':');
+    const colonIndex = line.indexOf(":");
     if (colonIndex <= 0) {
-      return this._error(ParseErrorCode.INVALID_HEADER, `无效的 Header 行: ${line.substring(0, 50)}`);
+      return this._error(
+        ParseErrorCode.INVALID_HEADER,
+        `无效的 Header 行: ${line.substring(0, 50)}`,
+      );
     }
 
     const rawName = line.substring(0, colonIndex);
@@ -368,7 +384,7 @@ export class HttpParser {
     // 处理多值 Header（Set-Cookie 等），用逗号拼接
     const existing = this._headers.get(name);
     if (existing !== undefined) {
-      this._headers.set(name, existing + ', ' + value);
+      this._headers.set(name, existing + ", " + value);
     } else {
       this._headers.set(name, value);
     }
@@ -378,17 +394,18 @@ export class HttpParser {
 
   private _buildRequest(): ParsedRequest {
     const headers = this._headers;
-    const connection = headers.get('connection')?.toLowerCase();
+    const connection = headers.get("connection")?.toLowerCase();
     const keepAlive =
-      this._httpVersion === '1.1'
-        ? !this._hasToken(connection, 'close')
-        : this._hasToken(connection, 'keep-alive');
+      this._httpVersion === "1.1"
+        ? !this._hasToken(connection, "close")
+        : this._hasToken(connection, "keep-alive");
 
-    const body = this._bodyChunks.length === 0
-      ? Buffer.allocUnsafe(0)
-      : this._bodyChunks.length === 1
-        ? this._bodyChunks[0]
-        : Buffer.concat(this._bodyChunks);
+    const body =
+      this._bodyChunks.length === 0
+        ? Buffer.allocUnsafe(0)
+        : this._bodyChunks.length === 1
+          ? this._bodyChunks[0]
+          : Buffer.concat(this._bodyChunks);
 
     return {
       method: this._method,
@@ -401,7 +418,10 @@ export class HttpParser {
   }
 
   private _parseContentLength(value: string): number | null {
-    const parts = value.split(',').map((item) => item.trim()).filter((item) => item.length > 0);
+    const parts = value
+      .split(",")
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
     if (parts.length === 0) return null;
 
     let resolved: number | null = null;
@@ -419,18 +439,21 @@ export class HttpParser {
   }
 
   private _parseTransferEncoding(value: string): { ok: true } | { ok: false; message: string } {
-    const items = value.split(',').map((item) => item.trim()).filter((item) => item.length > 0);
+    const items = value
+      .split(",")
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
     if (items.length === 0) {
-      return { ok: false, message: '无效的 Transfer-Encoding' };
+      return { ok: false, message: "无效的 Transfer-Encoding" };
     }
-    if (items.length !== 1) return { ok: false, message: '仅支持 chunked Transfer-Encoding' };
-    const tokenPart = items[0].split(';', 1)[0].trim().toLowerCase();
-    if (tokenPart !== 'chunked') return { ok: false, message: '仅支持 chunked Transfer-Encoding' };
+    if (items.length !== 1) return { ok: false, message: "仅支持 chunked Transfer-Encoding" };
+    const tokenPart = items[0].split(";", 1)[0].trim().toLowerCase();
+    if (tokenPart !== "chunked") return { ok: false, message: "仅支持 chunked Transfer-Encoding" };
     return { ok: true };
   }
 
   private _parseChunkSize(line: string): number | null {
-    const semi = line.indexOf(';');
+    const semi = line.indexOf(";");
     const rawSize = (semi === -1 ? line : line.substring(0, semi)).trim();
     if (rawSize.length === 0) return null;
 
@@ -462,9 +485,7 @@ export class HttpParser {
     for (let i = 0; i < text.length; i++) {
       const ch = text.charCodeAt(i);
       const isAlphaNum =
-        (ch >= 0x30 && ch <= 0x39) ||
-        (ch >= 0x41 && ch <= 0x5a) ||
-        (ch >= 0x61 && ch <= 0x7a);
+        (ch >= 0x30 && ch <= 0x39) || (ch >= 0x41 && ch <= 0x5a) || (ch >= 0x61 && ch <= 0x7a);
       if (isAlphaNum) continue;
       switch (ch) {
         case 0x21: // !
@@ -503,7 +524,7 @@ export class HttpParser {
     if (!value || value.length === 0) return false;
     let start = 0;
     while (start < value.length) {
-      const comma = value.indexOf(',', start);
+      const comma = value.indexOf(",", start);
       const end = comma === -1 ? value.length : comma;
       const token = value.substring(start, end).trim();
       if (token === target) return true;

@@ -43,7 +43,7 @@ export class BufferReader {
     for (let i = start; i < end - 1; i++) {
       if (buf[i] === 0x0d && buf[i + 1] === 0x0a) {
         // 找到 \r\n
-        const line = buf.toString('latin1', start, i);
+        const line = buf.toString("latin1", start, i);
         this._offset = i + 2; // 跳过 \r\n
         return line;
       }

@@ -14,7 +14,7 @@
 
 在 `scripts/benchmark/` 下执行基准测试脚本后，比较 `Nova` 与现有 Node 原生服务的请求处理能力。
 
-| 测试目标 | QPS (Req/s) | 延迟 (ms) | 内存占用 |
-| --- | --- | --- | --- |
-| Node.js 原生 http | - | - | - |
-| Nova Http Server | - | - | - |
+| 测试目标          | QPS (Req/s) | 延迟 (ms) | 内存占用 |
+| ----------------- | ----------- | --------- | -------- |
+| Node.js 原生 http | -           | -         | -        |
+| Nova Http Server  | -           | -         | -        |
