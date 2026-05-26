@@ -1,11 +1,12 @@
 /**
  * BufferReader — 滚动 Buffer 读取器
  *
- * 职责：在 TCP 流分包场景下，安全地从 Buffer 中按行或按字节读取数据。
+ * 职责：在 TCP 流分包场景下，安全地从 Buffer 中按行或按字节读取数据
+ *
  * 设计原则：
- *   - 零拷贝优先：仅在必要时（offset > length/2）触发 compact
+ *   - 仅在必要时（offset > length/2）触发 compact
  *   - 所有读取操作均通过 offset 推进，不修改底层 buf
- *   - readLine 扫描 CRLF（\r\n），返回不含 CRLF 的行字符串
+ *   - readLine 扫描 CRLF`\r\n`，返回不含 CRLF 的行字符串
  */
 export class BufferReader {
   /** 当前内部缓冲区 */
@@ -14,8 +15,9 @@ export class BufferReader {
   private _offset: number = 0;
 
   /**
-   * 追加新到达的 TCP 数据块到缓冲区。
-   * 若 offset 超过缓冲区一半则先 compact，减少内存碎片。
+   * 追加新到达的 TCP 数据块到缓冲区
+   *
+   * 若 offset 超过缓冲区一半则先 compact，减少内存碎片
    */
   feed(chunk: Buffer): void {
     if (this._offset > 0 && this._offset >= this._buf.length / 2) {
@@ -32,11 +34,11 @@ export class BufferReader {
   }
 
   /**
-   * 读取一行（以 \r\n 结尾）。
-   * @returns 行内容（不含 \r\n），或 null（数据不足，需等待更多数据）
+   * 读取一行，判断条件为 `\r\n`
+   * @returns 行内容 或 null
    */
   readLine(): string | null {
-    const buf = this._buf;
+    const buf = this._buf; // 当前缓冲区
     const start = this._offset;
     const end = buf.length;
 
@@ -52,8 +54,8 @@ export class BufferReader {
   }
 
   /**
-   * 读取确定数量的字节。
-   * @returns Buffer 切片，或 null（数据不足）
+   * 读取确定数量的字节
+   * @returns Buffer 切片，或 null
    */
   readBytes(n: number): Buffer | null {
     if (this._offset + n > this._buf.length) {
@@ -65,8 +67,8 @@ export class BufferReader {
   }
 
   /**
-   * 跳过 n 个字节（不返回内容）。
-   * @returns 是否成功跳过（数据是否充足）
+   * 跳过 n 个字节
+   * @returns 是否成功跳过
    */
   skipBytes(n: number): boolean {
     if (this._offset + n > this._buf.length) {
@@ -77,7 +79,11 @@ export class BufferReader {
   }
 
   /**
-   * 查看接下来 n 字节，不推进 offset（peek 操作）。
+   * 查看接下来 n 字节，不推进 offset
+   *
+   * @param n 查看的字节数
+   *
+   * @returns null
    */
   peekBytes(n: number): Buffer | null {
     if (this._offset + n > this._buf.length) {
@@ -97,8 +103,7 @@ export class BufferReader {
   }
 
   /**
-   * 紧缩缓冲区：将 offset 之后的内容移到开头，释放已消费的空间。
-   * 内部自动调用，外部无需手动调用。
+   * 紧缩缓冲区：将 offset 之后的内容移到开头，释放已消费的空间
    */
   compact(): void {
     if (this._offset === 0) return;
@@ -111,7 +116,9 @@ export class BufferReader {
   }
 
   /**
-   * 完全重置读取器状态（用于 Keep-Alive 请求间清理）。
+   * 重置读取器状态
+   *
+   * @returns null
    */
   reset(): void {
     this._buf = Buffer.allocUnsafe(0);

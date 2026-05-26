@@ -23,6 +23,7 @@ const MAX_REQUEST_LINE_LENGTH = 16384; // 16 KB
 const MAX_HEADER_LINE_LENGTH = 8192; // 8 KB
 const MAX_HEADERS_COUNT = 200;
 const MAX_HEADERS_TOTAL_BYTES = 65536; // 64 KB
+const MAX_BODY_SIZE = 1_048_576; // 1 MiB
 
 // == 类型定义
 
@@ -45,6 +46,7 @@ export const ParseErrorCode = {
   HEADER_SECTION_TOO_LARGE: 431,
   TOO_MANY_HEADERS: 431,
   CONFLICTING_HEADERS: 400,
+  BODY_TOO_LARGE: 413,
   INVALID_CONTENT_LENGTH: 400,
   INVALID_CHUNK: 400,
   INVALID_REQUEST_LINE: 400,
@@ -68,6 +70,14 @@ export interface ParsedRequest {
   body: Buffer;
   /** 是否应保持连接（Keep-Alive） */
   keepAlive: boolean;
+}
+
+export interface HttpParserOptions {
+  maxRequestLineLength?: number;
+  maxHeaderLineLength?: number;
+  maxHeadersCount?: number;
+  maxHeadersTotalBytes?: number;
+  maxBodySize?: number;
 }
 
 /** parse() 的返回结果 */
@@ -105,7 +115,19 @@ export class HttpParser {
   private _headerBytesTotal: number = 0;
   private _bodyChunks: Buffer[] = [];
   private _bodyBytesRemaining: number = 0; // Fixed body 剩余字节数
+  private _bodyBytesRead: number = 0;
   private _currentChunkSize: number = -1; // Chunked body 当前块大小
+  private readonly _options: Required<HttpParserOptions>;
+
+  constructor(options: HttpParserOptions = {}) {
+    this._options = {
+      maxRequestLineLength: options.maxRequestLineLength ?? MAX_REQUEST_LINE_LENGTH,
+      maxHeaderLineLength: options.maxHeaderLineLength ?? MAX_HEADER_LINE_LENGTH,
+      maxHeadersCount: options.maxHeadersCount ?? MAX_HEADERS_COUNT,
+      maxHeadersTotalBytes: options.maxHeadersTotalBytes ?? MAX_HEADERS_TOTAL_BYTES,
+      maxBodySize: options.maxBodySize ?? MAX_BODY_SIZE,
+    };
+  }
 
   /**
    * 尝试从 BufferReader 中解析一个完整的 HTTP 请求。
@@ -129,7 +151,7 @@ export class HttpParser {
           if (line === null) return { done: false };
           if (line === "") break; // 忽略请求前空行
 
-          if (line.length > MAX_REQUEST_LINE_LENGTH) {
+          if (line.length > this._options.maxRequestLineLength) {
             return this._error(ParseErrorCode.REQUEST_LINE_TOO_LONG, "请求行超出长度限制");
           }
 
@@ -144,12 +166,12 @@ export class HttpParser {
           const line = reader.readLine();
           if (line === null) return { done: false };
 
-          if (line.length > MAX_HEADER_LINE_LENGTH) {
+          if (line.length > this._options.maxHeaderLineLength) {
             return this._error(ParseErrorCode.HEADER_TOO_LONG, "Header 行超出长度限制");
           }
 
           this._headerBytesTotal += line.length + 2;
-          if (this._headerBytesTotal > MAX_HEADERS_TOTAL_BYTES) {
+          if (this._headerBytesTotal > this._options.maxHeadersTotalBytes) {
             return this._error(ParseErrorCode.HEADER_SECTION_TOO_LARGE, "Header 总大小超出限制");
           }
 
@@ -160,7 +182,7 @@ export class HttpParser {
           }
 
           this._headerCount++;
-          if (this._headerCount > MAX_HEADERS_COUNT) {
+          if (this._headerCount > this._options.maxHeadersCount) {
             return this._error(ParseErrorCode.TOO_MANY_HEADERS, "Header 数量超出限制");
           }
 
@@ -194,6 +216,9 @@ export class HttpParser {
             if (len === null) {
               return this._error(ParseErrorCode.INVALID_CONTENT_LENGTH, "无效的 Content-Length");
             }
+            if (len > this._options.maxBodySize) {
+              return this._error(ParseErrorCode.BODY_TOO_LARGE, "Payload Too Large");
+            }
             this._bodyBytesRemaining = len;
             this._state = len === 0 ? State.DONE : State.BODY_FIXED;
           } else {
@@ -206,6 +231,10 @@ export class HttpParser {
         case State.BODY_FIXED: {
           const chunk = reader.readBytes(this._bodyBytesRemaining);
           if (chunk === null) return { done: false };
+          this._bodyBytesRead += chunk.byteLength;
+          if (this._bodyBytesRead > this._options.maxBodySize) {
+            return this._error(ParseErrorCode.BODY_TOO_LARGE, "Payload Too Large");
+          }
           this._bodyChunks.push(chunk);
           this._bodyBytesRemaining = 0;
           this._state = State.DONE;
@@ -215,7 +244,7 @@ export class HttpParser {
         case State.CHUNK_SIZE: {
           const line = reader.readLine();
           if (line === null) return { done: false };
-          if (line.length > MAX_HEADER_LINE_LENGTH) {
+          if (line.length > this._options.maxHeaderLineLength) {
             return this._error(ParseErrorCode.HEADER_TOO_LONG, "Chunk size 行超出长度限制");
           }
 
@@ -230,6 +259,10 @@ export class HttpParser {
             break;
           }
 
+          if (this._bodyBytesRead + size > this._options.maxBodySize) {
+            return this._error(ParseErrorCode.BODY_TOO_LARGE, "Payload Too Large");
+          }
+
           this._currentChunkSize = size;
           this._state = State.CHUNK_DATA;
           break;
@@ -239,6 +272,7 @@ export class HttpParser {
           // chunk data + \r\n
           const chunk = reader.readBytes(this._currentChunkSize);
           if (chunk === null) return { done: false };
+          this._bodyBytesRead += chunk.byteLength;
           this._bodyChunks.push(chunk);
 
           // 跳过 chunk 末尾的 \r\n
@@ -251,12 +285,12 @@ export class HttpParser {
         case State.CHUNK_TRAILERS: {
           const line = reader.readLine();
           if (line === null) return { done: false };
-          if (line.length > MAX_HEADER_LINE_LENGTH) {
+          if (line.length > this._options.maxHeaderLineLength) {
             return this._error(ParseErrorCode.HEADER_TOO_LONG, "Trailer 行超出长度限制");
           }
 
           this._headerBytesTotal += line.length + 2;
-          if (this._headerBytesTotal > MAX_HEADERS_TOTAL_BYTES) {
+          if (this._headerBytesTotal > this._options.maxHeadersTotalBytes) {
             return this._error(ParseErrorCode.HEADER_SECTION_TOO_LARGE, "Header 总大小超出限制");
           }
 
@@ -266,7 +300,7 @@ export class HttpParser {
           }
 
           this._headerCount++;
-          if (this._headerCount > MAX_HEADERS_COUNT) {
+          if (this._headerCount > this._options.maxHeadersCount) {
             return this._error(ParseErrorCode.TOO_MANY_HEADERS, "Header 数量超出限制");
           }
 
@@ -301,6 +335,7 @@ export class HttpParser {
     this._headerBytesTotal = 0;
     this._bodyChunks = [];
     this._bodyBytesRemaining = 0;
+    this._bodyBytesRead = 0;
     this._currentChunkSize = -1;
   }
 

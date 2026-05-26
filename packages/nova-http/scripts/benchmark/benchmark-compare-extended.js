@@ -189,7 +189,7 @@ async function waitHealthy(baseUrl, timeoutMs = 15000) {
 }
 
 async function startNova(port) {
-  const { createApp, bodyParser } = require(path.resolve(__dirname, "../dist/src/index.js"));
+  const { createApp, bodyParser } = require(path.resolve(__dirname, "../../dist/src/index.js"));
   const app = createApp({ keepAliveTimeout: 65_000, maxBodySize: 2 * 1024 * 1024 });
   app.use(bodyParser());
 
@@ -365,7 +365,7 @@ async function main() {
 
   printSummary(allResults);
 
-  const outputDir = path.resolve(__dirname, "../.tmp");
+  const outputDir = path.resolve(__dirname, "../../.tmp");
   fs.mkdirSync(outputDir, { recursive: true });
   const outFile = path.join(outputDir, `benchmark-compare-extended-${Date.now()}.json`);
   fs.writeFileSync(

@@ -2,7 +2,7 @@
 
 const path = require("path");
 
-const distEntry = path.resolve(__dirname, "../dist/src/index.js");
+const distEntry = path.resolve(__dirname, "../../dist/src/index.js");
 
 let createApp;
 let bodyParser;

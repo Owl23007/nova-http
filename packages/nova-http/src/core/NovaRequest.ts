@@ -69,7 +69,7 @@ export class NovaRequest {
   }
 
   /**
-   * Query 参数（URLSearchParams），懒解析。
+   * Query 参数 URLSearchParams，懒解析
    * @example req.query.get('page') // '1'
    */
   get query(): URLSearchParams {

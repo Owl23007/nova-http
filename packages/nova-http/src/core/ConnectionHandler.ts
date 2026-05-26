@@ -1,24 +1,3 @@
-/**
- * ConnectionHandler — TCP 连接生命周期管理器
- *
- * 职责：
- *   1. 绑定 net.Socket，配置底层 TCP 选项
- *   2. 持有 BufferReader + HttpParser 实例
- *   3. 接收 socket data 事件，驱动解析状态机
- *   4. 处理 Keep-Alive：同一连接上解析多个 HTTP 请求
- *   5. 内置超时防护：
- *      - headersTimeout（默认 60s）：防 Slowloris 攻击
- *      - keepAliveTimeout（默认 65s）：空闲连接回收
- *      - requestTimeout（默认 600s）：完整请求超时
- *   6. Body 超限立即响应 413 并销毁连接
- *   7. 解析出错立即响应对应错误码并关闭连接
- *
- * Keep-Alive 请求序列：
- *   [data] → parser.parse() → 完成 → dispatch(req, res)
- *       → response 发送完成 → 重置计时器 → 等待下一请求
- *       → headersTimeout 到期 → socket.end()
- */
-
 import type { Socket } from "net";
 import { BufferReader } from "./BufferReader";
 import { HttpParser } from "./HttpParser";
@@ -27,13 +6,14 @@ import { NovaResponse } from "./NovaResponse";
 
 /** ConnectionHandler 依赖的 Nova 应用接口 */
 export interface NovaApp {
-  _dispatch(req: NovaRequest, res: NovaResponse): Promise<void>;
-  _config: ConnectionConfig;
-  _onConnect(socket: Socket): void;
-  _onClose(socket: Socket): void;
-  _onError(err: Error, socket: Socket): void;
+  _dispatch(req: NovaRequest, res: NovaResponse): Promise<void>; // 处理请求的核心方法，返回 Promise
+  _config: ConnectionConfig; // 连接配置项
+  _onConnect(socket: Socket): void; // 新连接回调
+  _onClose(socket: Socket): void; // 连接关闭回调
+  _onError(err: Error, socket: Socket): void; // 连接错误回调
 }
 
+/** ConnectionHandler 的连接处理配置项 */
 export interface ConnectionConfig {
   /** 等待请求头的最大毫秒数，防 Slowloris，默认 60000 */
   headersTimeout: number;
@@ -47,8 +27,25 @@ export interface ConnectionConfig {
   trustProxy: boolean;
 }
 
+/**
+ * TCP 连接生命周期管理器
+ *
+ *   1. 绑定 net.Socket，配置底层 TCP 选项
+ *   2. 持有 BufferReader + HttpParser 实例
+ *   3. 接收 socket data 事件，驱动解析状态机
+ *   4. 处理 Keep-Alive：同一连接上解析多个 HTTP 请求
+ *   5. 超时防护：
+ *      - headersTimeout（默认 60s）：防 Slowloris 攻击
+ *      - keepAliveTimeout（默认 65s）：空闲连接回收
+ *      - requestTimeout（默认 600s）：完整请求超时
+ *   6. Body 超限立即响应 413 并销毁连接
+ *   7. 解析出错立即响应对应错误码并关闭连接
+ */
+
 export class ConnectionHandler {
+  /** 绑定的 BufferReader 实例，管理 TCP 数据缓冲和读取 */
   private readonly _reader: BufferReader;
+  /** 绑定的 HttpParser 实例，负责 HTTP 请求解析状态机 */
   private readonly _parser: HttpParser;
 
   /** 当前 headers 等待定时器 */
@@ -58,54 +55,71 @@ export class ConnectionHandler {
   /** 请求处理超时定时器 */
   private _requestTimer: ReturnType<typeof setTimeout> | null = null;
 
-  /** 当前是否正在处理请求（防止多请求并发） */
+  /** 当前是否正在处理请求 */
   private _busy: boolean = false;
   /** 是否已接到关闭指令 */
   private _closing: boolean = false;
-  /** 当前接收的 body 字节数（用于 maxBodySize 检查） */
+  /** 当前接收的 body 字节数 */
   private _bodyBytesReceived: number = 0;
 
+  /**
+   * 构造函数：初始化状态，绑定 Socket 事件
+   *
+   * @param socket 新建立的 TCP 连接 Socket
+   * @param app Nova 应用实例，提供配置和回调接口
+   */
   constructor(
     private readonly _socket: Socket,
     private readonly _app: NovaApp,
   ) {
+    // 1. 初始化 BufferReader 和 HttpParser 实例
     this._reader = new BufferReader();
-    this._parser = new HttpParser();
+    this._parser = new HttpParser({ maxBodySize: _app._config.maxBodySize });
 
+    // 2. 配置 Socket 选项
     this._setupSocket();
+
+    // 3. 通知 Nova 应用有新连接
     this._app._onConnect(_socket);
+
+    // 4. 启动 headers 超时计时器
     this._startHeadersTimer();
   }
 
-  //  Socket 配置
-
+  /** 配置 Socket 选项 */
   private _setupSocket(): void {
     const socket = this._socket;
 
     // TCP 性能优化：禁用 Nagle 算法，小数据包立即发送
     socket.setNoDelay(true);
-    // TCP 层 Keep-Alive 探针（30s 后开始，与 HTTP Keep-Alive 配合）
+    // TCP 层 Keep-Alive 探针
+    // 30s 后开始，与 HTTP Keep-Alive 配合使用，防止死连接占用资源
     socket.setKeepAlive(true, 30_000);
-    // 关闭 socket 超时（由我们自己管理）
+    // 关闭 socket 超时，由 ConnectionHandler 内部定时器管理超时逻辑
     socket.setTimeout(0);
 
+    // 绑定事件处理器
+    // 1. 数据接收事件，驱动 HTTP 解析
     socket.on("data", (chunk: Buffer) => this._onData(chunk));
+    // 2. 错误事件，清理资源并通知 Nova 应用
     socket.on("error", (err: Error) => this._onSocketError(err));
+    // 3. 连接关闭事件，清理资源并通知 Nova 应用
     socket.on("close", () => this._onClose());
+    // 4. 连接结束事件，处理半关闭状态
     socket.on("end", () => {
-      // 对端关闭写端（半关闭），我们也关闭写端
+      // 当客户端发送 FIN 包时，触发 end 事件，表示对方已完成发送数据
+      // 服务器端也应当响应 FIN 包，进入半关闭状态，等待对方确认后完全关闭
       if (!socket.destroyed) {
         socket.end();
       }
     });
   }
 
-  //  数据接收与解析
-
+  /** 数据接收与解析 */
   private _onData(chunk: Buffer): void {
     if (this._closing || this._socket.destroyed) return;
 
-    // Body 超限前置检查（在 feed 之前，防止 OOM）
+    // 1. Body 超限前置检查：先累加字节数，再 feed 数据，确保超限时立即响应 413 并关闭连接
     this._bodyBytesReceived += chunk.length;
     if (this._bodyBytesReceived > this._app._config.maxBodySize + 8192) {
       // 8192 是 header 部分的容差，超限后立即拒绝
@@ -113,11 +127,12 @@ export class ConnectionHandler {
       return;
     }
 
+    // 2. 将新数据追加到 BufferReader 中，驱动解析状态机
     this._reader.feed(chunk);
 
-    // 解析循环：一个 TCP 包可能包含多个完整 HTTP 请求（Keep-Alive pipeline）
+    // 3. 解析循环：一个 TCP 包可能包含多个完整 HTTP 请求 [Keep-Alive | pipeline]
     while (!this._busy && !this._closing) {
-      const result = this._parser.parse(this._reader);
+      const result = this._parser.parse(this._reader); // 尝试将当前的缓冲区解析为一个完整的 HTTP 请求
 
       if (!result.done) {
         // 数据不足，等待下一个 data 事件
@@ -125,16 +140,16 @@ export class ConnectionHandler {
       }
 
       if ("error" in result) {
-        // 解析出错
+        // 解析出错，根据错误类型发送对应的 HTTP 错误响应并关闭连接
         this._sendErrorAndClose(result.error.code, result.error.message);
         return;
       }
 
-      // 解析成功，停止 headers 超时计时器
+      // 解析成功，停止 headers 超时计时器，启动请求处理超时计时器
       this._clearHeadersTimer();
       this._startRequestTimer();
 
-      // Body 大小精确验证
+      // Body 大小验证
       if (result.request.body.length > this._app._config.maxBodySize) {
         this._sendErrorAndClose(413, "Payload Too Large");
         return;
@@ -297,7 +312,7 @@ export class ConnectionHandler {
   }
 
   /**
-   * 主动优雅关闭连接（等待当前请求完成后再关闭）。
+   * 主动优雅关闭连接
    */
   gracefulClose(): void {
     this._closing = true;
@@ -305,5 +320,25 @@ export class ConnectionHandler {
       this._socket.end();
     }
     // 若 busy，_onRequestDone 检测到 _closing 后会关闭
+  }
+
+  /**
+   * 主动关闭连接
+   */
+  close(): void {
+    this.gracefulClose();
+    // 强制关闭，以防请求处理过慢或客户端不响应
+    setTimeout(() => {
+      if (!this._socket.destroyed) {
+        this._socket.destroy();
+      }
+    }, 5000); // 5s 后强制销毁，确保资源回收
+  }
+
+  /**
+   * 立即销毁连接
+   */
+  shutdown(): void {
+    this._socket.destroy();
   }
 }

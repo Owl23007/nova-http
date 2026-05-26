@@ -259,7 +259,7 @@ async function main() {
 
     printSummary(results);
 
-    const outputDir = path.resolve(__dirname, "../.tmp");
+    const outputDir = path.resolve(__dirname, "../../.tmp");
     fs.mkdirSync(outputDir, { recursive: true });
     const outputFile = path.join(outputDir, `benchmark-${Date.now()}.json`);
     fs.writeFileSync(

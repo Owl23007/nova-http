@@ -187,7 +187,7 @@ async function waitHealthy(baseUrl, timeoutMs = 15_000) {
 }
 
 async function startNova(port) {
-  const distEntry = path.resolve(__dirname, "../dist/src/index.js");
+  const distEntry = path.resolve(__dirname, "../../dist/src/index.js");
   const { createApp, bodyParser } = require(distEntry);
 
   const app = createApp({
@@ -281,7 +281,7 @@ async function startKoa(port) {
 
 function getFrameworkVersions() {
   return {
-    nova: require("../package.json").version,
+    nova: require("../../package.json").version,
     express: require("express/package.json").version,
     fastify: require("fastify/package.json").version,
     koa: require("koa/package.json").version,
@@ -388,7 +388,7 @@ async function main() {
 
   printSummary(allResults);
 
-  const outputDir = path.resolve(__dirname, "../.tmp");
+  const outputDir = path.resolve(__dirname, "../../.tmp");
   fs.mkdirSync(outputDir, { recursive: true });
   const outputFile = path.join(outputDir, `benchmark-compare-${Date.now()}.json`);
   fs.writeFileSync(

@@ -1,23 +1,3 @@
-/**
- * Router — Radix Tree 路由器
- *
- * 基于前缀压缩的 Radix Tree 实现，支持：
- *   - 精确匹配：/users/list
- *   - 参数匹配：/users/:id（单段，注入 params.id）
- *   - 通配符匹配：/static/*（剩余全部路径，注入 params['*']）
- *   - 全部 HTTP 方法：GET/POST/PUT/PATCH/DELETE/HEAD/OPTIONS
- *
- * 匹配优先级（由高到低）：
- *   1. 精确静态段
- *   2. 参数段（:param）
- *   3. 通配符（*）
- *
- * 复杂度：
- *   - 插入：O(k)，k = 路径分段数
- *   - 查找：O(k)，k = 路径分段数
- *   - 空间：O(n·k)，n = 路由总数
- */
-
 import type { NovaRequest } from "./NovaRequest";
 import type { NovaResponse } from "./NovaResponse";
 
@@ -35,15 +15,15 @@ export interface RouteMatch {
 // == Radix Tree 节点
 
 interface RadixNode {
-  /** 节点代表的路径段（静态文字、':param' 或 '*'） */
+  /** 节点代表的路径段 [string,':param','*'] */
   segment: string;
   /** 是否是参数节点 */
   isParam: boolean;
-  /** 参数名（仅 isParam=true 时有效） */
+  /** 参数名，仅 isParam=true 时有效 */
   paramName?: string;
   /** 是否是通配符节点 */
   isWildcard: boolean;
-  /** 子节点列表（静态优先排序） */
+  /** 子节点列表 */
   children: RadixNode[];
   /** 注册的 HTTP 方法 → 处理函数 */
   handlers: Map<string, Handler>;
@@ -63,14 +43,32 @@ function createNode(segment: string): RadixNode {
 }
 
 // == Router
-
+/**
+ * Router Radix Tree 路由器
+ *
+ * 基于前缀压缩的 Radix Tree 实现，支持：
+ *   - 精确匹配：`/users/list`
+ *   - 参数匹配：`/users/:id` ，单段，注入 params.id
+ *   - 通配符匹配：`/static/*`，剩余全部路径，注入 params['*']
+ *   - 全部 HTTP 方法：GET/POST/PUT/PATCH/DELETE/HEAD/OPTIONS
+ *
+ * 匹配优先级 - 由高到低：
+ *   1. 精确静态段
+ *   2. 参数段（:param）
+ *   3. 通配符（*）
+ *
+ * 复杂度：
+ *   - 插入：O(k)，k = 路径分段数
+ *   - 查找：O(k)，k = 路径分段数
+ *   - 空间：O(n·k)，n = 路由总数
+ */
 export class Router {
   private readonly _root: RadixNode = createNode("/");
-  /** 记录已注册路由（用于调试和文档生成） */
+  /** 记录已注册路由 */
   private readonly _routes: Array<{ method: string; path: string }> = [];
 
   /**
-   * 注册路由。
+   * 注册路由
    * @param method HTTP 方法（大写）
    * @param path 路由路径，如 '/users/:id/posts'
    * @param handler 处理函数

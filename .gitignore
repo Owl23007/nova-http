@@ -1,5 +1,7 @@
 **/dist/**
 **/node_modules/**
+**/coverage/**
+**/.tmp/**
 examples/*
 .tmp/*
 *.tgz
