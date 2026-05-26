@@ -1,5 +1,6 @@
 import type { NovaRequest } from "./NovaRequest";
 import type { NovaResponse } from "./NovaResponse";
+import type { HttpMethod } from "./HttpParser";
 
 // == 类型定义
 
@@ -65,23 +66,24 @@ function createNode(segment: string): RadixNode {
 export class Router {
   private readonly _root: RadixNode = createNode("/");
   /** 记录已注册路由 */
-  private readonly _routes: Array<{ method: string; path: string }> = [];
+  private readonly _routes: Array<{ method: HttpMethod; path: string }> = [];
 
   /**
    * 注册路由
-   * @param method HTTP 方法（大写）
+   * @param method HTTP 方法，注册时会统一转换为大写 token
    * @param path 路由路径，如 '/users/:id/posts'
    * @param handler 处理函数
    */
-  add(method: string, path: string, handler: Handler): void {
+  add(method: HttpMethod, path: string, handler: Handler): void {
+    const normalizedMethod = normalizeHttpMethod(method);
     const normalizedPath = normalizePath(path);
-    this._routes.push({ method, path: normalizedPath });
+    this._routes.push({ method: normalizedMethod, path: normalizedPath });
 
     const segments = splitPath(normalizedPath);
 
     if (segments.length === 0) {
       // 根路径
-      this._root.handlers.set(method.toUpperCase(), handler);
+      this._root.handlers.set(normalizedMethod, handler);
       return;
     }
 
@@ -98,21 +100,22 @@ export class Router {
       }
     }
 
-    node.handlers.set(method.toUpperCase(), handler);
+    node.handlers.set(normalizedMethod, handler);
   }
 
   /**
    * 查找路由。
-   * @param method HTTP 方法（大写）
+   * @param method HTTP 方法，查找时会统一转换为大写 token
    * @param pathname 不含 query string 的路径
    * @returns 匹配结果（handler + params），未匹配返回 null
    */
-  find(method: string, pathname: string): RouteMatch | null {
+  find(method: HttpMethod, pathname: string): RouteMatch | null {
+    const normalizedMethod = normalizeHttpMethod(method);
     const normalizedPath = normalizePath(pathname);
     const segments = splitPath(normalizedPath);
 
     if (segments.length === 0) {
-      const handler = this._root.handlers.get(method.toUpperCase());
+      const handler = this._root.handlers.get(normalizedMethod);
       if (handler) return { handler, params: {} };
       return null;
     }
@@ -122,7 +125,7 @@ export class Router {
 
     if (!node) return null;
 
-    const handler = node.handlers.get(method.toUpperCase());
+    const handler = node.handlers.get(normalizedMethod);
     if (!handler) return null;
 
     return { handler, params };
@@ -148,7 +151,7 @@ export class Router {
   }
 
   /** 获取已注册路由列表 */
-  get routes(): ReadonlyArray<{ method: string; path: string }> {
+  get routes(): ReadonlyArray<{ method: HttpMethod; path: string }> {
     return this._routes;
   }
 
@@ -227,6 +230,45 @@ function safeDecodeURIComponent(value: string): string {
   } catch {
     return value;
   }
+}
+
+function normalizeHttpMethod(method: HttpMethod): HttpMethod {
+  const normalized = method.toUpperCase();
+  if (!isHttpToken(normalized)) {
+    throw new TypeError(`非法的 HTTP 方法: ${method.substring(0, 20)}`);
+  }
+  return normalized;
+}
+
+function isHttpToken(text: string): boolean {
+  if (text.length === 0) return false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text.charCodeAt(i);
+    const isAlphaNum =
+      (ch >= 0x30 && ch <= 0x39) || (ch >= 0x41 && ch <= 0x5a) || (ch >= 0x61 && ch <= 0x7a);
+    if (isAlphaNum) continue;
+    switch (ch) {
+      case 0x21: // !
+      case 0x23: // #
+      case 0x24: // $
+      case 0x25: // %
+      case 0x26: // &
+      case 0x27: // '
+      case 0x2a: // *
+      case 0x2b: // +
+      case 0x2d: // -
+      case 0x2e: // .
+      case 0x5e: // ^
+      case 0x5f: // _
+      case 0x60: // `
+      case 0x7c: // |
+      case 0x7e: // ~
+        break;
+      default:
+        return false;
+    }
+  }
+  return true;
 }
 
 /** 从节点的 children 中查找匹配的子节点（精确匹配） */

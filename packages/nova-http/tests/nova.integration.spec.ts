@@ -87,4 +87,19 @@ describe("Nova integration", () => {
     expect(wrongMethod).toContain("HTTP/1.1 405 Method Not Allowed");
     expect(wrongMethod).toContain("allow: GET");
   });
+
+  it("supports custom HTTP methods registered through app.method", async () => {
+    app = createApp();
+    app.method("PROPFIND", "/files", (_req, res) => res.send("custom method"));
+
+    const port = await listen(app);
+
+    const response = await request(
+      port,
+      "PROPFIND /files HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
+    );
+
+    expect(response).toContain("HTTP/1.1 200 OK");
+    expect(response).toContain("custom method");
+  });
 });

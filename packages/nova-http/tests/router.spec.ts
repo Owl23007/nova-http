@@ -139,4 +139,16 @@ describe("Router", () => {
     expect(router.find("POST", "/users")?.handler).toBe(postHandler);
     expect(router.findAllowedMethods("/users").sort()).toEqual(["GET", "POST"]);
   });
+
+  it("UT-ROUTE-13 支持注册扩展 HTTP 方法并统一规范为大写", () => {
+    const router = new Router();
+    const handler = () => {};
+
+    router.add("propfind", "/files", handler);
+
+    expect(router.find("PROPFIND", "/files")?.handler).toBe(handler);
+    expect(router.find("propfind", "/files")?.handler).toBe(handler);
+    expect(router.findAllowedMethods("/files")).toEqual(["PROPFIND"]);
+    expect(router.routes).toEqual([{ method: "PROPFIND", path: "/files" }]);
+  });
 });

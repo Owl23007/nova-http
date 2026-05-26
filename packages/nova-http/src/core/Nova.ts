@@ -26,6 +26,7 @@ import type { NovaResponse } from "./NovaResponse";
 import type { Middleware, ErrorMiddleware, NextFunction } from "./MiddlewareChain";
 import type { Handler } from "./Router";
 import type { HookName, HookHandler } from "./Hooks";
+import type { HttpMethod } from "./HttpParser";
 
 //  类型定义
 
@@ -41,6 +42,7 @@ export interface NovaConfig extends Partial<ConnectionConfig> {
 
 /** 链式路由构建器（app.route('/path').get(handler).post(handler)） */
 export interface RouteBuilder {
+  method(method: HttpMethod, ...handlers: (Middleware | Handler)[]): RouteBuilder;
   get(...handlers: (Middleware | Handler)[]): RouteBuilder;
   post(...handlers: (Middleware | Handler)[]): RouteBuilder;
   put(...handlers: (Middleware | Handler)[]): RouteBuilder;
@@ -166,6 +168,13 @@ export class Nova implements NovaApp {
   }
 
   /**
+   * 注册任意 HTTP 方法，适配 WebDAV 等扩展方法。
+   */
+  method(method: HttpMethod, path: string, ...handlers: (Middleware | Handler)[]): this {
+    return this._addRoute(method, path, handlers);
+  }
+
+  /**
    * 为路径注册所有 HTTP 方法处理器。
    */
   all(path: string, ...handlers: (Middleware | Handler)[]): this {
@@ -185,6 +194,10 @@ export class Nova implements NovaApp {
    */
   route(path: string): RouteBuilder {
     const builder: RouteBuilder = {
+      method: (method, ...h) => {
+        this.method(method, path, ...h);
+        return builder;
+      },
       get: (...h) => {
         this.get(path, ...h);
         return builder;
@@ -303,7 +316,7 @@ export class Nova implements NovaApp {
   /**
    * 获取已注册路由列表（供调试和文档生成）。
    */
-  get routes(): ReadonlyArray<{ method: string; path: string }> {
+  get routes(): ReadonlyArray<{ method: HttpMethod; path: string }> {
     return this._router.routes;
   }
 
@@ -390,7 +403,7 @@ export class Nova implements NovaApp {
 
   //  私有工具方法
 
-  private _addRoute(method: string, path: string, handlers: (Middleware | Handler)[]): this {
+  private _addRoute(method: HttpMethod, path: string, handlers: (Middleware | Handler)[]): this {
     if (handlers.length === 0) return this;
 
     if (handlers.length === 1) {
