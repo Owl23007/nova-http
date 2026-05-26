@@ -27,17 +27,8 @@ const MAX_BODY_SIZE = 1_048_576; // 1 MiB
 
 // == 类型定义
 
-/** HTTP 方法枚举 */
-export type HttpMethod =
-  | "GET"
-  | "POST"
-  | "PUT"
-  | "PATCH"
-  | "DELETE"
-  | "HEAD"
-  | "OPTIONS"
-  | "TRACE"
-  | "CONNECT";
+/** HTTP 方法。HTTP 允许扩展方法，因此这里保留为 string。 */
+export type HttpMethod = string;
 
 /** 解析错误对应的 HTTP 状态码 */
 export const ParseErrorCode = {
@@ -107,7 +98,7 @@ export class HttpParser {
   private _state: State = State.IDLE;
 
   // 解析中间结果
-  private _method: HttpMethod = "GET";
+  private _method: string = "GET";
   private _path: string = "/";
   private _httpVersion: "1.0" | "1.1" = "1.1";
   private _headers: Map<string, string> = new Map();
@@ -269,14 +260,22 @@ export class HttpParser {
         }
 
         case State.CHUNK_DATA: {
-          // chunk data + \r\n
+          // 先确认 chunk data 和尾部 CRLF 都完整到达，避免分包时提前消费数据。
+          const chunkWithCrlf = reader.peekBytes(this._currentChunkSize + 2);
+          if (chunkWithCrlf === null) return { done: false };
+          if (
+            chunkWithCrlf[this._currentChunkSize] !== 0x0d ||
+            chunkWithCrlf[this._currentChunkSize + 1] !== 0x0a
+          ) {
+            return this._error(ParseErrorCode.INVALID_CHUNK, "chunk data 后缺少 CRLF");
+          }
+
           const chunk = reader.readBytes(this._currentChunkSize);
           if (chunk === null) return { done: false };
           this._bodyBytesRead += chunk.byteLength;
           this._bodyChunks.push(chunk);
 
-          // 跳过 chunk 末尾的 \r\n
-          if (!reader.skipBytes(2)) return { done: false };
+          reader.skipBytes(2);
 
           this._state = State.CHUNK_SIZE;
           break;
@@ -378,7 +377,7 @@ export class HttpParser {
       this._path = path;
     }
 
-    this._method = method as HttpMethod;
+    this._method = method;
 
     if (versionStr === "HTTP/1.1") {
       this._httpVersion = "1.1";

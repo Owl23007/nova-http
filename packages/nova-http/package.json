@@ -45,17 +45,20 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "postbuild": "node -e \"const fs=require('fs');fs.cpSync('cli/templates','dist/cli/templates',{recursive:true})\"",
     "build:watch": "tsc -p tsconfig.build.json --watch",
+    "postbuild": "node -e \"const fs=require('fs');fs.cpSync('cli/templates','dist/cli/templates',{recursive:true})\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
-    "cli": "ts-node cli/nova.ts",
-    "cli:init": "ts-node cli/create-nova.ts",
     "bench": "node scripts/benchmark/benchmark.js",
     "bench:server": "node scripts/benchmark/benchmark-server.js",
     "bench:compare": "node scripts/benchmark/benchmark-compare.js",
     "bench:compare:extended": "node scripts/benchmark/benchmark-compare-extended.js",
     "bench:parser": "node scripts/benchmark/benchmark-parser-vs-llhttp.js",
-    "bench:parser:native": "node scripts/benchmark/benchmark-parser-vs-node-native.js"
+    "bench:parser:native": "node scripts/benchmark/benchmark-parser-vs-node-native.js",
+    "cli": "ts-node cli/nova.ts",
+    "cli:init": "ts-node cli/create-nova.ts"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",

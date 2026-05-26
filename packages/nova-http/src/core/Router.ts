@@ -180,7 +180,7 @@ export class Router {
     for (const child of node.children) {
       if (child.isParam) {
         const snapshot = params[child.paramName!];
-        params[child.paramName!] = decodeURIComponent(segment);
+        params[child.paramName!] = safeDecodeURIComponent(segment);
         const result = this._findNode(child, segments, depth + 1, params);
         if (result) return result;
         // 回溯
@@ -195,7 +195,7 @@ export class Router {
     // 3. 通配符节点（* 消耗剩余全部路径段）
     for (const child of node.children) {
       if (child.isWildcard) {
-        params["*"] = segments.slice(depth).map(decodeURIComponent).join("/");
+        params["*"] = segments.slice(depth).map(safeDecodeURIComponent).join("/");
         if (child.handlers.size > 0) return child;
       }
     }
@@ -219,6 +219,14 @@ function normalizePath(path: string): string {
 function splitPath(path: string): string[] {
   if (path === "/") return [];
   return path.split("/").filter(Boolean);
+}
+
+function safeDecodeURIComponent(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
 }
 
 /** 从节点的 children 中查找匹配的子节点（精确匹配） */
