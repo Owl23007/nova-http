@@ -12,7 +12,7 @@
  */
 
 import type { Socket } from "net";
-import type { ParsedRequest } from "./HttpParser";
+import type { ParsedRequest } from "./http-parser";
 
 export class NovaRequest {
   /** HTTP 方法 */

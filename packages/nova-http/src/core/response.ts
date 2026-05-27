@@ -13,86 +13,12 @@
  */
 
 import { createReadStream, stat } from "fs";
-import { extname } from "path";
 import type { Socket } from "net";
-import type { NovaRequest } from "./NovaRequest";
+import { getMimeType, getStatusText, parseRange } from "./http-metadata";
+import type { NovaRequest } from "./request";
 
-// == MIME 类型表
-
-const MIME_TYPES: Readonly<Record<string, string>> = {
-  ".html": "text/html; charset=utf-8",
-  ".htm": "text/html; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".js": "application/javascript; charset=utf-8",
-  ".mjs": "application/javascript; charset=utf-8",
-  ".ts": "application/typescript",
-  ".json": "application/json; charset=utf-8",
-  ".xml": "application/xml; charset=utf-8",
-  ".txt": "text/plain; charset=utf-8",
-  ".md": "text/markdown; charset=utf-8",
-  ".ico": "image/x-icon",
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".gif": "image/gif",
-  ".webp": "image/webp",
-  ".svg": "image/svg+xml",
-  ".avif": "image/avif",
-  ".mp4": "video/mp4",
-  ".webm": "video/webm",
-  ".mp3": "audio/mpeg",
-  ".wav": "audio/wav",
-  ".ogg": "audio/ogg",
-  ".woff": "font/woff",
-  ".woff2": "font/woff2",
-  ".ttf": "font/ttf",
-  ".otf": "font/otf",
-  ".eot": "application/vnd.ms-fontobject",
-  ".pdf": "application/pdf",
-  ".zip": "application/zip",
-  ".gz": "application/gzip",
-  ".tar": "application/x-tar",
-  ".wasm": "application/wasm",
-};
-
-export function getMimeType(filePath: string): string {
-  return MIME_TYPES[extname(filePath).toLowerCase()] ?? "application/octet-stream";
-}
-
-// == Range 请求解析
-
-interface RangeResult {
-  start: number;
-  end: number;
-}
-
-function parseRange(rangeHeader: string, fileSize: number): RangeResult | null {
-  const match = rangeHeader.match(/^bytes=(\d*)-(\d*)$/);
-  if (!match) return null;
-
-  const startStr = match[1];
-  const endStr = match[2];
-
-  let start: number;
-  let end: number;
-
-  if (startStr === "") {
-    // suffix-range: bytes=-500（最后500字节）
-    const suffixLen = parseInt(endStr, 10);
-    if (isNaN(suffixLen)) return null;
-    start = Math.max(0, fileSize - suffixLen);
-    end = fileSize - 1;
-  } else {
-    start = parseInt(startStr, 10);
-    end = endStr === "" ? fileSize - 1 : parseInt(endStr, 10);
-  }
-
-  if (isNaN(start) || isNaN(end) || start > end || end >= fileSize || start < 0) {
-    return null;
-  }
-
-  return { start, end };
-}
+export { getMimeType } from "./http-metadata";
+export type { RangeResult } from "./http-metadata";
 
 // == NovaResponse
 
@@ -381,45 +307,3 @@ export class NovaResponse {
     this.socket.uncork();
   }
 }
-
-// == HTTP 状态码文本
-
-function getStatusText(code: number): string {
-  return STATUS_TEXTS[code] ?? "Unknown";
-}
-
-const STATUS_TEXTS: Readonly<Record<number, string>> = {
-  100: "Continue",
-  101: "Switching Protocols",
-  200: "OK",
-  201: "Created",
-  202: "Accepted",
-  204: "No Content",
-  206: "Partial Content",
-  301: "Moved Permanently",
-  302: "Found",
-  303: "See Other",
-  304: "Not Modified",
-  307: "Temporary Redirect",
-  308: "Permanent Redirect",
-  400: "Bad Request",
-  401: "Unauthorized",
-  403: "Forbidden",
-  404: "Not Found",
-  405: "Method Not Allowed",
-  408: "Request Timeout",
-  409: "Conflict",
-  410: "Gone",
-  413: "Payload Too Large",
-  414: "URI Too Long",
-  415: "Unsupported Media Type",
-  416: "Range Not Satisfiable",
-  422: "Unprocessable Entity",
-  429: "Too Many Requests",
-  431: "Request Header Fields Too Large",
-  500: "Internal Server Error",
-  501: "Not Implemented",
-  502: "Bad Gateway",
-  503: "Service Unavailable",
-  504: "Gateway Timeout",
-};

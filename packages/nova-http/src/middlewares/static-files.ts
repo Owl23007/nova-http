@@ -1,8 +1,6 @@
 import { stat } from "fs/promises";
 import { basename, join, normalize, resolve, sep } from "path";
-import type { NovaRequest } from "../core/NovaRequest";
-import type { NovaResponse } from "../core/NovaResponse";
-import type { NextFunction } from "../core/MiddlewareChain";
+import type { NextFunction, NovaRequest, NovaResponse } from "../core";
 
 /**
  * 静态文件中间件配置项。

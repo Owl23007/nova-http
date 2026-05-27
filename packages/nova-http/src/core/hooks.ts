@@ -27,8 +27,8 @@
 
 import { EventEmitter } from "events";
 import type { Socket } from "net";
-import type { NovaRequest } from "./NovaRequest";
-import type { NovaResponse } from "./NovaResponse";
+import type { NovaRequest } from "./request";
+import type { NovaResponse } from "./response";
 
 // == 钩子上下文类型
 

@@ -37,6 +37,16 @@
       "require": "./dist/src/index.js",
       "default": "./dist/src/index.js"
     },
+    "./core": {
+      "types": "./dist/src/core/index.d.ts",
+      "require": "./dist/src/core/index.js",
+      "default": "./dist/src/core/index.js"
+    },
+    "./middlewares": {
+      "types": "./dist/src/middlewares/index.d.ts",
+      "require": "./dist/src/middlewares/index.js",
+      "default": "./dist/src/middlewares/index.js"
+    },
     "./package.json": "./package.json"
   },
   "publishConfig": {

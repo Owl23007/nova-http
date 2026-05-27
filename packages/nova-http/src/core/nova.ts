@@ -1,14 +1,19 @@
 import { createServer, Server, Socket } from "net";
-import { Hooks } from "./Hooks";
-import { Router } from "./Router";
-import { MiddlewareChain } from "./MiddlewareChain";
-import { ConnectionHandler, type NovaApp, type ConnectionConfig } from "./ConnectionHandler";
-import type { NovaRequest } from "./NovaRequest";
-import type { NovaResponse } from "./NovaResponse";
-import type { Middleware, ErrorMiddleware, NextFunction } from "./MiddlewareChain";
-import type { Handler } from "./Router";
-import type { HookName, HookHandler } from "./Hooks";
-import type { HttpMethod } from "./HttpParser";
+import { ConnectionHandler, type ConnectionConfig, type NovaApp } from "./connection-handler";
+import { Hooks } from "./hooks";
+import { MiddlewareChain } from "./middleware-chain";
+import { createMountedMiddleware, createPrefixedMiddleware } from "./mount";
+import { BUILTIN_HTTP_METHODS, createRouteBuilder } from "./route-builder";
+import { Router } from "./router";
+import type { ErrorMiddleware, Middleware } from "./middleware-chain";
+import type { HookHandler, HookName } from "./hooks";
+import type { HttpMethod } from "./http-parser";
+import type { NovaRequest } from "./request";
+import type { NovaResponse } from "./response";
+import type { Handler } from "./router";
+import type { RouteBuilder } from "./route-builder";
+
+export type { RouteBuilder } from "./route-builder";
 
 /**
  * Nova 应用配置项。
@@ -34,51 +39,6 @@ export interface NovaConfig extends Partial<ConnectionConfig> {
    * @defaultValue `0`
    */
   maxConnections?: number;
-}
-
-/**
- * 链式路由构建器。
- *
- * @example
- * ```ts
- * app.route("/users")
- *   .get(listUsers)
- *   .post(createUser);
- * ```
- */
-export interface RouteBuilder {
-  /**
-   * 为当前路径注册指定 HTTP 方法。
-   *
-   * @param method - HTTP 方法名。
-   * @param handlers - 路由级中间件和终端处理函数。
-   * @returns 当前路由构建器。
-   */
-  method(method: HttpMethod, ...handlers: (Middleware | Handler)[]): RouteBuilder;
-
-  /** 注册 `GET` 处理函数。 */
-  get(...handlers: (Middleware | Handler)[]): RouteBuilder;
-
-  /** 注册 `POST` 处理函数。 */
-  post(...handlers: (Middleware | Handler)[]): RouteBuilder;
-
-  /** 注册 `PUT` 处理函数。 */
-  put(...handlers: (Middleware | Handler)[]): RouteBuilder;
-
-  /** 注册 `PATCH` 处理函数。 */
-  patch(...handlers: (Middleware | Handler)[]): RouteBuilder;
-
-  /** 注册 `DELETE` 处理函数。 */
-  delete(...handlers: (Middleware | Handler)[]): RouteBuilder;
-
-  /** 注册 `HEAD` 处理函数。 */
-  head(...handlers: (Middleware | Handler)[]): RouteBuilder;
-
-  /** 注册 `OPTIONS` 处理函数。 */
-  options(...handlers: (Middleware | Handler)[]): RouteBuilder;
-
-  /** 为当前路径注册所有内置 HTTP 方法。 */
-  all(...handlers: (Middleware | Handler)[]): RouteBuilder;
 }
 
 /**
@@ -170,21 +130,23 @@ export class Nova implements NovaApp {
       const prefix = pathOrMiddleware;
       for (const mw of middlewares) {
         if (this._isSubApp(mw)) {
-          this._chain.use(this._makeMountedMiddleware(prefix, mw));
+          this._chain.use(createMountedMiddleware(prefix, mw._dispatchInternal.bind(mw)));
         } else {
-          const prefixed = this._makePrefixedMiddleware(prefix, mw);
-          this._chain.use(prefixed);
+          this._chain.use(createPrefixedMiddleware(prefix, mw));
         }
       }
     } else {
       if (this._isSubApp(pathOrMiddleware)) {
-        this._chain.use(this._makeMountedMiddleware("/", pathOrMiddleware));
+        this._chain.use(
+          createMountedMiddleware("/", pathOrMiddleware._dispatchInternal.bind(pathOrMiddleware)),
+        );
       } else {
         this._chain.use(pathOrMiddleware);
       }
       for (const mw of middlewares) {
         if (this._isSubApp(mw)) {
-          this._chain.use(this._makeMountedMiddleware("/", mw));
+          // 子应用挂载必须使用 createMountedMiddleware 包裹，以便正确处理子应用内路由分发和 404 处理
+          this._chain.use(createMountedMiddleware("/", mw._dispatchInternal.bind(mw)));
         } else {
           this._chain.use(mw);
         }
@@ -250,8 +212,7 @@ export class Nova implements NovaApp {
    * @returns 当前应用实例。
    */
   all(path: string, ...handlers: (Middleware | Handler)[]): this {
-    const methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"];
-    for (const method of methods) {
+    for (const method of BUILTIN_HTTP_METHODS) {
       this._addRoute(method, path, handlers);
     }
     return this;
@@ -271,45 +232,9 @@ export class Nova implements NovaApp {
    * ```
    */
   route(path: string): RouteBuilder {
-    const builder: RouteBuilder = {
-      method: (method, ...h) => {
-        this.method(method, path, ...h);
-        return builder;
-      },
-      get: (...h) => {
-        this.get(path, ...h);
-        return builder;
-      },
-      post: (...h) => {
-        this.post(path, ...h);
-        return builder;
-      },
-      put: (...h) => {
-        this.put(path, ...h);
-        return builder;
-      },
-      patch: (...h) => {
-        this.patch(path, ...h);
-        return builder;
-      },
-      delete: (...h) => {
-        this.delete(path, ...h);
-        return builder;
-      },
-      head: (...h) => {
-        this.head(path, ...h);
-        return builder;
-      },
-      options: (...h) => {
-        this.options(path, ...h);
-        return builder;
-      },
-      all: (...h) => {
-        this.all(path, ...h);
-        return builder;
-      },
-    };
-    return builder;
+    return createRouteBuilder(path, (method, routePath, handlers) => {
+      this._addRoute(method, routePath, handlers);
+    });
   }
 
   /**
@@ -517,49 +442,6 @@ export class Nova implements NovaApp {
     return this;
   }
 
-  private _makePrefixedMiddleware(
-    prefix: string,
-    mw: Middleware | ErrorMiddleware,
-  ): Middleware | ErrorMiddleware {
-    const normalizedPrefix = prefix.endsWith("/") ? prefix.slice(0, -1) : prefix;
-
-    if (mw.length === 4) {
-      const errMw = mw as ErrorMiddleware;
-      return (err: unknown, req: NovaRequest, res: NovaResponse, next: NextFunction) => {
-        if (req.pathname.startsWith(normalizedPrefix)) {
-          return errMw(err, req, res, next);
-        }
-        next();
-      };
-    }
-
-    const normalMw = mw as Middleware;
-    return (req: NovaRequest, res: NovaResponse, next: NextFunction) => {
-      if (req.pathname.startsWith(normalizedPrefix)) {
-        return normalMw(req, res, next);
-      }
-      next();
-    };
-  }
-
-  private _makeMountedMiddleware(prefix: string, app: Nova): Middleware {
-    const normalizedPrefix = normalizeMountPrefix(prefix);
-
-    return async (req: NovaRequest, res: NovaResponse, next: NextFunction) => {
-      if (!matchesMountPrefix(req.pathname, normalizedPrefix)) {
-        next();
-        return;
-      }
-
-      const mountedReq = createMountedRequest(req, normalizedPrefix);
-      const handled = await app._dispatchInternal(mountedReq, res, true);
-
-      if (!handled && !res.headersSent) {
-        next();
-      }
-    };
-  }
-
   private _isSubApp(value: unknown): value is Nova {
     return value instanceof Nova;
   }
@@ -590,46 +472,4 @@ export class Nova implements NovaApp {
  */
 export function createApp(config?: NovaConfig): Nova {
   return new Nova(config);
-}
-
-function normalizeMountPrefix(prefix: string): string {
-  if (!prefix || prefix === "/") return "/";
-  return prefix.endsWith("/") ? prefix.slice(0, -1) : prefix;
-}
-
-function matchesMountPrefix(pathname: string, prefix: string): boolean {
-  if (prefix === "/") return true;
-  return pathname === prefix || pathname.startsWith(`${prefix}/`);
-}
-
-function createMountedRequest(req: NovaRequest, prefix: string): NovaRequest {
-  if (prefix === "/") {
-    return req;
-  }
-
-  const mountedPathname = req.pathname === prefix ? "/" : req.pathname.slice(prefix.length);
-  const querySuffix = req.path.slice(req.pathname.length);
-  const mountedPath = `${mountedPathname}${querySuffix}`;
-  const mountedReq = Object.create(req) as NovaRequest;
-
-  Object.defineProperties(mountedReq, {
-    path: {
-      value: mountedPath,
-      enumerable: true,
-      configurable: true,
-    },
-    pathname: {
-      value: mountedPathname,
-      enumerable: true,
-      configurable: true,
-    },
-    params: {
-      value: {},
-      writable: true,
-      enumerable: true,
-      configurable: true,
-    },
-  });
-
-  return mountedReq;
 }

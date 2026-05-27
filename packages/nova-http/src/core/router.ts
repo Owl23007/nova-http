@@ -1,6 +1,6 @@
-import type { NovaRequest } from "./NovaRequest";
-import type { NovaResponse } from "./NovaResponse";
-import type { HttpMethod } from "./HttpParser";
+import type { HttpMethod } from "./http-parser";
+import type { NovaRequest } from "./request";
+import type { NovaResponse } from "./response";
 
 // == 类型定义
 

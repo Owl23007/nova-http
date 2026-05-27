@@ -15,7 +15,7 @@
  * 支持 Keep-Alive：每次 DONE 后调用 reset()，可在同一连接上继续解析下一请求。
  */
 
-import { BufferReader } from "./BufferReader";
+import { BufferReader } from "./buffer-reader";
 
 // == 常量
 

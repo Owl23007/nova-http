@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bodyParser } from "../src/middlewares/bodyParser";
+import { bodyParser } from "../src/middlewares";
 
 function makeReq(body: string, contentType: string) {
   return {

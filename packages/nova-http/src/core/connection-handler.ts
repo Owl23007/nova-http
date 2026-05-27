@@ -1,8 +1,8 @@
 import type { Socket } from "net";
-import { BufferReader } from "./BufferReader";
-import { HttpParser } from "./HttpParser";
-import { NovaRequest } from "./NovaRequest";
-import { NovaResponse } from "./NovaResponse";
+import { BufferReader } from "./buffer-reader";
+import { HttpParser } from "./http-parser";
+import { NovaRequest } from "./request";
+import { NovaResponse } from "./response";
 
 /** ConnectionHandler 依赖的 Nova 应用接口 */
 export interface NovaApp {

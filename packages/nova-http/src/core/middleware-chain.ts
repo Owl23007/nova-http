@@ -1,5 +1,5 @@
-import type { NovaRequest } from "./NovaRequest";
-import type { NovaResponse } from "./NovaResponse";
+import type { NovaRequest } from "./request";
+import type { NovaResponse } from "./response";
 
 export type Middleware = (
   req: NovaRequest,
