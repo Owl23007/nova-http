@@ -1,9 +1,20 @@
 import { once } from "events";
+import { mkdtemp, rm, writeFile } from "fs/promises";
 import { Socket } from "net";
+import { tmpdir } from "os";
+import { join } from "path";
 import { afterEach, describe, expect, it } from "vitest";
-import { bodyParser, createApp, type Nova } from "../src";
+import {
+  bodyParser,
+  createApp,
+  staticFiles,
+  type Nova,
+  type NovaRequest,
+  type NovaResponse,
+} from "../src";
 
 let app: Nova | undefined;
+let tempDir: string | undefined;
 
 async function listen(testApp: Nova): Promise<number> {
   await testApp.listen(0, "127.0.0.1");
@@ -17,7 +28,7 @@ async function request(port: number, raw: string): Promise<string> {
 
   socket.connect(port, "127.0.0.1");
   await once(socket, "connect");
-  socket.on("data", (chunk) => chunks.push(chunk));
+  socket.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
   socket.write(raw);
   await once(socket, "end");
 
@@ -27,15 +38,187 @@ async function request(port: number, raw: string): Promise<string> {
 describe("Nova integration", () => {
   afterEach(async () => {
     await app?.close();
+    if (tempDir) {
+      await rm(tempDir, { recursive: true, force: true });
+    }
     app = undefined;
+    tempDir = undefined;
+  });
+
+  it("IT-01 启动服务", async () => {
+    app = createApp();
+
+    const port = await listen(app);
+
+    expect(port).toBeGreaterThan(0);
+  });
+
+  it("IT-02 JSON 接口", async () => {
+    app = createApp();
+    app.get("/hello", (_req: NovaRequest, res: NovaResponse) => {
+      res.json({ message: "hello" });
+    });
+
+    const port = await listen(app);
+    const response = await request(
+      port,
+      "GET /hello HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
+    );
+
+    expect(response).toContain("HTTP/1.1 200 OK");
+    expect(response).toContain("content-type: application/json; charset=utf-8");
+    expect(response).toContain('{"message":"hello"}');
+  });
+
+  it("IT-03 路由参数", async () => {
+    app = createApp();
+    app.get("/users/:id", (req: NovaRequest, res: NovaResponse) => {
+      res.json({ id: req.params.id });
+    });
+
+    const port = await listen(app);
+    const response = await request(
+      port,
+      "GET /users/1 HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
+    );
+
+    expect(response).toContain("HTTP/1.1 200 OK");
+    expect(response).toContain('{"id":"1"}');
+  });
+
+  it("IT-04 POST 请求体", async () => {
+    app = createApp();
+    app.use(bodyParser());
+    app.post("/users", (req: NovaRequest, res: NovaResponse) => {
+      res.json({ received: req.bodyParsed });
+    });
+
+    const port = await listen(app);
+    const body = '{"name":"nova"}';
+    const response = await request(
+      port,
+      [
+        "POST /users HTTP/1.1",
+        "Host: localhost",
+        "Connection: close",
+        "Content-Type: application/json",
+        `Content-Length: ${Buffer.byteLength(body)}`,
+        "",
+        body,
+      ].join("\r\n"),
+    );
+
+    expect(response).toContain("HTTP/1.1 200 OK");
+    expect(response).toContain('{"received":{"name":"nova"}}');
+  });
+
+  it("IT-05 404 响应", async () => {
+    app = createApp();
+
+    const port = await listen(app);
+    const response = await request(
+      port,
+      "GET /missing HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
+    );
+
+    expect(response).toContain("HTTP/1.1 404 Not Found");
+    expect(response).toContain("Not Found");
+  });
+
+  it("IT-06 405 响应", async () => {
+    app = createApp();
+    app.get("/known", (_req: NovaRequest, res: NovaResponse) => {
+      res.send("known");
+    });
+
+    const port = await listen(app);
+    const response = await request(
+      port,
+      "POST /known HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\nContent-Length: 0\r\n\r\n",
+    );
+
+    expect(response).toContain("HTTP/1.1 405 Method Not Allowed");
+    expect(response).toContain("allow: GET");
+  });
+
+  it("IT-07 静态文件访问", async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "nova-static-"));
+    await writeFile(join(tempDir, "hello.txt"), "static hello", "utf8");
+
+    app = createApp();
+    app.use(staticFiles(tempDir));
+
+    const port = await listen(app);
+    const response = await request(
+      port,
+      "GET /hello.txt HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
+    );
+
+    expect(response).toContain("HTTP/1.1 200 OK");
+    expect(response).toContain("content-type: text/plain; charset=utf-8");
+    expect(response).toContain("static hello");
+  });
+
+  it("IT-08 Keep-Alive 同一 TCP 连接处理多个请求", async () => {
+    app = createApp();
+    app.get("/first", (_req: NovaRequest, res: NovaResponse) => {
+      res.send("first");
+    });
+    app.get("/second", (_req: NovaRequest, res: NovaResponse) => {
+      res.send("second");
+    });
+
+    const port = await listen(app);
+    const response = await request(
+      port,
+      [
+        "GET /first HTTP/1.1",
+        "Host: localhost",
+        "Connection: keep-alive",
+        "",
+        "",
+        "GET /second HTTP/1.1",
+        "Host: localhost",
+        "Connection: close",
+        "",
+        "",
+      ].join("\r\n"),
+    );
+
+    expect(response.match(/HTTP\/1\.1 200 OK/g)).toHaveLength(2);
+    expect(response).toContain("first");
+    expect(response).toContain("second");
+  });
+
+  it("supports custom HTTP methods registered through app.method", async () => {
+    app = createApp();
+    app.method("PROPFIND", "/files", (_req: NovaRequest, res: NovaResponse) => {
+      res.send("custom method");
+    });
+
+    const port = await listen(app);
+
+    const response = await request(
+      port,
+      "PROPFIND /files HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
+    );
+
+    expect(response).toContain("HTTP/1.1 200 OK");
+    expect(response).toContain("custom method");
   });
 
   it("serves routes, parameters and JSON bodies over TCP", async () => {
     app = createApp();
     app.use(bodyParser());
-    app.get("/", (_req, res) => res.json({ ok: true }));
-    app.get("/users/:id", (req, res) => res.json({ id: req.params.id }));
-    app.post("/echo", (req, res) => res.json({ received: req.bodyParsed }));
+    app.get("/", (_req: NovaRequest, res: NovaResponse) => {
+      res.json({ ok: true });
+    });
+    app.get("/users/:id", (req: NovaRequest, res: NovaResponse) => {
+      res.json({ id: req.params.id });
+    });
+    app.post("/echo", (req: NovaRequest, res: NovaResponse) => {
+      res.json({ received: req.bodyParsed });
+    });
 
     const port = await listen(app);
 
@@ -66,40 +249,5 @@ describe("Nova integration", () => {
       ].join("\r\n"),
     );
     expect(echo).toContain('{"received":{"name":"nova"}}');
-  });
-
-  it("returns 404 and 405 responses", async () => {
-    app = createApp();
-    app.get("/known", (_req, res) => res.send("known"));
-
-    const port = await listen(app);
-
-    const missing = await request(
-      port,
-      "GET /missing HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
-    );
-    expect(missing).toContain("HTTP/1.1 404 Not Found");
-
-    const wrongMethod = await request(
-      port,
-      "POST /known HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\nContent-Length: 0\r\n\r\n",
-    );
-    expect(wrongMethod).toContain("HTTP/1.1 405 Method Not Allowed");
-    expect(wrongMethod).toContain("allow: GET");
-  });
-
-  it("supports custom HTTP methods registered through app.method", async () => {
-    app = createApp();
-    app.method("PROPFIND", "/files", (_req, res) => res.send("custom method"));
-
-    const port = await listen(app);
-
-    const response = await request(
-      port,
-      "PROPFIND /files HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
-    );
-
-    expect(response).toContain("HTTP/1.1 200 OK");
-    expect(response).toContain("custom method");
   });
 });
