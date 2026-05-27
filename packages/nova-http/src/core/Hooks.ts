@@ -181,10 +181,13 @@ export class Hooks extends EventEmitter {
  * requestTimer() — 内置请求计时中间件。
  * 在 onRequest 钩子记录开始时间，在 onResponse 钩子注入 X-Response-Time 响应头。
  *
- * 使用：app.addHook('onRequest', requestTimerStart)
- *       app.addHook('onResponse', requestTimerEnd)
- *
- * 注：该函数不是中间件，而是返回两个钩子处理器。
+ * @example
+ * ```js
+ * app.addHook('onRequest', requestTimerStart)
+ * app.addHook('onResponse', requestTimerEnd)
+ *```
+
+ * 该函数不是中间件，而是返回两个钩子处理器。
  */
 export function createRequestTimer(): {
   onRequest: HookHandler<"onRequest">;

@@ -22,14 +22,12 @@
  */
 
 //  核心导出
-
 export { Nova, createApp } from "./core/Nova";
 export { bodyParser } from "./middlewares/bodyParser";
 export { staticFiles } from "./middlewares/staticFiles";
 export { createRequestTimer } from "./core/Hooks";
 
 //  类型导出
-
 export type { NovaConfig, RouteBuilder } from "./core/Nova";
 export type { NovaRequest } from "./core/NovaRequest";
 export type { NovaResponse } from "./core/NovaResponse";
