@@ -7,7 +7,7 @@ import {
   type NovaRequest,
   type NovaResponse,
   type NextFunction,
-} from "../src";
+} from "../../src";
 
 let app: Nova | undefined;
 

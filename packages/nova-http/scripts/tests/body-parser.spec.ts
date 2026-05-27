@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bodyParser } from "../src/middlewares";
+import { bodyParser } from "../../src/middlewares";
 
 function makeReq(body: string, contentType: string) {
   return {
@@ -24,7 +24,7 @@ function makeRes() {
 }
 
 describe("bodyParser", () => {
-  it("parses JSON request bodies", () => {
+  it("UT-BODY-01 解析 JSON 请求体", () => {
     const req = makeReq('{"name":"nova"}', "application/json");
     const res = makeRes();
     let nextCalled = false;
@@ -37,7 +37,7 @@ describe("bodyParser", () => {
     expect(req.bodyParsed).toEqual({ name: "nova" });
   });
 
-  it("parses urlencoded request bodies", () => {
+  it("UT-BODY-02 解析 urlencoded 请求体", () => {
     const req = makeReq("name=nova&tag=http&tag=test", "application/x-www-form-urlencoded");
     const res = makeRes();
 
@@ -46,7 +46,7 @@ describe("bodyParser", () => {
     expect(req.bodyParsed).toEqual({ name: "nova", tag: ["http", "test"] });
   });
 
-  it("rejects invalid JSON", () => {
+  it("UT-BODY-03 拒绝非法 JSON 请求体", () => {
     const req = makeReq("{bad", "application/json");
     const res = makeRes();
     let nextCalled = false;
@@ -60,7 +60,7 @@ describe("bodyParser", () => {
     expect(res.sent).toBe("Invalid JSON body");
   });
 
-  it("rejects bodies larger than the configured limit", () => {
+  it("UT-BODY-04 拒绝超过配置限制的请求体", () => {
     const req = makeReq("abcdef", "application/json");
     const res = makeRes();
 

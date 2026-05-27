@@ -119,6 +119,7 @@ const STATUS_TEXTS: Readonly<Record<number, string>> = {
   308: "Permanent Redirect",
   400: "Bad Request",
   401: "Unauthorized",
+  402: "Payment Required",
   403: "Forbidden",
   404: "Not Found",
   405: "Method Not Allowed",

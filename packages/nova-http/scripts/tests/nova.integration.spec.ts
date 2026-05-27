@@ -11,7 +11,7 @@ import {
   type Nova,
   type NovaRequest,
   type NovaResponse,
-} from "../src";
+} from "../../src";
 
 let app: Nova | undefined;
 let tempDir: string | undefined;

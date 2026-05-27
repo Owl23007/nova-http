@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BufferReader, HttpParser, NovaRequest } from "../src/core";
+import { BufferReader, HttpParser, NovaRequest } from "../../src/core";
 
 // 将原始 HTTP 报文写入 BufferReader，模拟 TCP 层收到字节流后的解析过程。
 function parseRaw(raw: string, parser = new HttpParser()) {

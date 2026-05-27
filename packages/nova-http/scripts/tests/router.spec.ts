@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Router } from "../src/core";
+import { Router } from "../../src/core";
 
 describe("Router", () => {
   it("UT-ROUTE-01 匹配静态路由", () => {

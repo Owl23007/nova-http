@@ -25,6 +25,6 @@
     "noFallthroughCasesInSwitch": true,
     "exactOptionalPropertyTypes": false
   },
-  "include": ["src/**/*", "cli/**/*", "tests/**/*"],
+  "include": ["src/**/*", "cli/**/*", "scripts/**/*"],
   "exclude": ["node_modules", "dist"]
 }
