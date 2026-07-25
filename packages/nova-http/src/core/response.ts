@@ -44,6 +44,9 @@ export class NovaResponse {
    * 设置 HTTP 状态码（链式调用）。
    */
   status(code: number): this {
+    if (!Number.isInteger(code) || code < 100 || code > 999) {
+      throw new RangeError(`Invalid HTTP status code: ${code}`);
+    }
     this._statusCode = code;
     return this;
   }
@@ -53,18 +56,35 @@ export class NovaResponse {
    * 多次调用相同 key 会覆盖（Set-Cookie 除外，会追加）。
    */
   setHeader(name: string, value: string | string[]): this {
+    validateHeaderName(name);
+    if (Array.isArray(value)) {
+      for (const item of value) validateHeaderValue(item);
+    } else {
+      validateHeaderValue(value);
+    }
+
     const key = name.toLowerCase();
+    const normalizedValue = Array.isArray(value) ? [...value] : value;
     if (key === "set-cookie") {
       const existing = this._headers.get("set-cookie");
       if (Array.isArray(existing)) {
-        this._headers.set("set-cookie", [...existing, ...(Array.isArray(value) ? value : [value])]);
+        this._headers.set("set-cookie", [
+          ...existing,
+          ...(Array.isArray(normalizedValue) ? normalizedValue : [normalizedValue]),
+        ]);
       } else if (existing !== undefined) {
-        this._headers.set("set-cookie", [existing, ...(Array.isArray(value) ? value : [value])]);
+        this._headers.set("set-cookie", [
+          existing,
+          ...(Array.isArray(normalizedValue) ? normalizedValue : [normalizedValue]),
+        ]);
       } else {
-        this._headers.set("set-cookie", Array.isArray(value) ? value : [value]);
+        this._headers.set(
+          "set-cookie",
+          Array.isArray(normalizedValue) ? normalizedValue : [normalizedValue],
+        );
       }
     } else {
-      this._headers.set(key, value);
+      this._headers.set(key, normalizedValue);
     }
     return this;
   }
@@ -134,8 +154,8 @@ export class NovaResponse {
    */
   redirect(url: string, code: number = 302): void {
     if (this._headersSent) return;
-    this._statusCode = code;
-    this._headers.set("location", url);
+    this.status(code);
+    this.setHeader("location", url);
     this._headers.set("content-length", "0");
     this._flush(null);
   }
@@ -305,5 +325,48 @@ export class NovaResponse {
       this.socket.write(body);
     }
     this.socket.uncork();
+  }
+}
+
+function validateHeaderName(name: string): void {
+  if (name.length === 0) {
+    throw new TypeError("Header name must not be empty");
+  }
+
+  for (let i = 0; i < name.length; i++) {
+    const ch = name.charCodeAt(i);
+    const isAlphaNum =
+      (ch >= 0x30 && ch <= 0x39) || (ch >= 0x41 && ch <= 0x5a) || (ch >= 0x61 && ch <= 0x7a);
+    if (isAlphaNum) continue;
+
+    switch (ch) {
+      case 0x21: // !
+      case 0x23: // #
+      case 0x24: // $
+      case 0x25: // %
+      case 0x26: // &
+      case 0x27: // '
+      case 0x2a: // *
+      case 0x2b: // +
+      case 0x2d: // -
+      case 0x2e: // .
+      case 0x5e: // ^
+      case 0x5f: // _
+      case 0x60: // `
+      case 0x7c: // |
+      case 0x7e: // ~
+        break;
+      default:
+        throw new TypeError(`Invalid HTTP header name: ${name}`);
+    }
+  }
+}
+
+function validateHeaderValue(value: string): void {
+  for (let i = 0; i < value.length; i++) {
+    const ch = value.charCodeAt(i);
+    if (ch > 0xff || ch === 0x7f || (ch <= 0x1f && ch !== 0x09)) {
+      throw new TypeError("Invalid character in HTTP header value");
+    }
   }
 }

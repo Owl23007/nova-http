@@ -57,6 +57,8 @@ export class ConnectionHandler {
 
   /** 当前是否正在处理请求 */
   private _busy: boolean = false;
+  /** 是否正在等待 Keep-Alive 连接上的下一个请求 */
+  private _awaitingNextRequest: boolean = false;
   /** 是否已接到关闭指令 */
   private _closing: boolean = false;
   /** 当前接收的 body 字节数 */
@@ -118,6 +120,13 @@ export class ConnectionHandler {
   /** 数据接收与解析 */
   private _onData(chunk: Buffer): void {
     if (this._closing || this._socket.destroyed) return;
+
+    // Keep-Alive 空闲结束：开始接收下一个请求，切换到 Header 超时保护。
+    if (this._awaitingNextRequest) {
+      this._awaitingNextRequest = false;
+      this._clearIdleTimer();
+      this._startHeadersTimer();
+    }
 
     // 1. Body 超限前置检查：先累加字节数，再 feed 数据，确保超限时立即响应 413 并关闭连接
     this._bodyBytesReceived += chunk.length;
@@ -188,7 +197,12 @@ export class ConnectionHandler {
     this._clearRequestTimer();
     this._busy = false;
 
-    if (this._closing || this._socket.destroyed) return;
+    if (this._socket.destroyed) return;
+
+    if (this._closing) {
+      this._socket.end();
+      return;
+    }
 
     if (!req.keepAlive) {
       // HTTP/1.0 或 Connection: close → 关闭连接
@@ -197,6 +211,7 @@ export class ConnectionHandler {
     }
 
     // Keep-Alive：重置状态，等待下一个请求
+    this._awaitingNextRequest = true;
     this._startIdleTimer();
 
     // 尝试继续解析缓冲区中可能已有的下一个请求
