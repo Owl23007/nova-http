@@ -62,6 +62,7 @@
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
     "bench": "node scripts/benchmark/benchmark.js",
+    "bench:stream": "node scripts/benchmark/benchmark-streaming.js",
     "bench:server": "node scripts/benchmark/benchmark-server.js",
     "bench:production": "pnpm --dir scripts/performance run start",
     "bench:production:stress": "pnpm --dir scripts/performance run stress",

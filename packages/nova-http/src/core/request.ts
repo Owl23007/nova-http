@@ -14,6 +14,7 @@
 import type { Socket } from "net";
 import type { ParsedRequest } from "./http-parser";
 
+/** Nova HTTP 请求对象 */
 export class NovaRequest {
   /** HTTP 方法 */
   readonly method: string;
@@ -49,7 +50,11 @@ export class NovaRequest {
   private _query: URLSearchParams | undefined;
   private _cookies: Record<string, string> | undefined;
   private _ip: string | undefined;
+  private _abortController: AbortController | undefined;
+  private _aborted: boolean = false;
+  private _abortReason: unknown;
 
+  /** 创建请求对象 */
   constructor(
     parsed: ParsedRequest,
     socket: Socket,
@@ -162,5 +167,26 @@ export class NovaRequest {
    */
   get bodySize(): number {
     return this.body.byteLength;
+  }
+
+  /** 请求取消信号，客户端断开、超时或服务关闭时触发 */
+  get signal(): AbortSignal {
+    if (this._abortController === undefined) {
+      this._abortController = new AbortController();
+      if (this._aborted) {
+        this._abortController.abort(this._abortReason);
+      }
+    }
+    return this._abortController.signal;
+  }
+
+  /** @internal 取消当前请求及其响应中的异步工作 */
+  _abort(reason: unknown): void {
+    if (this._aborted) return;
+    this._aborted = true;
+    this._abortReason = reason;
+    if (this._abortController !== undefined) {
+      this._abortController.abort(reason);
+    }
   }
 }

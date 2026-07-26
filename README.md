@@ -38,7 +38,7 @@
 | **Keep-Alive 多路复用** | 单 TCP 连接处理多请求，支持流水线，内置 Slowloris 防御            |
 | **全链路钩子**          | 10 个生命周期钩子，支持异步，覆盖 连接→解析→路由→响应→断开 全链路 |
 | **内置中间件**          | `bodyParser`（JSON/urlencoded）、`staticFiles`（ETag/Range/流式） |
-| **流式响应**            | `sendFile()` 支持 HTTP Range 206、ETag 缓存、背压（drain）感知    |
+| **流式响应**            | 支持 AsyncIterable、Readable、chunked framing 与背压感知          |
 | **Express 兼容风格**    | `app.get/post/use/route()`，中间件签名 `(req, res, next)`         |
 
 ---
@@ -258,6 +258,7 @@ app.use((err: Error, _req, res, _next) => {
 | `context`     | `Record<string, unknown>` | 中间件间共享的请求上下文                       |
 | `keepAlive`   | `boolean`                 | 是否为 Keep-Alive 连接                         |
 | `socket`      | `net.Socket`              | 底层 TCP socket                                |
+| `signal`      | `AbortSignal`             | 客户端断开、超时或服务关闭时触发               |
 
 ---
 
@@ -276,13 +277,35 @@ res.removeHeader('x-powered-by')
 res.send(data: string | Buffer)       // 自动推断 Content-Type
 res.json(data: unknown)               // application/json
 res.html(html: string)                // text/html
-res.end()                             // 无 Body
+await res.end(chunk?: string | Buffer | Uint8Array)
+
+// 通用流式响应
+await res.flushHeaders()
+await res.write(chunk: string | Buffer | Uint8Array)
+await res.stream(source: Readable | AsyncIterable<StreamChunk>)
 
 // 重定向
 res.redirect(location: string, status?: 301 | 302 | 307 | 308)
 
 // 文件发送（支持 Range 206、ETag 缓存、流式传输）
 await res.sendFile(absolutePath: string)
+```
+
+流式写入会自动处理 HTTP/1.1 chunked framing 与 socket 背压，业务只需发送原始数据块。
+手动调用 `write()` 时必须逐次 `await`，并在 handler 返回前调用 `end()`。
+
+```typescript
+app.get("/generate", async (_req, res) => {
+  res.setHeader("content-type", "text/plain; charset=utf-8");
+
+  await res.stream(generateTokens());
+});
+
+async function* generateTokens() {
+  yield "Hello";
+  yield " ";
+  yield "Nova";
+}
 ```
 
 ---

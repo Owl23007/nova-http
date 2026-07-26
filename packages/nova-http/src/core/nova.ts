@@ -9,7 +9,7 @@ import type { ErrorMiddleware, Middleware } from "./middleware-chain";
 import type { HookHandler, HookName } from "./hooks";
 import type { HttpMethod } from "./http-parser";
 import type { NovaRequest } from "./request";
-import type { NovaResponse } from "./response";
+import { NovaResponse } from "./response";
 import type { Handler } from "./router";
 import type { RouteBuilder } from "./route-builder";
 
@@ -270,7 +270,8 @@ export class Nova implements NovaApp {
     const listenHost = host ?? this._fullConfig.host;
 
     return new Promise((resolve, reject) => {
-      const server = createServer((socket: Socket) => {
+      // 客户端结束请求方向后仍可能等待长响应，半关闭连接必须由 ConnectionHandler 主动收尾
+      const server = createServer({ allowHalfOpen: true }, (socket: Socket) => {
         const handler = new ConnectionHandler(socket, this);
         this._connections.add(handler);
 
@@ -341,7 +342,38 @@ export class Nova implements NovaApp {
    * 请求分发入口：全局中间件 → 路由匹配 → 路由处理器 → 404 处理
    */
   async _dispatch(req: NovaRequest, res: NovaResponse): Promise<void> {
-    await this._dispatchInternal(req, res, false);
+    try {
+      await this._dispatchInternal(req, res, false);
+
+      // handler 返回时已经开始流式响应却没有请求结束，通常意味着遗漏 await end()
+      if (res.headersSent && !res._hasEndRequest) {
+        throw NovaResponse._createNotEndedError();
+      }
+
+      // 未显式发送内容的成功 handler 以空响应结束，避免连接进入无响应状态
+      if (!res.headersSent) {
+        await res.end();
+      } else {
+        await res._waitForFinish();
+      }
+
+      res._emitResponseObservers();
+      this._emitResponse(req, res);
+    } catch (error: unknown) {
+      this.hooks.callHook("onError", { error, req, res });
+
+      if (!res.headersSent) {
+        res.status(500).send("Internal Server Error");
+        await res._waitForFinish();
+        res._emitResponseObservers();
+        this._emitResponse(req, res);
+        return;
+      }
+
+      // 响应头发送后无法再安全改变状态码，关闭连接避免输出第二条 HTTP 响应
+      res._abort(toError(error), true);
+      await res._waitForFinish().catch(() => undefined);
+    }
   }
 
   private async _dispatchInternal(
@@ -354,7 +386,7 @@ export class Nova implements NovaApp {
     await this._chain.dispatch(req, res);
 
     if (res.headersSent) {
-      this._emitResponse(req, res);
+      if (fallthroughOnNotFound) this._observeResponse(req, res);
       return true;
     }
 
@@ -370,16 +402,8 @@ export class Nova implements NovaApp {
         params: match.params,
       });
 
-      try {
-        await match.handler(req, res);
-      } catch (err: unknown) {
-        this.hooks.callHook("onError", { error: err, req, res });
-        if (!res.headersSent) {
-          res.status(500).send("Internal Server Error");
-        }
-      }
-
-      this._emitResponse(req, res);
+      await match.handler(req, res);
+      if (fallthroughOnNotFound) this._observeResponse(req, res);
       return true;
     }
 
@@ -387,7 +411,7 @@ export class Nova implements NovaApp {
     if (allowedMethods.length > 0) {
       res.setHeader("allow", allowedMethods.join(", "));
       res.status(405).send("Method Not Allowed");
-      this._emitResponse(req, res);
+      if (fallthroughOnNotFound) this._observeResponse(req, res);
       return true;
     }
 
@@ -400,7 +424,6 @@ export class Nova implements NovaApp {
       res.status(404).send("Not Found");
     }
 
-    this._emitResponse(req, res);
     return true;
   }
 
@@ -454,9 +477,18 @@ export class Nova implements NovaApp {
       req,
       res,
       durationMs,
-      statusCode: res.getHeader("status") ? parseInt(res.getHeader("status") as string) : 200,
+      statusCode: res.statusCode,
     });
   }
+
+  private _observeResponse(req: NovaRequest, res: NovaResponse): void {
+    res._addResponseObserver(this, () => this._emitResponse(req, res));
+  }
+}
+
+function toError(error: unknown): Error {
+  if (error instanceof Error) return error;
+  return new Error(String(error));
 }
 
 /**

@@ -37,6 +37,7 @@ export type {
   ParseResult,
 } from "./http-parser";
 export type { RangeResult } from "./http-metadata";
+export type { StreamChunk, StreamSource } from "./response";
 export type { ErrorMiddleware, Middleware, NextFunction } from "./middleware-chain";
 export type { NovaConfig } from "./nova";
 export type { RouteBuilder } from "./route-builder";

@@ -159,6 +159,58 @@ describe("Nova integration", () => {
     expect(response).toContain("static hello");
   });
 
+  it("preserves Range, cache validation and HEAD behavior for streamed files", async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "nova-static-stream-"));
+    await writeFile(join(tempDir, "hello.txt"), "static hello", "utf8");
+
+    app = createApp();
+    app.use(staticFiles(tempDir));
+    const port = await listen(app);
+
+    const rangeResponse = await request(
+      port,
+      [
+        "GET /hello.txt HTTP/1.1",
+        "Host: localhost",
+        "Range: bytes=0-5",
+        "Connection: close",
+        "",
+        "",
+      ].join("\r\n"),
+    );
+    expect(rangeResponse).toContain("HTTP/1.1 206 Partial Content");
+    expect(rangeResponse).toContain("content-range: bytes 0-5/12");
+    expect(rangeResponse.endsWith("\r\n\r\nstatic")).toBe(true);
+
+    const initialResponse = await request(
+      port,
+      "GET /hello.txt HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
+    );
+    const etag = initialResponse.match(/\r\netag: ([^\r\n]+)/)?.[1];
+    expect(etag).toBeDefined();
+
+    const cachedResponse = await request(
+      port,
+      [
+        "GET /hello.txt HTTP/1.1",
+        "Host: localhost",
+        `If-None-Match: ${etag}`,
+        "Connection: close",
+        "",
+        "",
+      ].join("\r\n"),
+    );
+    expect(cachedResponse).toContain("HTTP/1.1 304 Not Modified");
+    expect(cachedResponse.endsWith("\r\n\r\n")).toBe(true);
+
+    const headResponse = await request(
+      port,
+      "HEAD /hello.txt HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
+    );
+    expect(headResponse).toContain("content-length: 12");
+    expect(headResponse.endsWith("\r\n\r\n")).toBe(true);
+  });
+
   it("IT-08 Keep-Alive 同一 TCP 连接处理多个请求", async () => {
     app = createApp();
     app.get("/first", (_req: NovaRequest, res: NovaResponse) => {
@@ -249,5 +301,36 @@ describe("Nova integration", () => {
       ].join("\r\n"),
     );
     expect(echo).toContain('{"received":{"name":"nova"}}');
+  });
+
+  it("emits onResponse for both mounted and parent apps after a stream ends", async () => {
+    let childResponses = 0;
+    let parentResponses = 0;
+    const child = createApp();
+    child.addHook("onResponse", () => {
+      childResponses++;
+    });
+    child.get("/stream", async (_req: NovaRequest, res: NovaResponse) => {
+      await res.write("mounted");
+      expect(childResponses).toBe(0);
+      expect(parentResponses).toBe(0);
+      await res.end();
+    });
+
+    app = createApp();
+    app.addHook("onResponse", () => {
+      parentResponses++;
+    });
+    app.use("/api", child);
+
+    const port = await listen(app);
+    const response = await request(
+      port,
+      "GET /api/stream HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
+    );
+
+    expect(response).toContain("mounted");
+    expect(childResponses).toBe(1);
+    expect(parentResponses).toBe(1);
   });
 });

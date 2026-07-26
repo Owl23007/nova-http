@@ -35,6 +35,8 @@ export type {
   RouteBuilder,
   RouteContext,
   RouteMatch,
+  StreamChunk,
+  StreamSource,
 } from "./core";
 export type { BodyParserOptions } from "./middlewares/body-parser";
 export type { StaticFilesOptions } from "./middlewares/static-files";

@@ -131,4 +131,168 @@ describe("connection lifecycle", () => {
 
     app = undefined;
   });
+
+  it("keeps a pipelined request paused until the streaming response ends", async () => {
+    let releaseStream: (() => void) | undefined;
+    let markFirstChunk: (() => void) | undefined;
+    const released = new Promise<void>((resolve) => {
+      releaseStream = resolve;
+    });
+    const firstChunkWritten = new Promise<void>((resolve) => {
+      markFirstChunk = resolve;
+    });
+    let nextRouteCalled = false;
+
+    app = createApp({ requestTimeout: 500 });
+    app.get("/stream", async (_req: NovaRequest, res: NovaResponse) => {
+      await res.write("first");
+      markFirstChunk?.();
+      await released;
+      await res.end("last");
+    });
+    app.get("/next", (_req: NovaRequest, res: NovaResponse) => {
+      nextRouteCalled = true;
+      res.send("next");
+    });
+
+    const port = await listen(app);
+    const connection = await connect(port);
+    socket = connection.socket;
+    const ended = once(socket, "end");
+    const firstData = once(socket, "data");
+    socket.write(
+      [
+        "GET /stream HTTP/1.1",
+        "Host: localhost",
+        "Connection: keep-alive",
+        "",
+        "",
+        "GET /next HTTP/1.1",
+        "Host: localhost",
+        "Connection: close",
+        "",
+        "",
+      ].join("\r\n"),
+    );
+
+    await waitWithTimeout(firstChunkWritten, 500);
+    await waitWithTimeout(firstData, 500);
+    expect(nextRouteCalled).toBe(false);
+    expect(Buffer.concat(connection.chunks).toString("utf8")).toContain("5\r\nfirst\r\n");
+
+    releaseStream?.();
+    await waitWithTimeout(ended, 500);
+
+    const response = Buffer.concat(connection.chunks).toString("utf8");
+    expect(nextRouteCalled).toBe(true);
+    expect(response.match(/HTTP\/1\.1 200 OK/g)).toHaveLength(2);
+    expect(response).toContain("4\r\nlast\r\n0\r\n\r\n");
+    expect(response).toContain("next");
+  });
+
+  it("allows an active response to finish after the client half-closes its request side", async () => {
+    app = createApp({ requestTimeout: 500 });
+    app.get("/delayed", async (_req: NovaRequest, res: NovaResponse) => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      await res.end("complete");
+    });
+
+    const port = await listen(app);
+    const connection = await connect(port);
+    socket = connection.socket;
+    const ended = once(socket, "end");
+    socket.end("GET /delayed HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n");
+
+    await waitWithTimeout(ended, 500);
+
+    const response = Buffer.concat(connection.chunks).toString("utf8");
+    expect(response).toContain("HTTP/1.1 200 OK");
+    expect(response).toContain("8\r\ncomplete\r\n0\r\n\r\n");
+  });
+
+  it("aborts a started response when the handler returns without ending it", async () => {
+    let observedError: unknown;
+    app = createApp({ requestTimeout: 500 });
+    app.addHook("onError", ({ error }) => {
+      observedError = error;
+    });
+    app.get("/broken", async (_req: NovaRequest, res: NovaResponse) => {
+      await res.write("partial");
+    });
+
+    const port = await listen(app);
+    const connection = await connect(port);
+    socket = connection.socket;
+    const closed = once(socket, "close");
+    socket.write("GET /broken HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n");
+
+    await waitWithTimeout(closed, 500);
+
+    expect(observedError).toMatchObject({ code: "ERR_RESPONSE_NOT_ENDED" });
+    expect(Buffer.concat(connection.chunks).toString("utf8")).not.toContain("0\r\n\r\n");
+  });
+
+  it("cancels the active stream source when the client disconnects", async () => {
+    let sourceCancelled = false;
+    let markFirstChunk: (() => void) | undefined;
+    const firstChunkWritten = new Promise<void>((resolve) => {
+      markFirstChunk = resolve;
+    });
+
+    const source: AsyncIterable<string> = {
+      [Symbol.asyncIterator]() {
+        let first = true;
+        return {
+          next: async () => {
+            if (first) {
+              first = false;
+              return { done: false, value: "ready" };
+            }
+            return new Promise<IteratorResult<string>>(() => undefined);
+          },
+          return: async () => {
+            sourceCancelled = true;
+            return { done: true, value: undefined };
+          },
+        };
+      },
+    };
+
+    app = createApp({ requestTimeout: 500 });
+    app.get("/cancel", async (_req: NovaRequest, res: NovaResponse) => {
+      markFirstChunk?.();
+      await res.stream(source);
+    });
+
+    const port = await listen(app);
+    const connection = await connect(port);
+    socket = connection.socket;
+    socket.write("GET /cancel HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    await waitWithTimeout(firstChunkWritten, 500);
+    socket.destroy();
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(sourceCancelled).toBe(true);
+  });
+
+  it("does not append a second HTTP response when a started stream times out", async () => {
+    app = createApp({ requestTimeout: 30 });
+    app.get("/timeout", async (_req: NovaRequest, res: NovaResponse) => {
+      await res.write("started");
+      await new Promise<void>(() => undefined);
+    });
+
+    const port = await listen(app);
+    const connection = await connect(port);
+    socket = connection.socket;
+    const closed = once(socket, "close");
+    socket.write("GET /timeout HTTP/1.1\r\nHost: localhost\r\n\r\n");
+
+    await waitWithTimeout(closed, 500);
+
+    const response = Buffer.concat(connection.chunks).toString("utf8");
+    expect(response.match(/HTTP\/1\.1/g)).toHaveLength(1);
+    expect(response).not.toContain("408 Request Timeout");
+    expect(response).toContain("7\r\nstarted\r\n");
+  });
 });

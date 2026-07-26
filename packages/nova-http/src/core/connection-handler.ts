@@ -61,8 +61,14 @@ export class ConnectionHandler {
   private _awaitingNextRequest: boolean = false;
   /** 是否已接到关闭指令 */
   private _closing: boolean = false;
-  /** 当前接收的 body 字节数 */
-  private _bodyBytesReceived: number = 0;
+  /** 客户端是否已经结束请求方向 */
+  private _readEnded: boolean = false;
+  /** 当前正在处理的请求 */
+  private _currentRequest: NovaRequest | null = null;
+  /** 当前正在发送的响应 */
+  private _currentResponse: NovaResponse | null = null;
+  /** 当前连接的读取侧是否因流式响应暂停 */
+  private _inputPaused: boolean = false;
 
   /**
    * 构造函数：初始化状态，绑定 Socket 事件
@@ -107,11 +113,10 @@ export class ConnectionHandler {
     socket.on("error", (err: Error) => this._onSocketError(err));
     // 3. 连接关闭事件，清理资源并通知 Nova 应用
     socket.on("close", () => this._onClose());
-    // 4. 连接结束事件，处理半关闭状态
+    // 4. 连接结束事件只代表客户端不再发送数据，不能截断仍在发送的流式响应
     socket.on("end", () => {
-      // 当客户端发送 FIN 包时，触发 end 事件，表示对方已完成发送数据
-      // 服务器端也应当响应 FIN 包，进入半关闭状态，等待对方确认后完全关闭
-      if (!socket.destroyed) {
+      this._readEnded = true;
+      if (!this._busy && !socket.destroyed) {
         socket.end();
       }
     });
@@ -128,22 +133,17 @@ export class ConnectionHandler {
       this._startHeadersTimer();
     }
 
-    // 1. Body 超限前置检查：先累加字节数，再 feed 数据，确保超限时立即响应 413 并关闭连接
-    this._bodyBytesReceived += chunk.length;
-    if (this._bodyBytesReceived > this._app._config.maxBodySize + 8192) {
-      // 8192 是 header 部分的容差，超限后立即拒绝
-      this._sendErrorAndClose(413, "Payload Too Large");
-      return;
-    }
-
-    // 2. 将新数据追加到 BufferReader 中，驱动解析状态机
+    // HttpParser 按实际 body framing 执行 maxBodySize 检查，避免把流水线请求误算入当前 body
     this._reader.feed(chunk);
 
-    // 3. 解析循环：一个 TCP 包可能包含多个完整 HTTP 请求 [Keep-Alive | pipeline]
+    // 一个 TCP 包可能包含多个完整 HTTP 请求 [Keep-Alive | pipeline]
     while (!this._busy && !this._closing) {
       const result = this._parser.parse(this._reader); // 尝试将当前的缓冲区解析为一个完整的 HTTP 请求
 
       if (!result.done) {
+        if (this._readEnded) {
+          this._socket.end();
+        }
         // 数据不足，等待下一个 data 事件
         break;
       }
@@ -167,35 +167,42 @@ export class ConnectionHandler {
       // 构建 Request/Response 对象
       const req = new NovaRequest(result.request, this._socket, this._app._config.trustProxy);
       const res = new NovaResponse(this._socket, req);
+      res._setStreamStartHandler(() => this._pauseInputForStream());
 
       req._startAt = process.hrtime.bigint();
 
       this._busy = true;
-      this._bodyBytesReceived = 0; // 重置字节计数
+      this._currentRequest = req;
+      this._currentResponse = res;
 
       // 异步处理请求
       this._app
         ._dispatch(req, res)
-        .then(() => this._onRequestDone(req))
-        .catch((err: Error) => {
+        .then(() => this._onRequestDone(req, res))
+        .catch(async (err: Error) => {
           this._app._onError(err, this._socket);
           if (!res.headersSent) {
             try {
               res.status(500).send("Internal Server Error");
+              await res._waitForFinish();
             } catch {
               /* socket 可能已关闭 */
             }
+          } else {
+            res._abort(err, true);
           }
-          this._onRequestDone(req);
+          this._onRequestDone(req, res);
         });
 
       break; // 等请求处理完再解析下一个
     }
   }
 
-  private _onRequestDone(req: NovaRequest): void {
+  private _onRequestDone(req: NovaRequest, res: NovaResponse): void {
     this._clearRequestTimer();
     this._busy = false;
+    this._currentRequest = null;
+    this._currentResponse = null;
 
     if (this._socket.destroyed) return;
 
@@ -204,15 +211,25 @@ export class ConnectionHandler {
       return;
     }
 
-    if (!req.keepAlive) {
-      // HTTP/1.0 或 Connection: close → 关闭连接
+    if (!req.keepAlive || !res._canReuseConnection) {
+      this._socket.end();
+      return;
+    }
+
+    if (this._readEnded && this._reader.isEmpty) {
       this._socket.end();
       return;
     }
 
     // Keep-Alive：重置状态，等待下一个请求
     this._awaitingNextRequest = true;
-    this._startIdleTimer();
+    if (!this._readEnded) {
+      this._startIdleTimer();
+      if (this._inputPaused) {
+        this._inputPaused = false;
+        this._socket.resume();
+      }
+    }
 
     // 尝试继续解析缓冲区中可能已有的下一个请求
     if (!this._reader.isEmpty) {
@@ -221,6 +238,13 @@ export class ConnectionHandler {
   }
 
   //  超时管理
+
+  private _pauseInputForStream(): void {
+    if (this._inputPaused || this._socket.destroyed) return;
+    this._inputPaused = true;
+    // 长流期间暂停读取后续流水线请求，让 TCP 接收窗口承担入站背压
+    this._socket.pause();
+  }
 
   private _startHeadersTimer(): void {
     this._clearHeadersTimer();
@@ -265,7 +289,15 @@ export class ConnectionHandler {
     const timeout = this._app._config.requestTimeout;
     if (timeout > 0) {
       this._requestTimer = setTimeout(() => {
-        this._sendErrorAndClose(408, "Request Timeout");
+        const error = createConnectionError("ERR_REQUEST_TIMEOUT", "Request Timeout");
+        if (this._currentResponse?.headersSent) {
+          this._closing = true;
+          this._clearAllTimers();
+          this._currentResponse._abort(error, true);
+        } else {
+          this._currentRequest?._abort(error);
+          this._sendErrorAndClose(408, "Request Timeout");
+        }
       }, timeout);
     }
   }
@@ -288,6 +320,15 @@ export class ConnectionHandler {
   private _sendErrorAndClose(statusCode: number, message: string): void {
     this._closing = true;
     this._clearAllTimers();
+    const error = createConnectionError(`ERR_HTTP_${statusCode}`, message);
+    this._currentRequest?._abort(error);
+
+    // 响应头发送后不能再拼接第二条错误响应，只能终止当前连接
+    if (this._currentResponse?.headersSent) {
+      this._currentResponse._abort(error, true);
+      return;
+    }
+    this._currentResponse?._abort(error, false);
 
     if (!this._socket.destroyed) {
       const body = Buffer.from(message, "utf8");
@@ -309,6 +350,8 @@ export class ConnectionHandler {
 
   private _onSocketError(err: Error): void {
     this._clearAllTimers();
+    this._currentRequest?._abort(err);
+    this._currentResponse?._abort(err, false);
     // ECONNRESET 等常见错误不需要上报
     if (
       (err as NodeJS.ErrnoException).code !== "ECONNRESET" &&
@@ -323,6 +366,11 @@ export class ConnectionHandler {
 
   private _onClose(): void {
     this._clearAllTimers();
+    const error = createConnectionError("ERR_STREAM_PREMATURE_CLOSE", "Socket closed");
+    this._currentRequest?._abort(error);
+    this._currentResponse?._abort(error, false);
+    this._currentRequest = null;
+    this._currentResponse = null;
     this._app._onClose(this._socket);
   }
 
@@ -354,6 +402,15 @@ export class ConnectionHandler {
    * 立即销毁连接
    */
   shutdown(): void {
+    const error = createConnectionError("ERR_SERVER_SHUTDOWN", "Server is shutting down");
+    this._currentRequest?._abort(error);
+    this._currentResponse?._abort(error, false);
     this._socket.destroy();
   }
+}
+
+function createConnectionError(code: string, message: string): Error {
+  const error = new Error(message) as Error & { code: string };
+  error.code = code;
+  return error;
 }
