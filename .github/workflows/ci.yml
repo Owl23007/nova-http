@@ -52,9 +52,22 @@ jobs:
       - name: Build
         run: pnpm run build
 
-      - name: Verify npm Package
+      - name: Verify release package synchronization
+        run: pnpm run check:release
+
+      - name: Type check generated templates
+        run: pnpm run check:templates
+
+      - name: Verify nova-http npm package
         working-directory: packages/nova-http
         run: npm pack --dry-run
+
+      - name: Verify create-nova-http npm package
+        working-directory: packages/create-nova-http
+        run: npm pack --dry-run
+
+      - name: Smoke test CLI project generation
+        run: pnpm run check:cli
 
   test:
     name: Test (Node.js ${{ matrix.node-version }})

@@ -27,7 +27,8 @@
   "files": [
     "dist",
     "LICENSE",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",

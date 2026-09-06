@@ -22,49 +22,45 @@ function pad(n, width) {
   return String(n).padStart(width, " ");
 }
 
-function requestLogger() {
+function registerRequestLogger(app) {
   const silent = process.env.LOG_LEVEL === "silent";
   const verbose = process.env.LOG_LEVEL === "verbose";
+  const startedAt = new WeakMap();
 
-  return function logger(req, res, next) {
+  app.addHook("onRequest", ({ req }) => {
     if (silent) {
-      next();
       return;
     }
 
-    const startNs = process.hrtime.bigint();
-    const method = req.method;
-    const pathname = req.pathname;
+    startedAt.set(req, process.hrtime.bigint());
 
     if (verbose) {
-      console.log(`${GRAY}→ ${method} ${pathname}${RESET}`);
+      console.log(`${GRAY}→ ${req.method} ${req.pathname}${RESET}`);
       req.headers.forEach((value, key) => {
         console.log(`  ${GRAY}${key}: ${value}${RESET}`);
       });
     }
+  });
 
-    const originalFlush = res._flush?.bind(res);
-    if (typeof originalFlush === "function") {
-      res._flush = function patchedFlush(...args) {
-        const elapsed = Number(process.hrtime.bigint() - startNs) / 1_000_000;
-        const statusCode = res._statusCode ?? 200;
-        const methodPad = (method + " ").padEnd(8, " ");
-        const colorMethod = `${METHOD_COLORS[method] ?? ""}${BOLD}${methodPad}${RESET}`;
-        const colorStatus = `${statusColor(statusCode)}${statusCode}${RESET}`;
-        const colorTime =
-          elapsed < 50
-            ? `\x1b[32m${pad(Math.round(elapsed), 4)}ms${RESET}`
-            : elapsed < 200
-              ? `\x1b[33m${pad(Math.round(elapsed), 4)}ms${RESET}`
-              : `\x1b[31m${pad(Math.round(elapsed), 4)}ms${RESET}`;
+  app.addHook("onResponse", ({ req, statusCode, durationMs }) => {
+    if (silent) return;
 
-        console.log(`  ${colorMethod}${pathname.padEnd(30, " ")} ${colorStatus}  ${colorTime}`);
-        return originalFlush(...args);
-      };
-    }
+    const startNs = startedAt.get(req);
+    const elapsed = startNs ? Number(process.hrtime.bigint() - startNs) / 1_000_000 : durationMs;
+    startedAt.delete(req);
 
-    next();
-  };
+    const methodPad = `${req.method} `.padEnd(8, " ");
+    const colorMethod = `${METHOD_COLORS[req.method] ?? ""}${BOLD}${methodPad}${RESET}`;
+    const colorStatus = `${statusColor(statusCode)}${statusCode}${RESET}`;
+    const colorTime =
+      elapsed < 50
+        ? `\x1b[32m${pad(Math.round(elapsed), 4)}ms${RESET}`
+        : elapsed < 200
+          ? `\x1b[33m${pad(Math.round(elapsed), 4)}ms${RESET}`
+          : `\x1b[31m${pad(Math.round(elapsed), 4)}ms${RESET}`;
+
+    console.log(`  ${colorMethod}${req.pathname.padEnd(30, " ")} ${colorStatus}  ${colorTime}`);
+  });
 }
 
-module.exports = { requestLogger };
+module.exports = { registerRequestLogger };

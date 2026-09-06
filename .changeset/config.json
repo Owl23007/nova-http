@@ -2,7 +2,7 @@
   "$schema": "./schema.json",
   "changelog": "@changesets/cli/changelog",
   "commit": false,
-  "fixed": [],
+  "fixed": [["nova-http", "create-nova-http"]],
   "linked": [],
   "access": "public",
   "baseBranch": "master",

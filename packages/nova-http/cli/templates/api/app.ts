@@ -11,7 +11,7 @@ import * as path from "path";
 import { usersRouter } from "./routes/users";
 import { healthRouter } from "./routes/health";
 import { authMiddleware } from "./middlewares/auth";
-import { requestLogger } from "./middlewares/logger";
+import { registerRequestLogger } from "./middlewares/logger";
 
 const app = createApp({
   maxBodySize: 1 * 1024 * 1024, // 1 MB
@@ -50,6 +50,7 @@ const APP_VERSION = readAppVersion();
 const timer = createRequestTimer();
 app.addHook("onRequest", timer.onRequest);
 app.addHook("onResponse", timer.onResponse);
+registerRequestLogger(app);
 
 app.addHook("onListen", ({ host, port }) => {
   const localHost = host === "0.0.0.0" || host === "::" ? "localhost" : host;
@@ -69,7 +70,6 @@ app.addHook("onNotFound", ({ res }) => {
 });
 
 // 全局中间件
-app.use(requestLogger());
 app.use(bodyParser());
 
 // 路由挂载

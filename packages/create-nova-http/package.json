@@ -1,6 +1,6 @@
 {
   "name": "create-nova-http",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Initializer for Nova HTTP projects",
   "keywords": [
     "create",
@@ -23,7 +23,8 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "CHANGELOG.md"
   ],
   "publishConfig": {
     "access": "public",

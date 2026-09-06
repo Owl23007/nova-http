@@ -4,7 +4,7 @@ const path = require("path");
 const { usersRouter } = require("./routes/users");
 const { healthRouter } = require("./routes/health");
 const { authMiddleware } = require("./middlewares/auth");
-const { requestLogger } = require("./middlewares/logger");
+const { registerRequestLogger } = require("./middlewares/logger");
 
 const app = createApp({
   maxBodySize: 1 * 1024 * 1024,
@@ -40,6 +40,7 @@ const APP_VERSION = readAppVersion();
 const timer = createRequestTimer();
 app.addHook("onRequest", timer.onRequest);
 app.addHook("onResponse", timer.onResponse);
+registerRequestLogger(app);
 
 app.addHook("onListen", ({ host, port }) => {
   const localHost = host === "0.0.0.0" || host === "::" ? "localhost" : host;
@@ -58,7 +59,6 @@ app.addHook("onNotFound", ({ res }) => {
   res.status(404).json({ error: "接口不存在" });
 });
 
-app.use(requestLogger());
 app.use(bodyParser());
 
 app.use("/health", healthRouter);

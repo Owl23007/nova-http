@@ -1,4 +1,4 @@
-import type { Middleware } from "nova-http";
+import type { Nova } from "nova-http";
 
 // ANSI 颜色
 const METHOD_COLORS: Record<string, string> = {
@@ -35,52 +35,43 @@ function pad(n: number, width: number): string {
  *   LOG_LEVEL=silent  关闭日志
  *   LOG_LEVEL=verbose 显示请求头
  */
-export function requestLogger(): Middleware {
+export function registerRequestLogger(app: Nova): void {
   const silent = process.env.LOG_LEVEL === "silent";
   const verbose = process.env.LOG_LEVEL === "verbose";
+  const startedAt = new WeakMap<object, bigint>();
 
-  return function logger(req, res, next): void {
+  app.addHook("onRequest", ({ req }) => {
     if (silent) {
-      next();
       return;
     }
 
-    const startNs = process.hrtime.bigint();
-    const method = req.method;
-    const pathname = req.pathname;
+    startedAt.set(req, process.hrtime.bigint());
 
     if (verbose) {
-      console.log(`${GRAY}→ ${method} ${pathname}${RESET}`);
+      console.log(`${GRAY}→ ${req.method} ${req.pathname}${RESET}`);
       req.headers.forEach((value, key) => {
         console.log(`  ${GRAY}${key}: ${value}${RESET}`);
       });
     }
+  });
 
-    // 拦截 res.end / res.send 来获取状态码
-    const originalFlush = (res as any)._flush?.bind(res);
+  app.addHook("onResponse", ({ req, statusCode, durationMs }) => {
+    if (silent) return;
 
-    if (typeof originalFlush === "function") {
-      (res as any)._flush = function (
-        this: typeof res,
-        ...args: unknown[]
-      ): ReturnType<typeof originalFlush> {
-        const elapsed = Number(process.hrtime.bigint() - startNs) / 1_000_000;
-        const statusCode = ((res as any)._statusCode as number) ?? 200;
-        const methodPad = (method + " ").padEnd(8, " ");
-        const colorMethod = `${METHOD_COLORS[method] ?? ""}${BOLD}${methodPad}${RESET}`;
-        const colorStatus = `${statusColor(statusCode)}${statusCode}${RESET}`;
-        const colorTime =
-          elapsed < 50
-            ? `\x1b[32m${pad(Math.round(elapsed), 4)}ms${RESET}`
-            : elapsed < 200
-              ? `\x1b[33m${pad(Math.round(elapsed), 4)}ms${RESET}`
-              : `\x1b[31m${pad(Math.round(elapsed), 4)}ms${RESET}`;
+    const startNs = startedAt.get(req);
+    const elapsed = startNs ? Number(process.hrtime.bigint() - startNs) / 1_000_000 : durationMs;
+    startedAt.delete(req);
 
-        console.log(`  ${colorMethod}${pathname.padEnd(30, " ")} ${colorStatus}  ${colorTime}`);
-        return originalFlush(...args);
-      };
-    }
+    const methodPad = `${req.method} `.padEnd(8, " ");
+    const colorMethod = `${METHOD_COLORS[req.method] ?? ""}${BOLD}${methodPad}${RESET}`;
+    const colorStatus = `${statusColor(statusCode)}${statusCode}${RESET}`;
+    const colorTime =
+      elapsed < 50
+        ? `\x1b[32m${pad(Math.round(elapsed), 4)}ms${RESET}`
+        : elapsed < 200
+          ? `\x1b[33m${pad(Math.round(elapsed), 4)}ms${RESET}`
+          : `\x1b[31m${pad(Math.round(elapsed), 4)}ms${RESET}`;
 
-    next();
-  };
+    console.log(`  ${colorMethod}${req.pathname.padEnd(30, " ")} ${colorStatus}  ${colorTime}`);
+  });
 }
