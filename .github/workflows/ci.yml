@@ -97,4 +97,11 @@ jobs:
           HUSKY: 0
 
       - name: Test
+        if: matrix.node-version != 20
         run: pnpm run test
+
+      - name: Test without Node.js SQLite performance suite
+        if: matrix.node-version == 20
+        run: >-
+          pnpm --filter nova-http exec vitest run
+          --exclude scripts/tests/performance-suite.spec.ts
