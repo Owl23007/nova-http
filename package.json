@@ -20,7 +20,7 @@
     "release": "changeset publish"
   },
   "devDependencies": {
-    "@changesets/cli": "^2.31.0",
+    "@changesets/cli": "^3.0.1",
     "husky": "^9.1.7",
     "lint-staged": "^17.0.4",
     "oxfmt": "^0.49.0",
