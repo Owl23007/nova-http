@@ -111,7 +111,7 @@ Router.find()              ← Radix Tree，O(k) 匹配
 路由处理器 + 局部中间件
     │
     ▼
-NovaResponse._flush()      ← socket.cork() 聚合写入
+NovaResponse writer        ← fixed/chunked framing + 背压控制
     │
     ▼
 TCP 响应 / Keep-Alive 复用
@@ -142,13 +142,13 @@ function createApp(config?: NovaConfig): Nova;
 
 **`NovaConfig` 选项：**
 
-| 字段               | 类型      | 默认值          | 说明                                       |
-| ------------------ | --------- | --------------- | ------------------------------------------ |
-| `maxBodySize`      | `number`  | `1048576` (1MB) | 请求体最大字节数，超出则返回 413           |
-| `keepAliveTimeout` | `number`  | `65000`         | Keep-Alive 空闲超时（毫秒）                |
-| `headersTimeout`   | `number`  | `60000`         | 接收完整请求头的超时（毫秒），防 Slowloris |
-| `requestTimeout`   | `number`  | `600000`        | 单请求最大处理时间（毫秒）                 |
-| `trustProxy`       | `boolean` | `false`         | 信任 `X-Forwarded-For` 头，影响 `req.ip`   |
+| 字段               | 类型      | 默认值          | 说明                                               |
+| ------------------ | --------- | --------------- | -------------------------------------------------- |
+| `maxBodySize`      | `number`  | `1048576` (1MB) | 请求体最大字节数，超出则返回 413                   |
+| `keepAliveTimeout` | `number`  | `65000`         | Keep-Alive 空闲超时（毫秒）                        |
+| `headersTimeout`   | `number`  | `60000`         | 接收完整请求头的超时（毫秒），防 Slowloris         |
+| `requestTimeout`   | `number`  | `600000`        | handler 与完整响应流的总超时（毫秒），`0` 表示禁用 |
+| `trustProxy`       | `boolean` | `false`         | 信任 `X-Forwarded-For` 头，影响 `req.ip`           |
 
 ---
 
@@ -265,6 +265,12 @@ app.use((err: Error, _req, res, _next) => {
 ### `NovaResponse`
 
 ```typescript
+// 响应状态（只读）
+res.statusCode
+res.headersSent
+res.writableEnded
+res.bodyBytesWritten
+
 // 状态码
 res.status(404)
 
@@ -293,6 +299,12 @@ await res.sendFile(absolutePath: string)
 
 流式写入会自动处理 HTTP/1.1 chunked framing 与 socket 背压，业务只需发送原始数据块。
 手动调用 `write()` 时必须逐次 `await`，并在 handler 返回前调用 `end()`。
+如果预先设置了 `Content-Length`，框架会校验最终写入字节数；未知长度的 HTTP/1.0
+响应会使用连接关闭定界，因此无法复用该连接。
+
+`requestTimeout` 覆盖 handler 和完整响应流生命周期。对于 SSE 等长连接，请设置足够大的
+超时，或使用 `createApp({ requestTimeout: 0 })` 禁用该限制。客户端断开、请求超时或服务关闭时，
+`req.signal` 会触发，可将其传给上游任务以尽快释放资源。
 
 ```typescript
 app.get("/generate", async (_req, res) => {
@@ -484,7 +496,7 @@ Node.js `http` 模块基于 `llhttp`（C++ 解析器），无法从 JavaScript �
 const app = createApp({
   headersTimeout: 30_000, // 降低以更快丢弃慢连接
   keepAliveTimeout: 30_000, // 根据客户端行为调整
-  requestTimeout: 120_000, // 接口最长处理时间
+  requestTimeout: 120_000, // handler 与响应流的最长总时间
 });
 ```
 
@@ -504,8 +516,8 @@ const app = createApp({ maxBodySize: 1 * 1024 * 1024 });
 
 ```typescript
 // 推荐：用钩子做指标采集
-app.addHook('onResponse', (req, res) => {
-  metrics.record(req.method, req.pathname, res._statusCode);
+app.addHook('onResponse', ({ req, statusCode }) => {
+  metrics.record(req.method, req.pathname, statusCode);
 });
 
 // 谨慎：用中间件做阻塞式日志（会增加 P99 延迟）

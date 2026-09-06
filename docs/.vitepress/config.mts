@@ -23,6 +23,7 @@ export default defineConfig({
         items: [
           { text: "路由 (Router)", link: "/guide/router" },
           { text: "中间件 (Middleware)", link: "/guide/middleware" },
+          { text: "流式响应", link: "/guide/streaming-response" },
         ],
       },
       {

@@ -251,6 +251,18 @@ describe("NovaResponse", () => {
     expect(socket.output()).not.toContain("transfer-encoding");
   });
 
+  it("suppresses bodies and emits a zero length for 205 responses", async () => {
+    const { response, socket } = createResponse();
+    response.status(205);
+
+    await response.end("ignored");
+
+    expect(socket.output()).toContain("HTTP/1.1 205 Reset Content");
+    expect(socket.output()).toContain("content-length: 0\r\n");
+    expect(socket.output()).not.toContain("ignored");
+    expect(socket.output()).not.toContain("transfer-encoding");
+  });
+
   it("keeps Transfer-Encoding under framework control", () => {
     const { response } = createResponse();
 

@@ -467,6 +467,7 @@ export class NovaResponse {
       this._req.method !== "HEAD" &&
       !(this._statusCode >= 100 && this._statusCode < 200) &&
       this._statusCode !== 204 &&
+      this._statusCode !== 205 &&
       this._statusCode !== 304;
 
     if (!bodyAllowed) {
@@ -476,6 +477,8 @@ export class NovaResponse {
         (this._statusCode === 204 || (this._statusCode >= 100 && this._statusCode < 200))
       ) {
         this._headers.delete("content-length");
+      } else if (this._statusCode === 205) {
+        this._headers.set("content-length", "0");
       }
     } else {
       const contentLengthHeader = this._headers.get("content-length");
