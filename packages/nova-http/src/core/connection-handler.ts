@@ -19,7 +19,7 @@ export interface ConnectionConfig {
   headersTimeout: number;
   /** Keep-Alive 空闲超时毫秒数，默认 65000 */
   keepAliveTimeout: number;
-  /** 完整请求（含 body）最大处理毫秒数，默认 600000 */
+  /** 普通请求处理的最大毫秒数；响应进入 streaming 后停止计时，默认 600000 */
   requestTimeout: number;
   /** 最大请求体字节数，默认 1048576 (1MB) */
   maxBodySize: number;
@@ -37,7 +37,7 @@ export interface ConnectionConfig {
  *   5. 超时防护：
  *      - headersTimeout（默认 60s）：防 Slowloris 攻击
  *      - keepAliveTimeout（默认 65s）：空闲连接回收
- *      - requestTimeout（默认 600s）：完整请求超时
+ *      - requestTimeout（默认 600s）：普通请求处理超时，streaming 响应开始后停止
  *   6. Body 超限立即响应 413 并销毁连接
  *   7. 解析出错立即响应对应错误码并关闭连接
  */
@@ -57,6 +57,8 @@ export class ConnectionHandler {
 
   /** 当前是否正在处理请求 */
   private _busy: boolean = false;
+  /** 当前响应是否已经进入 streaming 生命周期 */
+  private _streamingResponse: boolean = false;
   /** 是否正在等待 Keep-Alive 连接上的下一个请求 */
   private _awaitingNextRequest: boolean = false;
   /** 是否已接到关闭指令 */
@@ -167,7 +169,7 @@ export class ConnectionHandler {
       // 构建 Request/Response 对象
       const req = new NovaRequest(result.request, this._socket, this._app._config.trustProxy);
       const res = new NovaResponse(this._socket, req);
-      res._setStreamStartHandler(() => this._pauseInputForStream());
+      res._setStreamStartHandler(() => this._onStreamStart());
 
       req._startAt = process.hrtime.bigint();
 
@@ -201,6 +203,7 @@ export class ConnectionHandler {
   private _onRequestDone(req: NovaRequest, res: NovaResponse): void {
     this._clearRequestTimer();
     this._busy = false;
+    this._streamingResponse = false;
     this._currentRequest = null;
     this._currentResponse = null;
 
@@ -238,6 +241,15 @@ export class ConnectionHandler {
   }
 
   //  超时管理
+
+  private _onStreamStart(): void {
+    if (!this._streamingResponse) {
+      this._streamingResponse = true;
+      // requestTimeout 保护普通 handler；长流进入 streaming 后由流自身生命周期负责终止。
+      this._clearRequestTimer();
+    }
+    this._pauseInputForStream();
+  }
 
   private _pauseInputForStream(): void {
     if (this._inputPaused || this._socket.destroyed) return;
@@ -369,6 +381,7 @@ export class ConnectionHandler {
     const error = createConnectionError("ERR_STREAM_PREMATURE_CLOSE", "Socket closed");
     this._currentRequest?._abort(error);
     this._currentResponse?._abort(error, false);
+    this._streamingResponse = false;
     this._currentRequest = null;
     this._currentResponse = null;
     this._app._onClose(this._socket);
@@ -376,9 +389,24 @@ export class ConnectionHandler {
 
   /**
    * 主动优雅关闭连接
+   *
+   * 普通请求允许完成；长期 streaming 响应会收到 ERR_SERVER_SHUTDOWN 并被终止，
+   * 避免 SSE 等永不结束的请求阻塞 server.close()。
    */
   gracefulClose(): void {
     this._closing = true;
+
+    if (this._streamingResponse) {
+      const error = createConnectionError("ERR_SERVER_SHUTDOWN", "Server is shutting down");
+      this._clearAllTimers();
+      this._currentRequest?._abort(error);
+      this._currentResponse?._abort(error, false);
+      if (!this._socket.destroyed) {
+        this._socket.destroy();
+      }
+      return;
+    }
+
     if (!this._busy && !this._socket.destroyed) {
       this._socket.end();
     }
