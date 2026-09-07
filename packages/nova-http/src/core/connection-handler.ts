@@ -4,13 +4,13 @@ import { HttpParser } from "./http-parser";
 import { NovaRequest } from "./request";
 import { NovaResponse } from "./response";
 
-/** ConnectionHandler 依赖的 Nova 应用接口 */
-export interface NovaApp {
-  _dispatch(req: NovaRequest, res: NovaResponse): Promise<void>; // 处理请求的核心方法，返回 Promise
-  _config: ConnectionConfig; // 连接配置项
-  _onConnect(socket: Socket): void; // 新连接回调
-  _onClose(socket: Socket): void; // 连接关闭回调
-  _onError(err: Error, socket: Socket): void; // 连接错误回调
+/** ConnectionHandler 运行请求和上报连接事件所需的上下文 */
+export interface ConnectionHandlerContext {
+  readonly config: ConnectionConfig;
+  dispatch(req: NovaRequest, res: NovaResponse): Promise<void>;
+  onConnect(socket: Socket): void;
+  onClose(socket: Socket): void;
+  onError(err: Error, socket: Socket): void;
 }
 
 /** ConnectionHandler 的连接处理配置项 */
@@ -80,17 +80,17 @@ export class ConnectionHandler {
    */
   constructor(
     private readonly _socket: Socket,
-    private readonly _app: NovaApp,
+    private readonly context: ConnectionHandlerContext,
   ) {
     // 1. 初始化 BufferReader 和 HttpParser 实例
     this._reader = new BufferReader();
-    this._parser = new HttpParser({ maxBodySize: _app._config.maxBodySize });
+    this._parser = new HttpParser({ maxBodySize: context.config.maxBodySize });
 
     // 2. 配置 Socket 选项
     this._setupSocket();
 
     // 3. 通知 Nova 应用有新连接
-    this._app._onConnect(_socket);
+    this.context.onConnect(_socket);
 
     // 4. 启动 headers 超时计时器
     this._startHeadersTimer();
@@ -161,13 +161,13 @@ export class ConnectionHandler {
       this._startRequestTimer();
 
       // Body 大小验证
-      if (result.request.body.length > this._app._config.maxBodySize) {
+      if (result.request.body.length > this.context.config.maxBodySize) {
         this._sendErrorAndClose(413, "Payload Too Large");
         return;
       }
 
       // 构建 Request/Response 对象
-      const req = new NovaRequest(result.request, this._socket, this._app._config.trustProxy);
+      const req = new NovaRequest(result.request, this._socket, this.context.config.trustProxy);
       const res = new NovaResponse(this._socket, req);
       res._setStreamStartHandler(() => this._onStreamStart());
 
@@ -178,11 +178,11 @@ export class ConnectionHandler {
       this._currentResponse = res;
 
       // 异步处理请求
-      this._app
-        ._dispatch(req, res)
+      this.context
+        .dispatch(req, res)
         .then(() => this._onRequestDone(req, res))
         .catch(async (err: Error) => {
-          this._app._onError(err, this._socket);
+          this.context.onError(err, this._socket);
           if (!res.headersSent) {
             try {
               res.status(500).send("Internal Server Error");
@@ -260,7 +260,7 @@ export class ConnectionHandler {
 
   private _startHeadersTimer(): void {
     this._clearHeadersTimer();
-    const timeout = this._app._config.headersTimeout;
+    const timeout = this.context.config.headersTimeout;
     if (timeout > 0) {
       this._headersTimer = setTimeout(() => {
         if (!this._busy) {
@@ -279,7 +279,7 @@ export class ConnectionHandler {
 
   private _startIdleTimer(): void {
     this._clearIdleTimer();
-    const timeout = this._app._config.keepAliveTimeout;
+    const timeout = this.context.config.keepAliveTimeout;
     if (timeout > 0) {
       this._idleTimer = setTimeout(() => {
         if (!this._socket.destroyed) {
@@ -298,7 +298,7 @@ export class ConnectionHandler {
 
   private _startRequestTimer(): void {
     this._clearRequestTimer();
-    const timeout = this._app._config.requestTimeout;
+    const timeout = this.context.config.requestTimeout;
     if (timeout > 0) {
       this._requestTimer = setTimeout(() => {
         const error = createConnectionError("ERR_REQUEST_TIMEOUT", "Request Timeout");
@@ -369,7 +369,7 @@ export class ConnectionHandler {
       (err as NodeJS.ErrnoException).code !== "ECONNRESET" &&
       (err as NodeJS.ErrnoException).code !== "EPIPE"
     ) {
-      this._app._onError(err, this._socket);
+      this.context.onError(err, this._socket);
     }
     if (!this._socket.destroyed) {
       this._socket.destroy();
@@ -384,7 +384,7 @@ export class ConnectionHandler {
     this._streamingResponse = false;
     this._currentRequest = null;
     this._currentResponse = null;
-    this._app._onClose(this._socket);
+    this.context.onClose(this._socket);
   }
 
   /**

@@ -2,11 +2,17 @@ import * as fs from "fs";
 import * as path from "path";
 import * as readline from "readline/promises";
 
+/** package.json 中 CLI 需要使用的元信息 */
 interface PackageMeta {
   name?: string;
   version?: string;
 }
 
+/**
+ * 从指定目录向上查找并读取最近的 package.json
+ *
+ * 构建产物和源码所在层级不同，因此不能依赖固定的相对路径
+ */
 function readPackageMeta(startDir: string): PackageMeta {
   let currentDir = startDir;
 
@@ -16,7 +22,7 @@ function readPackageMeta(startDir: string): PackageMeta {
       try {
         return JSON.parse(fs.readFileSync(packageJsonPath, "utf8")) as PackageMeta;
       } catch {
-        // Ignore invalid package.json files outside the current package.
+        // 忽略 JSON 解析错误，继续向上查找
       }
     }
 
@@ -34,6 +40,21 @@ const PACKAGE_META = readPackageMeta(__dirname);
 const VERSION = PACKAGE_META.version ?? "0.1.0";
 const FRAMEWORK_VERSION_RANGE = VERSION === "0.1.0" ? "^0.1.0" : `^${VERSION}`;
 const DEFAULT_PROJECT_VERSION = "0.1.0";
+const PROJECT_NAME_PATTERN = /^[a-zA-Z0-9_-][a-zA-Z0-9_\-.]*$/;
+const TEXT_FILE_EXTENSIONS = new Set([
+  ".ts",
+  ".js",
+  ".json",
+  ".md",
+  ".txt",
+  ".html",
+  ".css",
+  ".env",
+  ".gitignore",
+  ".npmignore",
+  ".yml",
+  ".yaml",
+]);
 
 const colors = {
   reset: "\x1b[0m",
@@ -94,6 +115,7 @@ interface Choice<T extends string> {
   description?: string;
 }
 
+/** 运行 nova-http 命令或 create-nova-http 初始化器 */
 export async function runCli(rawArgs: string[], mode: InvocationMode): Promise<void> {
   const args = [...rawArgs];
 
@@ -110,7 +132,7 @@ export async function runCli(rawArgs: string[], mode: InvocationMode): Promise<v
   if (mode === "command") {
     if (args.length === 0) {
       if (canUseInteractive()) {
-        createProjectFromOptions(await runInteractive(mode), mode);
+        createProject(await runInteractive(mode));
         return;
       }
       printHelp(mode);
@@ -129,13 +151,14 @@ export async function runCli(rawArgs: string[], mode: InvocationMode): Promise<v
   }
 
   if (args.length === 0 && canUseInteractive()) {
-    createProjectFromOptions(await runInteractive(mode), mode);
+    createProject(await runInteractive(mode));
     return;
   }
 
-  createProjectFromOptions(parseArgs(args, mode), mode);
+  createProject(parseArgs(args, mode));
 }
 
+/** 将非交互式命令行参数转换为创建项目所需的选项 */
 function parseArgs(args: string[], mode: InvocationMode): CliOptions {
   const projectName = args[0];
   if (!projectName) {
@@ -170,6 +193,7 @@ function parseArgs(args: string[], mode: InvocationMode): CliOptions {
   };
 }
 
+/** 输出缺少必要参数时使用的简短用法 */
 function printUsage(mode: InvocationMode): void {
   if (mode === "initializer") {
     console.log("  用法: create-nova-http [项目名称] [--template minimal|api] [--lang ts|js]");
@@ -179,6 +203,7 @@ function printUsage(mode: InvocationMode): void {
   console.log("  用法: nova-http create [项目名称] [--template minimal|api] [--lang ts|js]");
 }
 
+/** 输出完整的命令帮助 */
 function printHelp(mode: InvocationMode): void {
   const primaryUsage =
     mode === "initializer"
@@ -230,18 +255,21 @@ ${bold("语言说明：")}
 `);
 }
 
+/** 判断当前进程是否可以安全地进入交互模式 */
 function canUseInteractive(): boolean {
   return Boolean(process.stdin.isTTY && process.stdout.isTTY);
 }
 
+/** 校验项目名是否符合 CLI 支持的目录名格式 */
 function validateProjectName(projectName: string): void {
-  if (!/^[a-zA-Z0-9_-][a-zA-Z0-9_\-.]*$/.test(projectName)) {
+  if (!PROJECT_NAME_PATTERN.test(projectName)) {
     log.error(`无效的项目名称: "${projectName}"`);
     log.info("项目名称只能包含字母、数字、连字符、下划线和点");
     process.exit(1);
   }
 }
 
+/** 依次收集项目名、模板、语言和覆盖选项 */
 async function runInteractive(mode: InvocationMode): Promise<CliOptions> {
   const rl = readline.createInterface({
     input: process.stdin,
@@ -296,6 +324,7 @@ async function runInteractive(mode: InvocationMode): Promise<CliOptions> {
   }
 }
 
+/** 判断 readline 是否因用户中断而结束 */
 function isAbortError(error: unknown): error is Error & { code?: string } {
   if (!(error instanceof Error)) {
     return false;
@@ -307,12 +336,14 @@ function isAbortError(error: unknown): error is Error & { code?: string } {
   return error.name === "AbortError" || code === "ABORT_ERR";
 }
 
+/** 输出取消提示并正常结束交互流程 */
 function handleInteractiveAbort(): never {
   console.log("");
   log.warn("已取消创建");
   process.exit();
 }
 
+/** 持续询问，直到获得合法的项目名 */
 async function askProjectName(rl: readline.Interface): Promise<string> {
   console.log(`  ${bold(blue("0/3 项目名称"))}`);
   console.log(`  ${gray("  请输入项目目录名称，例如 my-app")}`);
@@ -322,7 +353,7 @@ async function askProjectName(rl: readline.Interface): Promise<string> {
       log.warn("项目名称不能为空");
       continue;
     }
-    if (!/^[a-zA-Z0-9_-][a-zA-Z0-9_\-.]*$/.test(answer)) {
+    if (!PROJECT_NAME_PATTERN.test(answer)) {
       log.warn("项目名称只能包含字母、数字、连字符、下划线和点");
       continue;
     }
@@ -330,6 +361,7 @@ async function askProjectName(rl: readline.Interface): Promise<string> {
   }
 }
 
+/** 显示单选列表，并返回用户选中项的值 */
 async function askChoice<T extends string>(
   rl: readline.Interface,
   title: string,
@@ -338,8 +370,7 @@ async function askChoice<T extends string>(
 ): Promise<T> {
   console.log(`  ${bold(blue(title))}`);
   for (const option of options) {
-    const hint = option.key === defaultKey ? "" : "";
-    const label = `${option.key}. ${option.label}${hint}`;
+    const label = `${option.key}. ${option.label}`;
     console.log(
       `  ${cyan(label.padEnd(18, " "))}${option.description ? gray(option.description) : ""}`,
     );
@@ -358,6 +389,7 @@ async function askChoice<T extends string>(
   }
 }
 
+/** 询问一个支持默认值的 yes/no 问题 */
 async function askConfirm(
   rl: readline.Interface,
   question: string,
@@ -373,10 +405,12 @@ async function askConfirm(
   }
 }
 
+/** 输出交互式创建向导的标题 */
 function printInteractiveBanner(): void {
   console.log(`  ${bold("Nova")} ${cyan("交互式创建向导")}`);
 }
 
+/** 在开始写入文件前输出本次创建选项 */
 function printInteractiveSummary(options: CliOptions, mode: InvocationMode): void {
   console.log(`  ${bold(blue("3/3 创建预览"))}`);
   console.log(
@@ -388,17 +422,8 @@ function printInteractiveSummary(options: CliOptions, mode: InvocationMode): voi
   console.log(`  ${gray("  覆盖")}   ${options.force ? "yes" : "no"}`);
 }
 
-function createProjectFromOptions(options: CliOptions, mode: InvocationMode): void {
-  createProject(options.name, options.template, options.lang, options.force, mode);
-}
-
-function createProject(
-  name: string,
-  template: TemplateKind,
-  lang: ProjectLanguage,
-  force: boolean,
-  mode: InvocationMode,
-): void {
+/** 检查目标和模板目录，然后将模板生成为一个新项目 */
+function createProject({ name, template, lang, force }: CliOptions): void {
   const targetDir = path.resolve(process.cwd(), name);
 
   console.log("");
@@ -442,8 +467,6 @@ function createProject(
     process.exit(1);
   }
 
-  const nextCommand = mode === "initializer" ? "npm run dev" : "npm run dev";
-
   console.log("");
   log.success(bold("项目创建成功！"));
   console.log("");
@@ -451,7 +474,7 @@ function createProject(
   console.log("");
   console.log(`    ${gray("$")} cd ${cyan(name)}`);
   console.log(`    ${gray("$")} npm install`);
-  console.log(`    ${gray("$")} ${nextCommand}`);
+  console.log(`    ${gray("$")} npm run dev`);
   console.log("");
 
   if (template === "api") {
@@ -474,6 +497,7 @@ interface TemplateVars {
   projectVersion: string;
 }
 
+/** 递归复制模板，并替换文件名和文本文件中的模板变量 */
 function copyTemplate(src: string, dest: string, vars: TemplateVars): void {
   const entries = fs.readdirSync(src, { withFileTypes: true });
 
@@ -486,22 +510,7 @@ function copyTemplate(src: string, dest: string, vars: TemplateVars): void {
       fs.mkdirSync(destPath, { recursive: true });
       copyTemplate(srcPath, destPath, vars);
     } else if (entry.isFile()) {
-      const textExtensions = new Set([
-        ".ts",
-        ".js",
-        ".json",
-        ".md",
-        ".txt",
-        ".html",
-        ".css",
-        ".env",
-        ".gitignore",
-        ".npmignore",
-        ".yml",
-        ".yaml",
-      ]);
-
-      if (textExtensions.has(path.extname(entry.name).toLowerCase())) {
+      if (TEXT_FILE_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) {
         let content = fs.readFileSync(srcPath, "utf8");
         content = content.replace(/\{\{name\}\}/g, vars.name);
         content = content.replace(/\{\{frameworkVersionRange\}\}/g, vars.frameworkVersionRange);
