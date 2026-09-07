@@ -82,8 +82,8 @@ jobs:
         uses: changesets/action@v2
         with:
           # This expects you to have a script called release which runs `changeset publish`
-          publish: pnpm run release
-          commit: "chore(release): version packages"
-          title: "chore(release): version packages"
+          publish-script: pnpm run release
+          commit-message: "chore(release): version packages"
+          pr-title: "chore(release): version packages"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
