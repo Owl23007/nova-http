@@ -197,7 +197,7 @@ app.get("/events", async (req, res) => {
 ### FR-6：终止与取消
 
 - `req.signal` 暴露请求级 `AbortSignal`；
-- 客户端断连、socket 错误、请求超时或强制关闭时触发 abort；
+- 客户端断连、socket 错误、进入流式模式前的请求超时或服务器关闭时触发 abort；
 - `Readable` 在 abort 后被 `destroy()`；
 - 异步迭代器在 abort 后调用 `return()`（如果提供）；
 - 所有临时 socket 监听器在终态后移除。
@@ -214,7 +214,8 @@ app.get("/events", async (req, res) => {
 - 流未完成时 `ConnectionHandler` 保持 busy；
 - 同一连接中已经到达的流水线请求可以保留在 reader 中，但不能提前分发；
 - 流正常结束后，仅在协议允许时恢复 Keep-Alive；
-- `requestTimeout` 覆盖完整 handler 和响应流生命周期；
+- `requestTimeout` 保护普通 handler，响应进入 streaming 后停止计时；
+- 服务器优雅关闭时主动终止长期 streaming 响应，避免关闭过程无限等待；
 - HTTP `HEAD` 及不允许 body 的状态码不发送响应体。
 
 ### FR-9：可观测性
@@ -279,7 +280,7 @@ app.get("/events", async (req, res) => {
 - 以 minor 版本发布；
 - README 增加 `write()`、`end()`、`stream()`、`signal` 和协议行为说明；
 - 提供异步生成器、Readable、NDJSON、SSE 四个示例；
-- 变更日志明确：流必须结束、应 `await write()`、`requestTimeout` 覆盖整个流；
+- 变更日志明确：流必须结束、应 `await write()`，且 `requestTimeout` 在进入 streaming 后停止计时；
 - 发布前运行 typecheck、单元测试、集成测试和性能基线对比。
 
 ## 11. 后续迭代

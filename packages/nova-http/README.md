@@ -1,39 +1,56 @@
 # nova-http
 
-基于 Node.js `net` 模块实现的零依赖 HTTP 框架，提供 TypeScript 类型、Radix Tree 路由、
-中间件、生命周期钩子、Keep-Alive 和背压感知的流式响应。
+[Full English documentation](https://github.com/Owl23007/nova-http/blob/master/README_EN.md) · [中文文档与 API 参考](https://github.com/Owl23007/nova-http#readme)
 
-## 安装
+A zero-dependency HTTP framework built directly on Node.js `net`. Nova provides a TypeScript-first API, radix-tree routing, middleware, lifecycle hooks, Keep-Alive connections, and backpressure-aware streaming.
+
+## Installation
 
 ```bash
 npm install nova-http
 ```
 
-## 快速开始
+Requires Node.js 18 or later.
+
+## Quick start
 
 ```typescript
-import { createApp } from "nova-http";
+import { bodyParser, createApp } from "nova-http";
 
 const app = createApp();
+
+app.use(bodyParser());
 
 app.get("/", (_req, res) => {
   res.json({ hello: "Nova!" });
 });
 
+app.get("/users/:id", (req, res) => {
+  res.json({ id: req.params.id });
+});
+
 await app.listen(3000);
 ```
 
-## 流式响应
+## Highlights
+
+- Zero runtime dependencies
+- Built-in HTTP/1.1 parser on top of TCP
+- Static, parameter, and wildcard routing
+- Express-style middleware and mountable sub-applications
+- JSON and URL-encoded body parsing
+- Static files with ETags, `Last-Modified`, and range requests
+- Node.js `Readable` and async-iterable streaming
+- Backpressure-aware response writes
+- Ten lifecycle hooks for logs and metrics
+- Keep-Alive, header timeouts, request timeouts, and body-size limits
+
+## Streaming
 
 ```typescript
 app.get("/stream", async (req, res) => {
   res.setHeader("content-type", "text/plain; charset=utf-8");
-
-  for await (const chunk of createSource(req.signal)) {
-    await res.write(chunk);
-  }
-
-  await res.end();
+  await res.stream(createSource(req.signal));
 });
 
 async function* createSource(signal: AbortSignal) {
@@ -44,9 +61,30 @@ async function* createSource(signal: AbortSignal) {
 }
 ```
 
-也可以使用 `await res.stream(readableOrAsyncIterable)` 自动消费数据源并结束响应。
-`requestTimeout` 覆盖 handler 和完整响应流生命周期；SSE 等长连接可通过
-`createApp({ requestTimeout: 0 })` 禁用该限制。
+For manual streaming, await every `res.write()` call and finish with `res.end()`. `requestTimeout` protects ordinary handlers but stops once the response enters streaming mode, so server-sent events and other long-lived streams are not cut off by it. Calling `app.close()` aborts active long-running streams during graceful shutdown.
 
-完整 API、示例与设计说明请查看
-[GitHub README](https://github.com/Owl23007/nova-http#readme)。
+## Built-in middleware
+
+```typescript
+import { bodyParser, staticFiles } from "nova-http";
+
+app.use(bodyParser({ maxSize: 1_048_576 }));
+app.use("/static", staticFiles("./public", { maxAge: 3600 }));
+```
+
+## Create a project
+
+```bash
+npm create nova-http@latest my-app
+npm create nova-http@latest my-api -- --template api --lang ts
+```
+
+Templates are available for TypeScript and JavaScript. Use `--template minimal|api`, `--lang ts|js`, and `--force` to customize generation.
+
+## Documentation
+
+See the links at the top of this page for the complete API reference, examples, and design notes.
+
+## License
+
+MIT © Owl23007

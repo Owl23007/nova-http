@@ -294,12 +294,17 @@ private _onRequestDone(req: NovaRequest, res: NovaResponse): void;
 
 ### 8.3 超时
 
-`requestTimeout` 从请求完成解析开始，到响应流结束为止。
+`requestTimeout` 从请求完成解析开始，保护尚未进入流式模式的普通 handler。响应首次调用
+`flushHeaders()`、`write()` 或 `stream()` 时进入 streaming 生命周期，必须立即清除该计时器；
+长期流由客户端断连、流源结束/失败或服务器关闭负责终止。
 
 超时处理必须区分：
 
-- header 未发送：可以发送 408 并关闭；
-- header 已发送：只 abort 当前 response 并销毁 socket，禁止再写一条 408。
+- streaming 前超时：可以发送 408 并关闭；
+- streaming 开始后：不再应用 `requestTimeout`，禁止在流中追加 408。
+
+服务器执行优雅关闭时，普通请求可继续完成；仍在运行的 streaming 响应必须收到
+`ERR_SERVER_SHUTDOWN`，触发 `req.signal` 并关闭 socket，避免 `server.close()` 被长期流阻塞。
 
 这项修改也是通用流上线的协议正确性前置条件。
 
@@ -350,14 +355,15 @@ listener leak。
 
 建议内部错误码：
 
-| code                               | 场景                       | 处理                             |
-| ---------------------------------- | -------------------------- | -------------------------------- |
-| `ERR_HTTP_HEADERS_SENT`            | header 后修改状态或 header | 同步抛出                         |
-| `ERR_STREAM_WRITE_AFTER_END`       | end 已请求后 write         | Promise reject                   |
-| `ERR_HTTP_CONTENT_LENGTH_MISMATCH` | 定长流多写或少写           | abort + destroy socket           |
-| `ERR_STREAM_PREMATURE_CLOSE`       | 客户端中途关闭             | abort；按现有网络错误策略降噪    |
-| `ERR_INVALID_STREAM_CHUNK`         | 非支持的 chunk 类型        | 发送前抛出或流中 abort           |
-| `ERR_REQUEST_TIMEOUT`              | 流持续超过请求超时         | header 前 408；header 后 destroy |
+| code                               | 场景                       | 处理                          |
+| ---------------------------------- | -------------------------- | ----------------------------- |
+| `ERR_HTTP_HEADERS_SENT`            | header 后修改状态或 header | 同步抛出                      |
+| `ERR_STREAM_WRITE_AFTER_END`       | end 已请求后 write         | Promise reject                |
+| `ERR_HTTP_CONTENT_LENGTH_MISMATCH` | 定长流多写或少写           | abort + destroy socket        |
+| `ERR_STREAM_PREMATURE_CLOSE`       | 客户端中途关闭             | abort；按现有网络错误策略降噪 |
+| `ERR_INVALID_STREAM_CHUNK`         | 非支持的 chunk 类型        | 发送前抛出或流中 abort        |
+| `ERR_REQUEST_TIMEOUT`              | 普通 handler 超过请求超时  | 返回 408 并关闭连接           |
+| `ERR_SERVER_SHUTDOWN`              | 服务器关闭时仍有长期流     | abort 流并销毁 socket         |
 
 错误边界：
 
@@ -433,7 +439,9 @@ await this.stream(fileStream);
 - Keep-Alive 和 pipelining 顺序；
 - HTTP/1.0 close-delimited；
 - 客户端断连取消；
-- 流中 request timeout；
+- 普通 handler 的 request timeout；
+- streaming 超过 `requestTimeout` 后仍保持连接；
+- `app.close()` 主动终止长期流；
 - `sendFile()` 回归。
 
 ### README 与 docs
@@ -495,17 +503,17 @@ Connection: close
 
 ## 15. 风险与缓解
 
-| 风险                       | 影响                   | 缓解                                         |
-| -------------------------- | ---------------------- | -------------------------------------------- |
-| handler 未请求结束就返回   | 不完整响应长期占用连接 | 抛出 `ERR_RESPONSE_NOT_ENDED` 并关闭连接     |
-| 长流期间持续收到流水线请求 | reader 内存持续增长    | busy 期间暂停 socket 读取侧                  |
-| 背压期间客户端关闭         | Promise 永久等待       | `drain` 与 close/error/abort 竞争            |
-| header 后错误仍写 500/408  | wire format 损坏       | header 后统一 destroy                        |
-| Content-Length 错误        | 客户端误读下一响应     | 精确计数，不匹配则关闭连接                   |
-| Keep-Alive listener 泄漏   | 告警与内存增长         | 终态集中清理并做循环测试                     |
-| 未 await 的大量 write      | 应用侧内存积压         | 内部有序队列 + 文档约束 + 可观测告警后续评估 |
-| 长连接达到 requestTimeout  | SSE 意外中断           | 文档说明；长流应用显式配置合理超时或 0       |
-| `sendFile()` 回归          | 静态文件能力受损       | 保留元数据逻辑并增加 Range/HEAD/缓存回归     |
+| 风险                           | 影响                   | 缓解                                         |
+| ------------------------------ | ---------------------- | -------------------------------------------- |
+| handler 未请求结束就返回       | 不完整响应长期占用连接 | 抛出 `ERR_RESPONSE_NOT_ENDED` 并关闭连接     |
+| 长流期间持续收到流水线请求     | reader 内存持续增长    | busy 期间暂停 socket 读取侧                  |
+| 背压期间客户端关闭             | Promise 永久等待       | `drain` 与 close/error/abort 竞争            |
+| header 后错误仍写 500/408      | wire format 损坏       | header 后统一 destroy                        |
+| Content-Length 错误            | 客户端误读下一响应     | 精确计数，不匹配则关闭连接                   |
+| Keep-Alive listener 泄漏       | 告警与内存增长         | 终态集中清理并做循环测试                     |
+| 未 await 的大量 write          | 应用侧内存积压         | 内部有序队列 + 文档约束 + 可观测告警后续评估 |
+| 长流不再受 requestTimeout 保护 | 失控流长期占用连接     | 客户端取消、应用级截止时间与关闭时强制终止   |
+| `sendFile()` 回归              | 静态文件能力受损       | 保留元数据逻辑并增加 Range/HEAD/缓存回归     |
 
 ## 16. 完成定义
 
