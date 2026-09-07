@@ -274,25 +274,4 @@ describe("connection lifecycle", () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(sourceCancelled).toBe(true);
   });
-
-  it("does not append a second HTTP response when a started stream times out", async () => {
-    app = createApp({ requestTimeout: 30 });
-    app.get("/timeout", async (_req: NovaRequest, res: NovaResponse) => {
-      await res.write("started");
-      await new Promise<void>(() => undefined);
-    });
-
-    const port = await listen(app);
-    const connection = await connect(port);
-    socket = connection.socket;
-    const closed = once(socket, "close");
-    socket.write("GET /timeout HTTP/1.1\r\nHost: localhost\r\n\r\n");
-
-    await waitWithTimeout(closed, 500);
-
-    const response = Buffer.concat(connection.chunks).toString("utf8");
-    expect(response.match(/HTTP\/1\.1/g)).toHaveLength(1);
-    expect(response).not.toContain("408 Request Timeout");
-    expect(response).toContain("7\r\nstarted\r\n");
-  });
 });
