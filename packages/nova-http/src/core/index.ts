@@ -14,7 +14,7 @@ export { NovaResponse } from "./response";
 export { BUILTIN_HTTP_METHODS, createRouteBuilder } from "./route-builder";
 export { Router } from "./router";
 
-export type { ConnectionConfig, NovaApp } from "./connection-handler";
+export type { ConnectionConfig, ConnectionHandlerContext } from "./connection-handler";
 export type {
   BodyParsedContext,
   ConnectContext,

@@ -1,5 +1,9 @@
 import { createServer, Server, Socket } from "net";
-import { ConnectionHandler, type ConnectionConfig, type NovaApp } from "./connection-handler";
+import {
+  ConnectionHandler,
+  type ConnectionConfig,
+  type ConnectionHandlerContext,
+} from "./connection-handler";
 import { Hooks } from "./hooks";
 import { MiddlewareChain } from "./middleware-chain";
 import { createMountedMiddleware, createPrefixedMiddleware } from "./mount";
@@ -58,7 +62,7 @@ export interface NovaConfig extends Partial<ConnectionConfig> {
  * await app.listen(3000);
  * ```
  */
-export class Nova implements NovaApp {
+export class Nova {
   /** 全链路钩子系统 */
   readonly hooks: Hooks = new Hooks();
 
@@ -74,8 +78,8 @@ export class Nova implements NovaApp {
   /** 活跃连接集合（用于优雅关闭） */
   private readonly _connections: Set<ConnectionHandler> = new Set();
 
-  /** 应用配置 */
-  readonly _config: ConnectionConfig;
+  /** 创建连接处理器时复用的配置与生命周期回调 */
+  private readonly connectionContext: ConnectionHandlerContext;
 
   /** 私有配置完整项 */
   private readonly _fullConfig: Required<NovaConfig>;
@@ -97,12 +101,26 @@ export class Nova implements NovaApp {
       trustProxy: config.trustProxy ?? false,
     };
 
-    this._config = {
+    const connectionConfig: ConnectionConfig = {
       headersTimeout: this._fullConfig.headersTimeout,
       keepAliveTimeout: this._fullConfig.keepAliveTimeout,
       requestTimeout: this._fullConfig.requestTimeout,
       maxBodySize: this._fullConfig.maxBodySize,
       trustProxy: this._fullConfig.trustProxy,
+    };
+
+    this.connectionContext = {
+      config: connectionConfig,
+      dispatch: (req, res) => this.dispatchRequest(req, res),
+      onConnect: (socket) => {
+        this.hooks.callHook("onConnect", { socket, timestamp: Date.now() });
+      },
+      onClose: (socket) => {
+        this.hooks.callHook("onDisconnect", { socket, timestamp: Date.now() });
+      },
+      onError: (error, socket) => {
+        this.hooks.callHook("onError", { error, socket });
+      },
     };
   }
 
@@ -272,7 +290,7 @@ export class Nova implements NovaApp {
     return new Promise((resolve, reject) => {
       // 客户端结束请求方向后仍可能等待长响应，半关闭连接必须由 ConnectionHandler 主动收尾
       const server = createServer({ allowHalfOpen: true }, (socket: Socket) => {
-        const handler = new ConnectionHandler(socket, this);
+        const handler = new ConnectionHandler(socket, this.connectionContext);
         this._connections.add(handler);
 
         // 连接关闭时从集合中移除（通过 socket close 事件）
@@ -336,12 +354,10 @@ export class Nova implements NovaApp {
     return this._router.routes;
   }
 
-  //  NovaApp 接口实现（供 ConnectionHandler 调用）
-
   /**
    * 请求分发入口：全局中间件 → 路由匹配 → 路由处理器 → 404 处理
    */
-  async _dispatch(req: NovaRequest, res: NovaResponse): Promise<void> {
+  private async dispatchRequest(req: NovaRequest, res: NovaResponse): Promise<void> {
     try {
       await this._dispatchInternal(req, res, false);
 
@@ -425,18 +441,6 @@ export class Nova implements NovaApp {
     }
 
     return true;
-  }
-
-  _onConnect(socket: Socket): void {
-    this.hooks.callHook("onConnect", { socket, timestamp: Date.now() });
-  }
-
-  _onClose(socket: Socket): void {
-    this.hooks.callHook("onDisconnect", { socket, timestamp: Date.now() });
-  }
-
-  _onError(err: Error, socket: Socket): void {
-    this.hooks.callHook("onError", { error: err, socket });
   }
 
   //  私有工具方法
