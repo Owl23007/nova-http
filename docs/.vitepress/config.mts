@@ -26,13 +26,6 @@ export default defineConfig({
           { text: "流式响应", link: "/guide/streaming-response" },
         ],
       },
-      {
-        text: "软件测试文档",
-        items: [
-          { text: "测试总览", link: "/testing/index" },
-          { text: "测试报告", link: "/testing/report" },
-        ],
-      },
     ],
 
     socialLinks: [{ icon: "github", link: "https://github.com/your-name/nova" }],
