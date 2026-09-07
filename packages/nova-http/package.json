@@ -1,6 +1,6 @@
 {
   "name": "nova-http",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "零依赖、高性能、全链路可控的 Node.js HTTP 框架",
   "keywords": [
     "framework",

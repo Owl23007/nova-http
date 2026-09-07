@@ -1,5 +1,11 @@
 # create-nova-http
 
+## 0.2.1
+
+### Patch Changes
+
+- 与 `nova-http@0.2.1` 同步版本，生成项目默认依赖 `nova-http@^0.2.1`。
+
 ## 0.2.0
 
 ### Minor Changes

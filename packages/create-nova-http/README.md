@@ -2,8 +2,8 @@
 
 Initializer package for Nova HTTP projects.
 
-The initializer follows the `nova-http` package version. `create-nova-http@0.2.0`
-therefore creates projects that depend on `nova-http@^0.2.0`.
+The initializer follows the `nova-http` package version. `create-nova-http@0.2.1`
+therefore creates projects that depend on `nova-http@^0.2.1`.
 
 ## Usage
 
