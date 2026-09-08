@@ -9,7 +9,7 @@ import { registerRoutes } from "./router/routes.js";
 import { registerSubApps } from "./router/subapps.js";
 
 export async function createProductionApp(env = process.env, runtime = loadNovaHttp()) {
-  // 应用组装层只负责串联配置、基础设施、中间件和 subapp，避免业务逻辑散落在启动文件里。
+  // 应用组装层只负责串联配置、基础设施、中间件和 subapp，避免业务逻辑散落在启动文件里
   const config = readServerConfig(env);
   const { createApp, bodyParser } = runtime;
   const metrics = createMetricsRegistry();
@@ -36,7 +36,7 @@ export async function createProductionApp(env = process.env, runtime = loadNovaH
   app.addHook("onResponse", metrics.onResponse);
   app.addHook("onError", metrics.onError);
 
-  // 全局中间件顺序：请求标识 -> 依赖注入 -> 请求体解析 -> Redis 计数。
+  // 全局中间件顺序：请求标识 -> 依赖注入 -> 请求体解析 -> Redis 计数
   app.use(requestContextMiddleware());
   app.use(resourceMiddleware(resources));
   app.use(bodyParser({ maxSize: config.maxBodySize, strict: true, maxParams: 100 }));

@@ -104,7 +104,7 @@ export class Router {
   }
 
   /**
-   * 查找路由。
+   * 查找路由
    * @param method HTTP 方法，查找时会统一转换为大写 token
    * @param pathname 不含 query string 的路径
    * @returns 匹配结果（handler + params），未匹配返回 null
@@ -132,7 +132,7 @@ export class Router {
   }
 
   /**
-   * 检查路径是否存在（不限方法），用于生成 405 响应。
+   * 检查路径是否存在（不限方法），用于生成 405 响应
    */
   findAllowedMethods(pathname: string): string[] {
     const normalizedPath = normalizePath(pathname);
@@ -280,8 +280,8 @@ function findChild(node: RadixNode, segment: string): RadixNode | undefined {
 }
 
 /**
- * 插入子节点，保持排序：静态节点 > 参数节点 > 通配符节点。
- * 这确保 find 时优先尝试精确匹配。
+ * 插入子节点，保持排序：静态节点 > 参数节点 > 通配符节点
+ * 这确保 find 时优先尝试精确匹配
  */
 function insertChild(parent: RadixNode, child: RadixNode): void {
   if (child.isWildcard) {

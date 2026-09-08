@@ -16,11 +16,11 @@ let performanceApp: PerformanceApp | undefined;
 let tempDir: string | undefined;
 
 async function createTestApp(): Promise<PerformanceApp> {
-  // 测试运行在当前 tsconfig 下，使用 file URL 动态导入。
+  // 测试运行在当前 tsconfig 下，使用 file URL 动态导入
   const modulePath = pathToFileURL(join(__dirname, "../performance/src/app/create-app.js")).href;
   const { createProductionApp } = await import(modulePath);
 
-  // 每个用例使用独立 SQLite 文件，避免订单数据在测试间串扰。
+  // 每个用例使用独立 SQLite 文件，避免订单数据在测试间串扰
   tempDir = await mkdtemp(join(tmpdir(), "nova-performance-"));
 
   return createProductionApp(
@@ -31,7 +31,7 @@ async function createTestApp(): Promise<PerformanceApp> {
       PROD_API_SQLITE_PATH: join(tempDir, "performance-test.sqlite"),
       PROD_API_REDIS_HOST: "127.0.0.1",
       PROD_API_REDIS_PORT: "6379",
-      // Redis 使用真实 6379 实例，通过唯一前缀隔离测试 key。
+      // Redis 使用真实 6379 实例，通过唯一前缀隔离测试 key
       PROD_API_REDIS_KEY_PREFIX: `nova-http:test:${Date.now()}:${Math.random()}`,
     },
     { createApp, bodyParser },
@@ -40,13 +40,13 @@ async function createTestApp(): Promise<PerformanceApp> {
 
 async function listen(app: Nova): Promise<number> {
   await app.listen(0, "127.0.0.1");
-  // 测试端口使用 0 自动分配，需要读取底层 server 的实际端口。
+  // 测试端口使用 0 自动分配，需要读取底层 server 的实际端口
   const address = (app as any)["_server"].address();
   return address.port;
 }
 
 async function request(port: number, raw: string): Promise<string> {
-  // 直接走 TCP 原始 HTTP 文本，覆盖 Nova 自身解析、路由和响应写回链路。
+  // 直接走 TCP 原始 HTTP 文本，覆盖 Nova 自身解析、路由和响应写回链路
   const socket = new Socket();
   const chunks: Buffer[] = [];
 
@@ -61,7 +61,7 @@ async function request(port: number, raw: string): Promise<string> {
 
 describe("performance ESM suite", () => {
   afterEach(async () => {
-    // 关闭服务并删除临时 SQLite 文件；Redis key 通过唯一前缀自然隔离并受 TTL 清理。
+    // 关闭服务并删除临时 SQLite 文件；Redis key 通过唯一前缀自然隔离并受 TTL 清理
     await performanceApp?.close();
     if (tempDir) {
       await rm(tempDir, { recursive: true, force: true });
@@ -74,7 +74,7 @@ describe("performance ESM suite", () => {
     performanceApp = await createTestApp();
     const port = await listen(performanceApp.app);
 
-    // 首次请求回源 SQLite 并写入 Redis，后续同 key 请求应命中缓存。
+    // 首次请求回源 SQLite 并写入 Redis，后续同 key 请求应命中缓存
     const first = await request(
       port,
       "GET /api/users/42 HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
@@ -99,7 +99,7 @@ describe("performance ESM suite", () => {
       items: [{ sku: "sku-1", quantity: 1 }],
     });
 
-    // 创建订单验证 bodyParser、业务校验、subapp 挂载和 SQLite 写入。
+    // 创建订单验证 bodyParser、业务校验、subapp 挂载和 SQLite 写入
     const created = await request(
       port,
       [
@@ -115,7 +115,7 @@ describe("performance ESM suite", () => {
     expect(created).toContain("HTTP/1.1 201 Created");
     expect(created).toContain('"customerId":"cust-test"');
 
-    // 统计接口读取同一个 SQLite 仓储，确认写入已经落库。
+    // 统计接口读取同一个 SQLite 仓储，确认写入已经落库
     const stats = await request(
       port,
       "GET /api/orders/stats HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
@@ -128,14 +128,14 @@ describe("performance ESM suite", () => {
     performanceApp = await createTestApp();
     const port = await listen(performanceApp.app);
 
-    // 指标接口未授权时伪装成 404，避免暴露内部观测面。
+    // 指标接口未授权时伪装成 404，避免暴露内部观测面
     const hidden = await request(
       port,
       "GET /__metrics HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
     );
     expect(hidden).toContain("HTTP/1.1 404 Not Found");
 
-    // 携带压测 token 时返回资源采样所需的 memory 和 eventLoop 指标。
+    // 携带压测 token 时返回资源采样所需的 memory 和 eventLoop 指标
     const visible = await request(
       port,
       [

@@ -1,7 +1,7 @@
 import { extname } from "path";
 
 /**
- * 常见文件扩展名到 Content-Type 的映射。
+ * 常见文件扩展名到 Content-Type 的映射
  */
 const MIME_TYPES: Readonly<Record<string, string>> = {
   ".html": "text/html; charset=utf-8",
@@ -40,31 +40,31 @@ const MIME_TYPES: Readonly<Record<string, string>> = {
 };
 
 /**
- * 解析文件路径对应的 MIME 类型。
+ * 解析文件路径对应的 MIME 类型
  *
- * @param filePath - 文件路径。
- * @returns 匹配到的 Content-Type，未知扩展名返回 `application/octet-stream`。
+ * @param filePath - 文件路径
+ * @returns 匹配到的 Content-Type，未知扩展名返回 `application/octet-stream`
  */
 export function getMimeType(filePath: string): string {
   return MIME_TYPES[extname(filePath).toLowerCase()] ?? "application/octet-stream";
 }
 
 /**
- * HTTP Range 头解析结果。
+ * HTTP Range 头解析结果
  */
 export interface RangeResult {
-  /** 起始字节位置。 */
+  /** 起始字节位置 */
   start: number;
-  /** 结束字节位置。 */
+  /** 结束字节位置 */
   end: number;
 }
 
 /**
- * 解析单段 `Range: bytes=start-end` 请求头。
+ * 解析单段 `Range: bytes=start-end` 请求头
  *
- * @param rangeHeader - Range 请求头值。
- * @param fileSize - 文件总字节数。
- * @returns 可用的字节范围；格式非法或越界时返回 `null`。
+ * @param rangeHeader - Range 请求头值
+ * @param fileSize - 文件总字节数
+ * @returns 可用的字节范围；格式非法或越界时返回 `null`
  */
 export function parseRange(rangeHeader: string, fileSize: number): RangeResult | null {
   const match = rangeHeader.match(/^bytes=(\d*)-(\d*)$/);
@@ -94,10 +94,10 @@ export function parseRange(rangeHeader: string, fileSize: number): RangeResult |
 }
 
 /**
- * 获取 HTTP 状态码短语。
+ * 获取 HTTP 状态码短语
  *
- * @param code - HTTP 状态码。
- * @returns 标准状态短语，未知状态码返回 `Unknown`。
+ * @param code - HTTP 状态码
+ * @returns 标准状态短语，未知状态码返回 `Unknown`
  */
 export function getStatusText(code: number): string {
   return STATUS_TEXTS[code] ?? "Unknown";

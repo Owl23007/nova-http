@@ -10,7 +10,7 @@ async function handleSearch(req, res) {
   const query = req.query.get("q") || "";
   const limit = Math.min(Math.max(Number(req.query.get("limit") || 10), 1), 50);
   const cacheKey = `search:${query}:${limit}`;
-  // 搜索列表按查询参数缓存，模拟读多写少的典型 API。
+  // 搜索列表按查询参数缓存，模拟读多写少的典型 API
   const cached = await req.context.redis.get(cacheKey);
 
   if (cached) {

@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 
 export function readServerConfig(env = process.env) {
-  // 所有运行参数都从环境变量读取，便于同一套服务在本地、CI 和压测环境复用。
+  // 所有运行参数都从环境变量读取，便于同一套服务在本地、CI 和压测环境复用
   return {
     host: env.PROD_API_HOST || env.BENCH_HOST || env.STRESS_HOST || "127.0.0.1",
     port: Number(env.PROD_API_PORT || env.BENCH_PORT || env.STRESS_PORT || 3910),

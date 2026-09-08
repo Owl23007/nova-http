@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { BufferReader, HttpParser, NovaRequest } from "../../src/core";
 
-// 将原始 HTTP 报文写入 BufferReader，模拟 TCP 层收到字节流后的解析过程。
+// 将原始 HTTP 报文写入 BufferReader，模拟 TCP 层收到字节流后的解析过程
 function parseRaw(raw: string, parser = new HttpParser()) {
   const reader = new BufferReader();
   reader.feed(Buffer.from(raw, "latin1"));
@@ -15,7 +15,7 @@ function feedAndParse(reader: BufferReader, parser: HttpParser, raw: string) {
 
 describe("HttpParser", () => {
   it("UT-HTTP-01 解析 GET 请求行", () => {
-    // 验证最基础的请求行解析：方法、路径、HTTP 版本和 Host 头都应被正确读取。
+    // 验证最基础的请求行解析：方法、路径、HTTP 版本和 Host 头都应被正确读取
     const result = parseRaw("GET / HTTP/1.1\r\nHost: localhost\r\n\r\n");
 
     expect(result.done).toBe(true);
@@ -29,7 +29,7 @@ describe("HttpParser", () => {
   });
 
   it("UT-HTTP-02 保留查询字符串并解析 pathname", () => {
-    // HttpParser 保留完整 path，NovaRequest 负责进一步拆分 pathname 和 query。
+    // HttpParser 保留完整 path，NovaRequest 负责进一步拆分 pathname 和 query
     const result = parseRaw("GET /users?id=1 HTTP/1.1\r\nHost: localhost\r\n\r\n");
 
     expect(result.done).toBe(true);
@@ -43,7 +43,7 @@ describe("HttpParser", () => {
   });
 
   it("UT-HTTP-03 解析带 Content-Length 的 JSON Body", () => {
-    // 固定长度 body 依赖 Content-Length，解析结果必须和原始 JSON 字符串完全一致。
+    // 固定长度 body 依赖 Content-Length，解析结果必须和原始 JSON 字符串完全一致
     const body = JSON.stringify({ name: "nova" });
     const result = parseRaw(
       [
@@ -65,7 +65,7 @@ describe("HttpParser", () => {
   });
 
   it("UT-HTTP-04 解析并合并 Chunked Body", () => {
-    // chunked body 按块读取，最终应合并为一个连续的请求体 Buffer。
+    // chunked body 按块读取，最终应合并为一个连续的请求体 Buffer
     const result = parseRaw(
       [
         "POST /chunk HTTP/1.1",
@@ -89,7 +89,7 @@ describe("HttpParser", () => {
   });
 
   it("UT-HTTP-05 拒绝非法请求行", () => {
-    // 缺少 HTTP 版本的请求行不符合格式要求，应返回 400 解析错误。
+    // 缺少 HTTP 版本的请求行不符合格式要求，应返回 400 解析错误
     const result = parseRaw("GET /\r\nHost: localhost\r\n\r\n");
 
     expect(result.done).toBe(true);
@@ -97,7 +97,7 @@ describe("HttpParser", () => {
   });
 
   it("UT-HTTP-06 拒绝超过 maxBodySize 的 Body", () => {
-    // 将 maxBodySize 设置为 3 字节，构造 6 字节 body，验证超限时返回 413。
+    // 将 maxBodySize 设置为 3 字节，构造 6 字节 body，验证超限时返回 413
     const body = "abcdef";
     const maxBodySize = 3;
     const result = parseRaw(
@@ -116,7 +116,7 @@ describe("HttpParser", () => {
   });
 
   it("UT-HTTP-07 拒绝 Content-Length 和 Transfer-Encoding 冲突", () => {
-    // 同时出现 CL 和 TE 存在请求走私风险，解析器应直接拒绝该请求。
+    // 同时出现 CL 和 TE 存在请求走私风险，解析器应直接拒绝该请求
     const result = parseRaw(
       [
         "POST /bad HTTP/1.1",
@@ -135,7 +135,7 @@ describe("HttpParser", () => {
   });
 
   it("UT-HTTP-08 支持配置解析器限制项", () => {
-    // 额外验证解析器的限制项可配置，避免安全阈值只能使用内置默认值。
+    // 额外验证解析器的限制项可配置，避免安全阈值只能使用内置默认值
     const result = parseRaw(
       "GET /long HTTP/1.1\r\nHost: localhost\r\n\r\n",
       new HttpParser({ maxRequestLineLength: 8 }),

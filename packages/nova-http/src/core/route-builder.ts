@@ -3,7 +3,7 @@ import type { Middleware } from "./middleware-chain";
 import type { Handler } from "./router";
 
 /**
- * Nova 内置支持批量注册的 HTTP 方法。
+ * Nova 内置支持批量注册的 HTTP 方法
  */
 export const BUILTIN_HTTP_METHODS = [
   "GET",
@@ -16,7 +16,7 @@ export const BUILTIN_HTTP_METHODS = [
 ] as const satisfies readonly HttpMethod[];
 
 /**
- * 链式路由构建器。
+ * 链式路由构建器
  *
  * @example
  * ```ts
@@ -27,45 +27,45 @@ export const BUILTIN_HTTP_METHODS = [
  */
 export interface RouteBuilder {
   /**
-   * 为当前路径注册指定 HTTP 方法。
+   * 为当前路径注册指定 HTTP 方法
    *
-   * @param method - HTTP 方法名。
-   * @param handlers - 路由级中间件和终端处理函数。
-   * @returns 当前路由构建器。
+   * @param method - HTTP 方法名
+   * @param handlers - 路由级中间件和终端处理函数
+   * @returns 当前路由构建器
    */
   method(method: HttpMethod, ...handlers: (Middleware | Handler)[]): RouteBuilder;
 
-  /** 注册 `GET` 处理函数。 */
+  /** 注册 `GET` 处理函数 */
   get(...handlers: (Middleware | Handler)[]): RouteBuilder;
 
-  /** 注册 `POST` 处理函数。 */
+  /** 注册 `POST` 处理函数 */
   post(...handlers: (Middleware | Handler)[]): RouteBuilder;
 
-  /** 注册 `PUT` 处理函数。 */
+  /** 注册 `PUT` 处理函数 */
   put(...handlers: (Middleware | Handler)[]): RouteBuilder;
 
-  /** 注册 `PATCH` 处理函数。 */
+  /** 注册 `PATCH` 处理函数 */
   patch(...handlers: (Middleware | Handler)[]): RouteBuilder;
 
-  /** 注册 `DELETE` 处理函数。 */
+  /** 注册 `DELETE` 处理函数 */
   delete(...handlers: (Middleware | Handler)[]): RouteBuilder;
 
-  /** 注册 `HEAD` 处理函数。 */
+  /** 注册 `HEAD` 处理函数 */
   head(...handlers: (Middleware | Handler)[]): RouteBuilder;
 
-  /** 注册 `OPTIONS` 处理函数。 */
+  /** 注册 `OPTIONS` 处理函数 */
   options(...handlers: (Middleware | Handler)[]): RouteBuilder;
 
-  /** 为当前路径注册所有内置 HTTP 方法。 */
+  /** 为当前路径注册所有内置 HTTP 方法 */
   all(...handlers: (Middleware | Handler)[]): RouteBuilder;
 }
 
 /**
- * 创建链式路由构建器。
+ * 创建链式路由构建器
  *
- * @param path - 绑定到构建器的路由路径。
- * @param register - 实际写入路由表的注册函数。
- * @returns 可继续链式调用的路由构建器。
+ * @param path - 绑定到构建器的路由路径
+ * @param register - 实际写入路由表的注册函数
+ * @returns 可继续链式调用的路由构建器
  */
 export function createRouteBuilder(
   path: string,

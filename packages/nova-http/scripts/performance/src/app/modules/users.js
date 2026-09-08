@@ -8,7 +8,7 @@ export function createUsersSubApp(createApp) {
 
 async function handleGetUser(req, res) {
   const cacheKey = `users:${req.params.id}`;
-  // 用户详情优先读 Redis，未命中时回源 SQLite，并写入短 TTL 缓存。
+  // 用户详情优先读 Redis，未命中时回源 SQLite，并写入短 TTL 缓存
   const cached = await req.context.redis.get(cacheKey);
 
   if (cached) {

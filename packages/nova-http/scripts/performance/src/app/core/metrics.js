@@ -1,7 +1,7 @@
 import { monitorEventLoopDelay, performance } from "node:perf_hooks";
 
 export function createMetricsRegistry() {
-  // event loop delay 与 ELU 用于判断高并发下是否出现明显主线程阻塞。
+  // event loop delay 与 ELU 用于判断高并发下是否出现明显主线程阻塞
   const eventLoopDelay = monitorEventLoopDelay({ resolution: 20 });
   const statusCounts = new Map();
 
@@ -26,7 +26,7 @@ export function createMetricsRegistry() {
     },
 
     snapshot() {
-      // ELU 采用增量统计，压测采样器每次读取到的是上一次采样后的利用率。
+      // ELU 采用增量统计，压测采样器每次读取到的是上一次采样后的利用率
       const elu = performance.eventLoopUtilization(lastElu);
       lastElu = performance.eventLoopUtilization();
 

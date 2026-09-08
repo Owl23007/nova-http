@@ -6,8 +6,8 @@
  *   - application/x-www-form-urlencoded → req.bodyParsed: Record<string, string>
  *
  * 工作原理：
- *   请求体已在 ConnectionHandler 中通过 HTTP 状态机完整读取到 req.body（Buffer）。
- *   bodyParser 只负责按 Content-Type 解析该 Buffer，不需要再次处理流。
+ *   请求体已在 ConnectionHandler 中通过 HTTP 状态机完整读取到 req.body（Buffer）
+ *   bodyParser 只负责按 Content-Type 解析该 Buffer，不需要再次处理流
  *
  * 安全：
  *   - maxSize 限制（ContentHandler 层面已有 maxBodySize 防护，此处作为二次确认）
@@ -45,10 +45,10 @@ interface BodyParserConfig {
 type ParsedFormBody = Record<string, string | string[]>;
 
 /**
- * 创建 bodyParser 中间件。
+ * 创建 bodyParser 中间件
  *
- * @param options - 请求体解析配置。
- * @returns 可传入 `app.use()` 的中间件。
+ * @param options - 请求体解析配置
+ * @returns 可传入 `app.use()` 的中间件
  */
 export function bodyParser(
   options: BodyParserOptions = {},
@@ -97,7 +97,7 @@ export function bodyParser(
 }
 
 /**
- * 合并 bodyParser 默认配置。
+ * 合并 bodyParser 默认配置
  */
 function normalizeBodyParserOptions(options: BodyParserOptions): BodyParserConfig {
   return {
@@ -109,7 +109,7 @@ function normalizeBodyParserOptions(options: BodyParserOptions): BodyParserConfi
 }
 
 /**
- * 根据 Content-Type 选择请求体解析器。
+ * 根据 Content-Type 选择请求体解析器
  */
 function selectBodyParser(
   contentType: string,
@@ -132,7 +132,7 @@ type ParseBodyResult =
   | { ok: false; message: "Too many form parameters" | "Invalid form body" };
 
 /**
- * 将原始请求体读取为 UTF-8 字符串。
+ * 将原始请求体读取为 UTF-8 字符串
  */
 function readUtf8Body(body: Buffer): string | null {
   try {
@@ -143,7 +143,7 @@ function readUtf8Body(body: Buffer): string | null {
 }
 
 /**
- * 解析 JSON 请求体。
+ * 解析 JSON 请求体
  */
 function parseJsonBody(text: string, strict: boolean): ParseBodyResult {
   try {
@@ -160,7 +160,7 @@ function parseJsonBody(text: string, strict: boolean): ParseBodyResult {
 }
 
 /**
- * 解析 `application/x-www-form-urlencoded` 请求体。
+ * 解析 `application/x-www-form-urlencoded` 请求体
  */
 function parseUrlEncodedBody(text: string, maxParams: number): ParseBodyResult {
   try {
@@ -188,7 +188,7 @@ function parseUrlEncodedBody(text: string, maxParams: number): ParseBodyResult {
 }
 
 /**
- * 解析单个表单键值对。
+ * 解析单个表单键值对
  */
 function parseFormPair(pair: string): { key: string; value: string } {
   const eqIdx = pair.indexOf("=");
@@ -207,7 +207,7 @@ function parseFormPair(pair: string): { key: string; value: string } {
 }
 
 /**
- * 追加表单字段。同名字段会自动合并为数组。
+ * 追加表单字段。同名字段会自动合并为数组
  */
 function appendFormValue(target: ParsedFormBody, key: string, value: string): void {
   const existing = target[key];
@@ -221,7 +221,7 @@ function appendFormValue(target: ParsedFormBody, key: string, value: string): vo
 }
 
 /**
- * 安全的 URL 解码：解码失败返回原始字符串，防止 malformed encoding 导致中间件崩溃。
+ * 安全的 URL 解码：解码失败返回原始字符串，防止 malformed encoding 导致中间件崩溃
  */
 function safeDecodeURIComponent(str: string): string {
   try {

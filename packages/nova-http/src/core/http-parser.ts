@@ -12,7 +12,7 @@
  *   - 请求行超过 MAX_REQUEST_LINE_LENGTH (16384) → ParseError.REQUEST_LINE_TOO_LONG (400)
  *   - Chunked body 解析失败 → ParseError.INVALID_CHUNK (400)
  *
- * 支持 Keep-Alive：每次 DONE 后调用 reset()，可在同一连接上继续解析下一请求。
+ * 支持 Keep-Alive：每次 DONE 后调用 reset()，可在同一连接上继续解析下一请求
  */
 
 import { BufferReader } from "./buffer-reader";
@@ -27,7 +27,7 @@ const MAX_BODY_SIZE = 1_048_576; // 1 MiB
 
 // == 类型定义
 
-/** HTTP 方法。HTTP 允许扩展方法，因此这里保留为 string。 */
+/** HTTP 方法。HTTP 允许扩展方法，因此这里保留为 string */
 export type HttpMethod = string;
 
 /** 解析错误对应的 HTTP 状态码 */
@@ -121,10 +121,10 @@ export class HttpParser {
   }
 
   /**
-   * 尝试从 BufferReader 中解析一个完整的 HTTP 请求。
+   * 尝试从 BufferReader 中解析一个完整的 HTTP 请求
    *
    * 可能在任意时刻返回 `{ done: false }`，表示数据尚不完整，
-   * 调用方应追加更多数据后再次调用。
+   * 调用方应追加更多数据后再次调用
    *
    * @param reader 已 feed 新数据的 BufferReader
    */
@@ -260,7 +260,7 @@ export class HttpParser {
         }
 
         case State.CHUNK_DATA: {
-          // 先确认 chunk data 和尾部 CRLF 都完整到达，避免分包时提前消费数据。
+          // 先确认 chunk data 和尾部 CRLF 都完整到达，避免分包时提前消费数据
           const chunkWithCrlf = reader.peekBytes(this._currentChunkSize + 2);
           if (chunkWithCrlf === null) return { done: false };
           if (
@@ -322,7 +322,7 @@ export class HttpParser {
   }
 
   /**
-   * 重置解析器状态，用于 Keep-Alive 连接上的下一个请求。
+   * 重置解析器状态，用于 Keep-Alive 连接上的下一个请求
    */
   reset(): void {
     this._state = State.IDLE;

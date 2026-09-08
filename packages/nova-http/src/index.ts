@@ -1,5 +1,5 @@
 /**
- * Nova HTTP 公共 API 主入口。
+ * Nova HTTP 公共 API 主入口
  *
  * 该入口仅导出稳定的运行时 API 和类型。需要更细粒度的模块时，可使用：
  * - `nova-http/core`
