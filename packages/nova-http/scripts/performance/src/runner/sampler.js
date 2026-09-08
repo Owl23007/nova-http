@@ -1,7 +1,7 @@
 import { requestJson } from "./http-client.js";
 
 export function startMetricSampler(config) {
-  // 采样器定时拉取服务内部 metrics，用于补齐 autocannon 不提供的 CPU/内存指标。
+  // 采样器定时拉取服务内部 metrics，用于补齐 autocannon 不提供的 CPU/内存指标
   const samples = [];
   let previous = null;
   let stopped = false;
@@ -16,7 +16,7 @@ export function startMetricSampler(config) {
 
       let cpuPercent = 0;
       if (previous) {
-        // CPU 使用率按进程 CPU 时间增量 / 墙钟时间增量计算，单核满载约等于 100%。
+        // CPU 使用率按进程 CPU 时间增量 / 墙钟时间增量计算，单核满载约等于 100%
         const cpuDeltaMicros =
           current.cpuUsage.user +
           current.cpuUsage.system -
@@ -63,7 +63,7 @@ export function startMetricSampler(config) {
 }
 
 export function summarizeSamples(samples) {
-  // 报告只汇总数值采样点；偶发采样错误保留在 raw samples 中方便排查。
+  // 报告只汇总数值采样点；偶发采样错误保留在 raw samples 中方便排查
   const numericSamples = samples.filter((sample) => typeof sample.cpuPercent === "number");
   if (numericSamples.length === 0) {
     return {

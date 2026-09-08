@@ -3,9 +3,9 @@ import type { NovaRequest, NovaResponse, NextFunction, Middleware } from "nova-h
 /**
  * JWT-style 身份验证中间件（示例实现）
  *
- * 真实项目中请替换为正规 JWT 验证（如 jsonwebtoken 库）。
+ * 真实项目中请替换为正规 JWT 验证（如 jsonwebtoken 库）
  * 此示例仅演示中间件模式：从 Authorization 头提取 Bearer token，
- * 解码 base64 payload，注入 req.context.user。
+ * 解码 base64 payload，注入 req.context.user
  *
  * 允许通过的 token 格式（仅用于测试）：
  *   eyJ0eXAiOiJKV1QifQ.eyJpZCI6MSwidXNlcm5hbWUiOiJhZG1pbiJ9.xxxxx

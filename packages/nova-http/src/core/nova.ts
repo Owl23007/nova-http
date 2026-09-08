@@ -20,25 +20,25 @@ import type { RouteBuilder } from "./route-builder";
 export type { RouteBuilder } from "./route-builder";
 
 /**
- * Nova 应用配置项。
+ * Nova 应用配置项
  */
 export interface NovaConfig extends Partial<ConnectionConfig> {
   /**
-   * 默认监听的 TCP 端口。
+   * 默认监听的 TCP 端口
    *
    * @defaultValue `3000`
    */
   port?: number;
 
   /**
-   * 默认监听的主机地址。
+   * 默认监听的主机地址
    *
    * @defaultValue `"0.0.0.0"`
    */
   host?: string;
 
   /**
-   * 最大并发连接数。设为 `0` 表示不限制。
+   * 最大并发连接数。设为 `0` 表示不限制
    *
    * @defaultValue `0`
    */
@@ -46,9 +46,9 @@ export interface NovaConfig extends Partial<ConnectionConfig> {
 }
 
 /**
- * Nova HTTP 应用主类。
+ * Nova HTTP 应用主类
  *
- * 负责管理全局中间件、路由表、生命周期钩子和底层 TCP 服务。
+ * 负责管理全局中间件、路由表、生命周期钩子和底层 TCP 服务
  *
  * @example
  * ```ts
@@ -85,9 +85,9 @@ export class Nova {
   private readonly _fullConfig: Required<NovaConfig>;
 
   /**
-   * 创建 Nova 应用实例。
+   * 创建 Nova 应用实例
    *
-   * @param config - 应用配置项。
+   * @param config - 应用配置项
    */
   constructor(config: NovaConfig = {}) {
     this._fullConfig = {
@@ -125,14 +125,14 @@ export class Nova {
   }
 
   /**
-   * 注册全局中间件、路径前缀中间件或子应用。
+   * 注册全局中间件、路径前缀中间件或子应用
    *
    * 不传路径前缀时，中间件会在所有请求上执行。传入字符串前缀时，
-   * 中间件仅在请求路径以该前缀开头时执行。
+   * 中间件仅在请求路径以该前缀开头时执行
    *
-   * @param pathOrMiddleware - 路径前缀、中间件、错误处理中间件或子应用。
-   * @param middlewares - 追加注册的中间件、错误处理中间件或子应用。
-   * @returns 当前应用实例。
+   * @param pathOrMiddleware - 路径前缀、中间件、错误处理中间件或子应用
+   * @param middlewares - 追加注册的中间件、错误处理中间件或子应用
+   * @returns 当前应用实例
    *
    * @example
    * ```ts
@@ -173,61 +173,61 @@ export class Nova {
     return this;
   }
 
-  /** 注册 `GET` 路由。 */
+  /** 注册 `GET` 路由 */
   get(path: string, ...handlers: (Middleware | Handler)[]): this {
     return this._addRoute("GET", path, handlers);
   }
 
-  /** 注册 `POST` 路由。 */
+  /** 注册 `POST` 路由 */
   post(path: string, ...handlers: (Middleware | Handler)[]): this {
     return this._addRoute("POST", path, handlers);
   }
 
-  /** 注册 `PUT` 路由。 */
+  /** 注册 `PUT` 路由 */
   put(path: string, ...handlers: (Middleware | Handler)[]): this {
     return this._addRoute("PUT", path, handlers);
   }
 
-  /** 注册 `PATCH` 路由。 */
+  /** 注册 `PATCH` 路由 */
   patch(path: string, ...handlers: (Middleware | Handler)[]): this {
     return this._addRoute("PATCH", path, handlers);
   }
 
-  /** 注册 `DELETE` 路由。 */
+  /** 注册 `DELETE` 路由 */
   delete(path: string, ...handlers: (Middleware | Handler)[]): this {
     return this._addRoute("DELETE", path, handlers);
   }
 
-  /** 注册 `HEAD` 路由。 */
+  /** 注册 `HEAD` 路由 */
   head(path: string, ...handlers: (Middleware | Handler)[]): this {
     return this._addRoute("HEAD", path, handlers);
   }
 
-  /** 注册 `OPTIONS` 路由。 */
+  /** 注册 `OPTIONS` 路由 */
   options(path: string, ...handlers: (Middleware | Handler)[]): this {
     return this._addRoute("OPTIONS", path, handlers);
   }
 
   /**
-   * 注册指定 HTTP 方法的路由。
+   * 注册指定 HTTP 方法的路由
    *
-   * 适用于 WebDAV 等扩展方法。方法名会在路由器内部统一规范化为大写。
+   * 适用于 WebDAV 等扩展方法。方法名会在路由器内部统一规范化为大写
    *
-   * @param method - HTTP 方法名。
-   * @param path - 路由路径。
-   * @param handlers - 路由级中间件和终端处理函数。
-   * @returns 当前应用实例。
+   * @param method - HTTP 方法名
+   * @param path - 路由路径
+   * @param handlers - 路由级中间件和终端处理函数
+   * @returns 当前应用实例
    */
   method(method: HttpMethod, path: string, ...handlers: (Middleware | Handler)[]): this {
     return this._addRoute(method, path, handlers);
   }
 
   /**
-   * 为路径注册所有内置 HTTP 方法处理函数。
+   * 为路径注册所有内置 HTTP 方法处理函数
    *
-   * @param path - 路由路径。
-   * @param handlers - 路由级中间件和终端处理函数。
-   * @returns 当前应用实例。
+   * @param path - 路由路径
+   * @param handlers - 路由级中间件和终端处理函数
+   * @returns 当前应用实例
    */
   all(path: string, ...handlers: (Middleware | Handler)[]): this {
     for (const method of BUILTIN_HTTP_METHODS) {
@@ -237,10 +237,10 @@ export class Nova {
   }
 
   /**
-   * 创建指定路径的链式路由构建器。
+   * 创建指定路径的链式路由构建器
    *
-   * @param path - 路由路径。
-   * @returns 链式路由构建器。
+   * @param path - 路由路径
+   * @returns 链式路由构建器
    *
    * @example
    * ```ts
@@ -256,11 +256,11 @@ export class Nova {
   }
 
   /**
-   * 注册生命周期钩子。
+   * 注册生命周期钩子
    *
-   * @param name - 钩子名称。
-   * @param handler - 钩子处理函数。
-   * @returns 当前应用实例。
+   * @param name - 钩子名称
+   * @param handler - 钩子处理函数
+   * @returns 当前应用实例
    *
    * @example
    * ```ts
@@ -276,12 +276,12 @@ export class Nova {
   }
 
   /**
-   * 启动服务器并开始监听。
+   * 启动服务器并开始监听
    *
-   * @param port - 端口号，可覆盖构造器中的 `port` 配置。
-   * @param host - 主机地址，可覆盖构造器中的 `host` 配置。
-   * @param callback - 监听成功后的回调函数。
-   * @returns 监听成功后 resolve 的 Promise。
+   * @param port - 端口号，可覆盖构造器中的 `port` 配置
+   * @param host - 主机地址，可覆盖构造器中的 `host` 配置
+   * @param callback - 监听成功后的回调函数
+   * @returns 监听成功后 resolve 的 Promise
    */
   listen(port?: number, host?: string, callback?: () => void): Promise<void> {
     const listenPort = port ?? this._fullConfig.port;
@@ -320,11 +320,11 @@ export class Nova {
   }
 
   /**
-   * 优雅关闭服务器。
+   * 优雅关闭服务器
    *
-   * 停止接受新连接，并通知所有活跃连接在完成当前请求后关闭。
+   * 停止接受新连接，并通知所有活跃连接在完成当前请求后关闭
    *
-   * @returns 服务器关闭后 resolve 的 Promise。
+   * @returns 服务器关闭后 resolve 的 Promise
    */
   close(): Promise<void> {
     return new Promise((resolve) => {
@@ -346,9 +346,9 @@ export class Nova {
   }
 
   /**
-   * 获取已注册路由列表。
+   * 获取已注册路由列表
    *
-   * @returns 只读路由列表，可用于调试和文档生成。
+   * @returns 只读路由列表，可用于调试和文档生成
    */
   get routes(): ReadonlyArray<{ method: HttpMethod; path: string }> {
     return this._router.routes;
@@ -496,10 +496,10 @@ function toError(error: unknown): Error {
 }
 
 /**
- * 创建 Nova 应用实例。
+ * 创建 Nova 应用实例
  *
- * @param config - 应用配置项。
- * @returns Nova 应用实例。
+ * @param config - 应用配置项
+ * @returns Nova 应用实例
  *
  * @example
  * ```ts

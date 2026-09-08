@@ -1,7 +1,7 @@
 /**
  * JWT-style 身份验证中间件（示例实现）
  *
- * 真实项目中请替换为正规 JWT 验证。
+ * 真实项目中请替换为正规 JWT 验证
  */
 function authMiddleware() {
   return function auth(req, res, next) {

@@ -146,7 +146,7 @@ function createNodeNativeParser() {
   parser[HTTPParser.kOnHeadersComplete] = () => 0;
   parser[HTTPParser.kOnBody] = () => {};
   parser[HTTPParser.kOnMessageComplete] = () => {};
-  // Keep references alive; initialize() does not strongly retain them.
+  // Keep references alive; initialize() does not strongly retain them
   parser._benchResource = resource;
   parser._benchConnectionsList = connectionsList;
 

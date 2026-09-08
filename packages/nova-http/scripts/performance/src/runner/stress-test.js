@@ -9,7 +9,7 @@ import { hasBudgetFailure, normalizeResult, printSummary, writeReport } from "./
 const stressConfig = readStressConfig();
 
 async function main() {
-  // 压测流程：启动服务 -> 等待 ready -> 逐场景预热和压测 -> 汇总报告 -> 关闭服务。
+  // 压测流程：启动服务 -> 等待 ready -> 逐场景预热和压测 -> 汇总报告 -> 关闭服务
   const server = startServerProcess(stressConfig);
 
   try {
@@ -40,7 +40,7 @@ async function main() {
 
 async function runScenario(runConfig, scenario) {
   process.stdout.write(`[stress] warmup ${scenario.name}\n`);
-  // 每个场景先预热，降低 JIT、连接建立、缓存冷启动对正式结果的影响。
+  // 每个场景先预热，降低 JIT、连接建立、缓存冷启动对正式结果的影响
   await runAutocannon(runConfig, scenario, runConfig.warmupDuration);
   await sleep(1000);
 

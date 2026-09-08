@@ -37,7 +37,7 @@ function readAppVersion(): string {
         return packageJson.version;
       }
     } catch {
-      // Ignore unreadable package.json and keep searching.
+      // Ignore unreadable package.json and keep searching
     }
   }
 

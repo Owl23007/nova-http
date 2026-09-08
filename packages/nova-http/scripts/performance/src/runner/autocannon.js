@@ -6,7 +6,7 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 
 export async function runAutocannon(config, scenario, runDuration) {
-  // autocannon 使用 JSON 输出，runner 再统一归一化成项目关心的指标表。
+  // autocannon 使用 JSON 输出，runner 再统一归一化成项目关心的指标表
   const { stdout } = await runCommand(
     process.execPath,
     buildAutocannonArgs(config, scenario, runDuration),
@@ -52,7 +52,7 @@ function buildAutocannonArgs(config, scenario, runDuration) {
 }
 
 function resolveNpmCli() {
-  // 通过 npm exec 调用 autocannon，避免要求用户全局安装压测工具。
+  // 通过 npm exec 调用 autocannon，避免要求用户全局安装压测工具
   const candidate = path.resolve(path.dirname(process.execPath), "node_modules/npm/bin/npm-cli.js");
   if (fs.existsSync(candidate)) return candidate;
 

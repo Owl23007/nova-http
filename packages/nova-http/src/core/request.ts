@@ -8,7 +8,7 @@
  *   - params: 由路由器注入的动态路径参数
  *   - bodyParsed: 由 bodyParser 中间件注入的解析后 body
  *
- * 允许开发者将自定义属性挂载到 `req.context`，保持类型安全。
+ * 允许开发者将自定义属性挂载到 `req.context`，保持类型安全
  */
 
 import type { Socket } from "net";
@@ -87,7 +87,7 @@ export class NovaRequest {
   }
 
   /**
-   * Cookie 键值对，懒解析。
+   * Cookie 键值对，懒解析
    * @example req.cookies['session'] // 'abc123'
    */
   get cookies(): Record<string, string> {
@@ -115,8 +115,8 @@ export class NovaRequest {
   }
 
   /**
-   * 客户端 IP 地址。
-   * 若 trustProxy=true，优先读取 X-Forwarded-For 的第一个 IP。
+   * 客户端 IP 地址
+   * 若 trustProxy=true，优先读取 X-Forwarded-For 的第一个 IP
    */
   get ip(): string {
     if (this._ip === undefined) {
@@ -142,28 +142,28 @@ export class NovaRequest {
   }
 
   /**
-   * 获取指定 Header 的值（大小写不敏感）。
+   * 获取指定 Header 的值（大小写不敏感）
    */
   getHeader(name: string): string | undefined {
     return this.headers.get(name.toLowerCase());
   }
 
   /**
-   * 判断请求是否为 JSON 请求体。
+   * 判断请求是否为 JSON 请求体
    */
   get isJson(): boolean {
     return (this.headers.get("content-type") ?? "").includes("application/json");
   }
 
   /**
-   * 判断请求是否为 form 请求体。
+   * 判断请求是否为 form 请求体
    */
   get isForm(): boolean {
     return (this.headers.get("content-type") ?? "").includes("application/x-www-form-urlencoded");
   }
 
   /**
-   * 请求体大小（字节）。
+   * 请求体大小（字节）
    */
   get bodySize(): number {
     return this.body.byteLength;

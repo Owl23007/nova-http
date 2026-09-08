@@ -3,9 +3,9 @@ import type { NovaRequest } from "./request";
 import type { NovaResponse } from "./response";
 
 /**
- * 子应用分发函数。
+ * 子应用分发函数
  *
- * 返回 `false` 表示子应用未匹配路由，父应用可以继续向后执行中间件。
+ * 返回 `false` 表示子应用未匹配路由，父应用可以继续向后执行中间件
  */
 export type MountedDispatcher = (
   req: NovaRequest,
@@ -14,11 +14,11 @@ export type MountedDispatcher = (
 ) => Promise<boolean>;
 
 /**
- * 创建只在指定路径前缀下执行的中间件。
+ * 创建只在指定路径前缀下执行的中间件
  *
- * @param prefix - 请求路径前缀。
- * @param middleware - 普通中间件或错误处理中间件。
- * @returns 带前缀判断的中间件。
+ * @param prefix - 请求路径前缀
+ * @param middleware - 普通中间件或错误处理中间件
+ * @returns 带前缀判断的中间件
  */
 export function createPrefixedMiddleware(
   prefix: string,
@@ -46,11 +46,11 @@ export function createPrefixedMiddleware(
 }
 
 /**
- * 创建子应用挂载中间件。
+ * 创建子应用挂载中间件
  *
- * @param prefix - 子应用挂载前缀。
- * @param dispatch - 子应用请求分发函数。
- * @returns 可注册到父应用的中间件。
+ * @param prefix - 子应用挂载前缀
+ * @param dispatch - 子应用请求分发函数
+ * @returns 可注册到父应用的中间件
  */
 export function createMountedMiddleware(prefix: string, dispatch: MountedDispatcher): Middleware {
   const normalizedPrefix = normalizeMountPrefix(prefix);
@@ -71,10 +71,10 @@ export function createMountedMiddleware(prefix: string, dispatch: MountedDispatc
 }
 
 /**
- * 规范化挂载前缀。
+ * 规范化挂载前缀
  *
- * @param prefix - 原始挂载前缀。
- * @returns 无尾部斜杠的前缀，根路径保持为 `/`。
+ * @param prefix - 原始挂载前缀
+ * @returns 无尾部斜杠的前缀，根路径保持为 `/`
  */
 export function normalizeMountPrefix(prefix: string): string {
   if (!prefix || prefix === "/") return "/";
@@ -82,7 +82,7 @@ export function normalizeMountPrefix(prefix: string): string {
 }
 
 /**
- * 判断请求路径是否命中挂载前缀。
+ * 判断请求路径是否命中挂载前缀
  */
 export function matchesMountPrefix(pathname: string, prefix: string): boolean {
   if (prefix === "/") return true;
@@ -90,10 +90,10 @@ export function matchesMountPrefix(pathname: string, prefix: string): boolean {
 }
 
 /**
- * 为子应用创建带重写路径的请求对象。
+ * 为子应用创建带重写路径的请求对象
  *
  * 该函数复用原请求原型，仅覆盖 `path`、`pathname` 和 `params`，避免复制 socket、
- * headers、body 等请求上下文。
+ * headers、body 等请求上下文
  */
 export function createMountedRequest(req: NovaRequest, prefix: string): NovaRequest {
   if (prefix === "/") {

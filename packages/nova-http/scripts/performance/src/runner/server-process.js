@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 export function startServerProcess(config) {
-  // runner 以子进程启动被测服务，保证每次压测都有独立、干净的应用生命周期。
+  // runner 以子进程启动被测服务，保证每次压测都有独立、干净的应用生命周期
   const serverScript = fileURLToPath(new URL("../app/server.js", import.meta.url));
   const server = spawn(process.execPath, [serverScript], {
     env: {
@@ -44,7 +44,7 @@ export async function stopServerProcess(server) {
   if (!server || server.killed) return;
   if (server.exitCode !== null || server.signalCode !== null) return;
 
-  // 先发 SIGTERM 走优雅关闭，超时后再兜底 SIGKILL。
+  // 先发 SIGTERM 走优雅关闭，超时后再兜底 SIGKILL
   await new Promise((resolve) => {
     const timeout = setTimeout(() => {
       if (!server.killed) {

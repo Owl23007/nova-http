@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 export function normalizeResult(scenario, result, samples, summarizeSamples) {
-  // 将 autocannon 原始结果和资源采样统一成稳定 JSON schema，便于 CI 或历史对比消费。
+  // 将 autocannon 原始结果和资源采样统一成稳定 JSON schema，便于 CI 或历史对比消费
   const requests = result.requests?.total || 0;
   const failures = (result.errors || 0) + (result.timeouts || 0) + (result.non2xx || 0);
   const attempts = requests + failures;
@@ -30,7 +30,7 @@ export function normalizeResult(scenario, result, samples, summarizeSamples) {
 }
 
 export function printSummary(config, results) {
-  // 控制台只打印核心指标，完整原始数据写入 reports/*.json。
+  // 控制台只打印核心指标，完整原始数据写入 reports/*.json
   process.stdout.write("\nStress test config\n");
   process.stdout.write(`- target: ${config.baseUrl}\n`);
   process.stdout.write(`- duration: ${config.duration}s\n`);
@@ -111,7 +111,7 @@ export function writeReport(config, scenarioResults) {
 }
 
 export function hasBudgetFailure(config, results) {
-  // 性能预算失败时返回非零退出码，方便在 CI 中做回归门禁。
+  // 性能预算失败时返回非零退出码，方便在 CI 中做回归门禁
   return results.some(
     (item) =>
       item.errorRate > config.budgets.maxErrorRate ||

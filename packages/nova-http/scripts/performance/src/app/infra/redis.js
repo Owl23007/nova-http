@@ -1,7 +1,7 @@
 import net from "node:net";
 
 export async function createRedisClient(config) {
-  // 只连接真实 Redis；压测和测试都覆盖实际网络与 Redis 命令开销。
+  // 只连接真实 Redis；压测和测试都覆盖实际网络与 Redis 命令开销
   const client = new RedisTcpClient(config);
   await client.connect();
   return client;
@@ -20,7 +20,7 @@ class RedisTcpClient {
   }
 
   async connect() {
-    // 使用最小 RESP 客户端直连 redis:alpine，避免为了压测脚本额外引入运行时依赖。
+    // 使用最小 RESP 客户端直连 redis:alpine，避免为了压测脚本额外引入运行时依赖
     await new Promise((resolve, reject) => {
       const socket = net.createConnection({ host: this.host, port: this.port }, resolve);
       socket.once("error", reject);
@@ -67,7 +67,7 @@ class RedisTcpClient {
     try {
       await this.command(["QUIT"]);
     } catch {
-      // Redis 可能先关闭连接，退出阶段只做 best effort 清理。
+      // Redis 可能先关闭连接，退出阶段只做 best effort 清理
     } finally {
       this.socket.destroy();
     }
@@ -113,7 +113,7 @@ class RedisTcpClient {
 }
 
 function encodeCommand(parts) {
-  // RESP 数组编码：*参数数量 + 多个 bulk string。
+  // RESP 数组编码：*参数数量 + 多个 bulk string
   const chunks = [`*${parts.length}\r\n`];
   for (const part of parts) {
     const value = String(part);

@@ -1,8 +1,8 @@
 /**
  * Hooks — 全链路可观测钩子系统
  *
- * 基于 Node.js 内置 EventEmitter，零依赖。
- * 提供 18 个观测点，覆盖请求从建立连接到响应发送的完整生命周期。
+ * 基于 Node.js 内置 EventEmitter，零依赖
+ * 提供 18 个观测点，覆盖请求从建立连接到响应发送的完整生命周期
  *
  * 钩子列表：
  *   - onConnect     TCP 连接建立
@@ -115,7 +115,7 @@ export class Hooks extends EventEmitter {
   }
 
   /**
-   * 注册钩子处理器。
+   * 注册钩子处理器
    * @param name 钩子名称
    * @param handler 处理函数
    */
@@ -125,7 +125,7 @@ export class Hooks extends EventEmitter {
   }
 
   /**
-   * 移除钩子处理器。
+   * 移除钩子处理器
    */
   removeHook<K extends HookName>(name: K, handler: HookHandler<K>): this {
     this.off(name, handler as (...args: unknown[]) => void);
@@ -133,8 +133,8 @@ export class Hooks extends EventEmitter {
   }
 
   /**
-   * 触发钩子（内部使用）。
-   * 同步钩子直接执行；异步钩子的 Promise 会被静默处理（不阻塞主流程）。
+   * 触发钩子（内部使用）
+   * 同步钩子直接执行；异步钩子的 Promise 会被静默处理（不阻塞主流程）
    */
   callHook<K extends HookName>(name: K, ctx: HookEvents[K]): void {
     // EventEmitter.emit 同步调用所有监听器
@@ -162,8 +162,8 @@ export class Hooks extends EventEmitter {
   }
 
   /**
-   * 触发钩子并等待所有异步处理器完成（串行执行）。
-   * 用于需要等待钩子完成才继续的场景（如 onRequest 中的鉴权前置）。
+   * 触发钩子并等待所有异步处理器完成（串行执行）
+   * 用于需要等待钩子完成才继续的场景（如 onRequest 中的鉴权前置）
    */
   async callHookAsync<K extends HookName>(name: K, ctx: HookEvents[K]): Promise<void> {
     const listeners = this.rawListeners(name) as Array<
@@ -178,8 +178,8 @@ export class Hooks extends EventEmitter {
 // == 内置可选插件：请求计时器
 
 /**
- * requestTimer() — 内置请求计时中间件。
- * 在 onRequest 钩子记录开始时间，在 onResponse 钩子注入 X-Response-Time 响应头。
+ * requestTimer() — 内置请求计时中间件
+ * 在 onRequest 钩子记录开始时间，在 onResponse 钩子注入 X-Response-Time 响应头
  *
  * @example
  * ```js
@@ -187,7 +187,7 @@ export class Hooks extends EventEmitter {
  * app.addHook('onResponse', requestTimerEnd)
  *```
 
- * 该函数不是中间件，而是返回两个钩子处理器。
+ * 该函数不是中间件，而是返回两个钩子处理器
  */
 export function createRequestTimer(): {
   onRequest: HookHandler<"onRequest">;

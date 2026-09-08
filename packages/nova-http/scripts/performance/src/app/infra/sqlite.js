@@ -3,7 +3,7 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
 export async function createSqliteDatabase(config) {
-  // 只使用真实 SQLite 文件；如果当前 Node 不支持 node:sqlite，启动阶段直接失败。
+  // 只使用真实 SQLite 文件；如果当前 Node 不支持 node:sqlite，启动阶段直接失败
   const { DatabaseSync } = await import("node:sqlite");
   mkdirSync(dirname(config.sqlitePath), { recursive: true });
 
@@ -63,7 +63,7 @@ export async function createSqliteDatabase(config) {
 }
 
 function seedUsers(database) {
-  // 固定种子数据让压测请求稳定命中同一批用户，减少数据生成对结果的干扰。
+  // 固定种子数据让压测请求稳定命中同一批用户，减少数据生成对结果的干扰
   const insert = database.prepare(
     "INSERT OR IGNORE INTO users (id, name, role, active, plan) VALUES (?, ?, ?, ?, ?)",
   );

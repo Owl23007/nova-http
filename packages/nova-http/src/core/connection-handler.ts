@@ -128,7 +128,7 @@ export class ConnectionHandler {
   private _onData(chunk: Buffer): void {
     if (this._closing || this._socket.destroyed) return;
 
-    // Keep-Alive 空闲结束：开始接收下一个请求，切换到 Header 超时保护。
+    // Keep-Alive 空闲结束：开始接收下一个请求，切换到 Header 超时保护
     if (this._awaitingNextRequest) {
       this._awaitingNextRequest = false;
       this._clearIdleTimer();
@@ -245,7 +245,7 @@ export class ConnectionHandler {
   private _onStreamStart(): void {
     if (!this._streamingResponse) {
       this._streamingResponse = true;
-      // requestTimeout 保护普通 handler；长流进入 streaming 后由流自身生命周期负责终止。
+      // requestTimeout 保护普通 handler；长流进入 streaming 后由流自身生命周期负责终止
       this._clearRequestTimer();
     }
     this._pauseInputForStream();
@@ -391,7 +391,7 @@ export class ConnectionHandler {
    * 主动优雅关闭连接
    *
    * 普通请求允许完成；长期 streaming 响应会收到 ERR_SERVER_SHUTDOWN 并被终止，
-   * 避免 SSE 等永不结束的请求阻塞 server.close()。
+   * 避免 SSE 等永不结束的请求阻塞 server.close()
    */
   gracefulClose(): void {
     this._closing = true;
