@@ -17,7 +17,7 @@
 
 import { BufferReader } from "./buffer-reader";
 
-// == 常量
+// 常量
 
 const MAX_REQUEST_LINE_LENGTH = 16384; // 16 KB
 const MAX_HEADER_LINE_LENGTH = 8192; // 8 KB
@@ -25,7 +25,7 @@ const MAX_HEADERS_COUNT = 200;
 const MAX_HEADERS_TOTAL_BYTES = 65536; // 64 KB
 const MAX_BODY_SIZE = 1_048_576; // 1 MiB
 
-// == 类型定义
+// 类型定义
 
 /** HTTP 方法。HTTP 允许扩展方法，因此这里保留为 string */
 export type HttpMethod = string;
@@ -77,7 +77,7 @@ export type ParseResult =
   | { done: false } // 需要更多数据
   | { done: true; error: ParseError }; // 解析出错
 
-// == 解析器状态
+// 解析器状态
 
 const enum State {
   IDLE,
@@ -92,7 +92,7 @@ const enum State {
   DONE,
 }
 
-// == HttpParser
+// HttpParser
 
 export class HttpParser {
   private _state: State = State.IDLE;
@@ -338,7 +338,7 @@ export class HttpParser {
     this._currentChunkSize = -1;
   }
 
-  // == 私有方法
+  // 私有方法
 
   private _parseRequestLine(line: string): ParseResult | null {
     // 格式：METHOD SP Request-URI SP HTTP-Version

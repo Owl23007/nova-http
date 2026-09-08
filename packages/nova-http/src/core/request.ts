@@ -45,7 +45,7 @@ export class NovaRequest {
   /** 内部：请求开始时间戳（ns），供钩子系统使用 */
   _startAt: bigint = 0n;
 
-  // == 懒解析缓存
+  // 懒解析缓存
 
   private _query: URLSearchParams | undefined;
   private _cookies: Record<string, string> | undefined;

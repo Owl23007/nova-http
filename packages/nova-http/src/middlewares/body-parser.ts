@@ -22,7 +22,7 @@
 
 import type { NextFunction, NovaRequest, NovaResponse } from "../core";
 
-// == 配置项
+// 配置项
 
 export interface BodyParserOptions {
   /** 最大请求体大小（字节），默认 1MB = 1048576 */
