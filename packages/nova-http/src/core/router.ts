@@ -2,7 +2,7 @@ import type { HttpMethod } from "./http-parser";
 import type { NovaRequest } from "./request";
 import type { NovaResponse } from "./response";
 
-// == 类型定义
+// 类型定义
 
 /** 路由处理函数 */
 export type Handler = (req: NovaRequest, res: NovaResponse) => void | Promise<void>;
@@ -13,7 +13,7 @@ export interface RouteMatch {
   params: Record<string, string>;
 }
 
-// == Radix Tree 节点
+// Radix Tree 节点
 
 interface RadixNode {
   /** 节点代表的路径段 [string,':param','*'] */
@@ -43,7 +43,7 @@ function createNode(segment: string): RadixNode {
   };
 }
 
-// == Router
+// Router
 /**
  * Router Radix Tree 路由器
  *
@@ -155,7 +155,7 @@ export class Router {
     return this._routes;
   }
 
-  // == 私有递归查找
+  // 私有递归查找
 
   private _findNode(
     node: RadixNode,
@@ -207,7 +207,7 @@ export class Router {
   }
 }
 
-// == 工具函数
+// 工具函数
 
 /** 规范化路径：去掉末尾斜杠，确保以 / 开头 */
 function normalizePath(path: string): string {

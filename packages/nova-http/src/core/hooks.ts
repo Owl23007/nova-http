@@ -30,7 +30,7 @@ import type { Socket } from "net";
 import type { NovaRequest } from "./request";
 import type { NovaResponse } from "./response";
 
-// == 钩子上下文类型
+// 钩子上下文类型
 
 export interface ConnectContext {
   socket: Socket;
@@ -87,7 +87,7 @@ export interface ListenContext {
   host: string;
 }
 
-// == 钩子名称到上下文的映射
+// 钩子名称到上下文的映射
 
 export interface HookEvents {
   onConnect: ConnectContext;
@@ -105,7 +105,7 @@ export interface HookEvents {
 export type HookName = keyof HookEvents;
 export type HookHandler<K extends HookName> = (ctx: HookEvents[K]) => void | Promise<void>;
 
-// == Hooks 类
+// Hooks 类
 
 export class Hooks extends EventEmitter {
   constructor() {
@@ -175,7 +175,7 @@ export class Hooks extends EventEmitter {
   }
 }
 
-// == 内置可选插件：请求计时器
+// 内置可选插件：请求计时器
 
 /**
  * requestTimer() — 内置请求计时中间件
