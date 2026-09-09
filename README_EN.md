@@ -70,21 +70,25 @@ const app = createApp({
   maxBodySize: 1_048_576,
   headersTimeout: 60_000,
   keepAliveTimeout: 65_000,
+  bodyIdleTimeout: 30_000,
+  bodyHighWaterMark: 65_536,
   requestTimeout: 600_000,
   trustProxy: false,
 });
 ```
 
-| Option             |     Default | Description                                                            |
-| ------------------ | ----------: | ---------------------------------------------------------------------- |
-| `port`             |      `3000` | Default port used by `app.listen()`                                    |
-| `host`             | `"0.0.0.0"` | Default host used by `app.listen()`                                    |
-| `maxConnections`   |         `0` | Maximum concurrent connections; `0` means unlimited                    |
-| `maxBodySize`      |   `1048576` | Maximum request body size in bytes                                     |
-| `headersTimeout`   |     `60000` | Time allowed to receive complete request headers, in milliseconds      |
-| `keepAliveTimeout` |     `65000` | Idle Keep-Alive timeout, in milliseconds                               |
-| `requestTimeout`   |    `600000` | Ordinary-handler timeout; stops when streaming begins; `0` disables it |
-| `trustProxy`       |     `false` | Trust forwarded client IP headers when resolving `req.ip`              |
+| Option              |     Default | Description                                                            |
+| ------------------- | ----------: | ---------------------------------------------------------------------- |
+| `port`              |      `3000` | Default port used by `app.listen()`                                    |
+| `host`              | `"0.0.0.0"` | Default host used by `app.listen()`                                    |
+| `maxConnections`    |         `0` | Maximum concurrent connections; `0` means unlimited                    |
+| `maxBodySize`       |   `1048576` | Maximum request body size in bytes                                     |
+| `headersTimeout`    |     `60000` | Time allowed to receive complete request headers, in milliseconds      |
+| `keepAliveTimeout`  |     `65000` | Idle Keep-Alive timeout, in milliseconds                               |
+| `bodyIdleTimeout`   |     `30000` | Idle timeout while receiving request-body bytes                        |
+| `bodyHighWaterMark` |     `65536` | Request-body Readable backpressure threshold                           |
+| `requestTimeout`    |    `600000` | Ordinary-handler timeout; stops when streaming begins; `0` disables it |
+| `trustProxy`        |     `false` | Trust forwarded client IP headers when resolving `req.ip`              |
 
 Manage the server lifecycle and inspect registered routes through the application instance:
 
@@ -162,20 +166,22 @@ app.use("/api/users", users);
 
 Frequently used request properties include:
 
-| Property         | Description                                            |
-| ---------------- | ------------------------------------------------------ |
-| `req.method`     | HTTP method                                            |
-| `req.path`       | Original path including the query string               |
-| `req.pathname`   | Path without the query string                          |
-| `req.headers`    | Lower-cased request headers as a `Map<string, string>` |
-| `req.body`       | Raw request body as a `Buffer`                         |
-| `req.bodyParsed` | Value produced by `bodyParser()`                       |
-| `req.params`     | Route parameters                                       |
-| `req.query`      | Lazily parsed `URLSearchParams`                        |
-| `req.cookies`    | Lazily parsed cookie values                            |
-| `req.ip`         | Client IP address                                      |
-| `req.context`    | Per-request data shared by middleware                  |
-| `req.signal`     | Aborted on disconnect, timeout, or server shutdown     |
+| Property         | Description                                        |
+| ---------------- | -------------------------------------------------- |
+| `req.method`     | HTTP method                                        |
+| `req.path`       | Original path including the query string           |
+| `req.pathname`   | Path without the query string                      |
+| `req.headers`    | Ordered `HeaderBlock` preserving duplicate fields  |
+| `req.body`       | Backpressure-aware `IncomingBody` readable stream  |
+| `req.bodyParsed` | Value produced by `bodyParser()`                   |
+| `req.params`     | Route parameters                                   |
+| `req.query`      | Lazily parsed `URLSearchParams`                    |
+| `req.cookies`    | Lazily parsed cookie values                        |
+| `req.ip`         | Client IP address                                  |
+| `req.context`    | Per-request data shared by middleware              |
+| `req.signal`     | Aborted on disconnect, timeout, or server shutdown |
+
+Request bodies are single-consumer streams. Use `for await (const chunk of req.body)` for the zero-copy path, or explicitly materialize with `req.buffer()`, `req.text()`, or `req.json()`.
 
 Build responses with the fluent response API:
 
@@ -238,7 +244,7 @@ app.use(
 );
 ```
 
-`maxBodySize` limits the raw body accepted by the HTTP parser, while `bodyParser.maxSize` applies a second limit before parsing. The smaller limit wins; both default to 1 MB.
+`maxBodySize` is the connection body policy, while `bodyParser.maxSize` limits explicit materialization before parsing. The smaller limit wins; both default to 1 MB. Consume the stream directly with `for await`, or use `req.buffer()`, `req.text()`, and `req.json()`.
 
 ### `staticFiles(root, options?)`
 

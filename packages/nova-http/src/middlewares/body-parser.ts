@@ -6,11 +6,10 @@
  *   - application/x-www-form-urlencoded → req.bodyParsed: Record<string, string>
  *
  * 工作原理：
- *   请求体已在 ConnectionHandler 中通过 HTTP 状态机完整读取到 req.body（Buffer）
- *   bodyParser 只负责按 Content-Type 解析该 Buffer，不需要再次处理流
+ *   bodyParser 通过 req.buffer() 显式物化流式请求体
  *
  * 安全：
- *   - maxSize 限制（ContentHandler 层面已有 maxBodySize 防护，此处作为二次确认）
+ *   - maxSize 限制作为连接层 body policy 之后的物化上限
  *   - JSON.parse 使用 try/catch，解析失败返回 400
  *   - urlencoded 限制参数数量（防 HPP 攻击）
  *
@@ -52,22 +51,12 @@ type ParsedFormBody = Record<string, string | string[]>;
  */
 export function bodyParser(
   options: BodyParserOptions = {},
-): (req: NovaRequest, res: NovaResponse, next: NextFunction) => void {
+): (req: NovaRequest, res: NovaResponse, next: NextFunction) => Promise<void> {
   const config = normalizeBodyParserOptions(options);
 
-  return (req: NovaRequest, res: NovaResponse, next: NextFunction): void => {
+  return async (req: NovaRequest, res: NovaResponse, next: NextFunction): Promise<void> => {
     if (req.bodyParsed !== undefined) {
       next();
-      return;
-    }
-
-    if (req.body.length === 0) {
-      next();
-      return;
-    }
-
-    if (req.body.length > config.maxSize) {
-      res.status(413).send("Payload Too Large");
       return;
     }
 
@@ -79,7 +68,22 @@ export function bodyParser(
       return;
     }
 
-    const text = readUtf8Body(req.body);
+    let raw: Buffer;
+    try {
+      raw = await req.buffer({ maxSize: config.maxSize });
+    } catch (error: unknown) {
+      if (error instanceof RangeError) {
+        res.status(413).send("Payload Too Large");
+        return;
+      }
+      throw error;
+    }
+    if (raw.length === 0) {
+      next();
+      return;
+    }
+
+    const text = readUtf8Body(raw);
     if (text === null) {
       res.status(400).send("Invalid request body encoding");
       return;

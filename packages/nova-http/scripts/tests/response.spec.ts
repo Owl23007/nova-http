@@ -1,7 +1,7 @@
 import { EventEmitter } from "events";
 import type { Socket } from "net";
 import { describe, expect, it } from "vitest";
-import { NovaRequest, NovaResponse } from "../../src/core";
+import { HeaderBlock, IncomingBody, NovaRequest, NovaResponse } from "../../src/core";
 
 class FakeSocket extends EventEmitter {
   readonly chunks: Buffer[] = [];
@@ -52,14 +52,19 @@ function createResponse(
   } = {},
 ): { response: NovaResponse; request: NovaRequest; socket: FakeSocket } {
   const socket = new FakeSocket();
+  const body = new IncomingBody(false, 64 * 1024, () => undefined);
+  body._complete();
   const request = new NovaRequest(
     {
       method: options.method ?? "GET",
-      path: "/",
-      httpVersion: options.httpVersion ?? "1.1",
-      headers: new Map(),
-      body: Buffer.alloc(0),
-      keepAlive: options.keepAlive ?? true,
+      rawTarget: "/",
+      target: { form: "origin", raw: "/" },
+      version: options.httpVersion ?? "1.1",
+      headers: new HeaderBlock(),
+      body,
+      trailers: new HeaderBlock(),
+      bodyPlan: { type: "none" },
+      connection: { close: !(options.keepAlive ?? true), connect: false },
     },
     socket as unknown as Socket,
   );

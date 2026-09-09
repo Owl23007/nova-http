@@ -4,8 +4,15 @@ const fs = require("fs");
 const path = require("path");
 const { createParser, TYPE } = require("llhttp-wasm");
 
-const { HttpParser } = require(path.resolve(__dirname, "../../dist/src/core/HttpParser.js"));
-const { BufferReader } = require(path.resolve(__dirname, "../../dist/src/core/BufferReader.js"));
+const {
+  SegmentedInput,
+  buildRequestHead,
+  createHeadScanState,
+  DEFAULT_PARSER_LIMITS,
+  parseHead,
+  scanHead,
+  takeScannedBlock,
+} = require(path.resolve(__dirname, "../../dist/src/core/index.js"));
 
 const warmupIterations = Number(process.env.BENCH_PARSER_WARMUP || 50_000);
 const measureIterations = Number(process.env.BENCH_PARSER_ITERATIONS || 300_000);
@@ -107,26 +114,29 @@ function makeInputs() {
 }
 
 function runNova(chunks, iterations) {
-  const parser = new HttpParser();
-  const reader = new BufferReader();
+  const input = new SegmentedInput();
 
   let parsed = 0;
   const started = process.hrtime.bigint();
 
   for (let i = 0; i < iterations; i += 1) {
-    let result = { done: false };
+    const scanner = createHeadScanState();
+    let requestHead;
     for (let c = 0; c < chunks.length; c += 1) {
-      reader.feed(chunks[c]);
-      result = parser.parse(reader);
-      if (result.done) break;
+      input.append(chunks[c]);
+      if (requestHead) continue;
+      const scan = scanHead(input, scanner, DEFAULT_PARSER_LIMITS);
+      if (scan.type === "error") throw new Error(`[nova] scan error: ${scan.error.code}`);
+      if (scan.type === "complete") {
+        const parsedHead = parseHead(takeScannedBlock(input, scan.length), DEFAULT_PARSER_LIMITS);
+        if (parsedHead.fatal) throw new Error(`[nova] parse error: ${parsedHead.code}`);
+        requestHead = buildRequestHead(parsedHead);
+        if (requestHead.fatal) throw new Error(`[nova] framing error: ${requestHead.code}`);
+      }
     }
 
-    if (!result.done) {
-      throw new Error("[nova] parse did not complete");
-    }
-    if (result.error) {
-      throw new Error(`[nova] parse error: ${result.error.code} ${result.error.message}`);
-    }
+    if (!requestHead) throw new Error("[nova] head did not complete");
+    if (requestHead.bodyPlan.type === "fixed") input.consume(requestHead.bodyPlan.length);
     parsed += 1;
   }
 

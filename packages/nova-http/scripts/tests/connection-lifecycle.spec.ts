@@ -132,6 +132,31 @@ describe("connection lifecycle", () => {
     app = undefined;
   });
 
+  it("continues receiving the active request body during graceful shutdown", async () => {
+    let markStarted: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+
+    app = createApp();
+    app.post("/upload", async (req: NovaRequest, res: NovaResponse) => {
+      markStarted?.();
+      res.send(await req.text());
+    });
+
+    const port = await listen(app);
+    const connection = await connect(port);
+    socket = connection.socket;
+    socket.write("POST /upload HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\n\r\nhe");
+    await waitWithTimeout(started, 500);
+
+    const ended = once(socket, "end");
+    const closed = app.close();
+    socket.write("llo");
+    await waitWithTimeout(Promise.all([closed, ended]), 500);
+    expect(Buffer.concat(connection.chunks).toString("utf8")).toContain("hello");
+  });
+
   it("keeps a pipelined request paused until the streaming response ends", async () => {
     let releaseStream: (() => void) | undefined;
     let markFirstChunk: (() => void) | undefined;
@@ -208,6 +233,131 @@ describe("connection lifecycle", () => {
     const response = Buffer.concat(connection.chunks).toString("utf8");
     expect(response).toContain("HTTP/1.1 200 OK");
     expect(response).toContain("8\r\ncomplete\r\n0\r\n\r\n");
+  });
+
+  it("dispatches after the head and streams a fragmented fixed body", async () => {
+    let markStarted: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+
+    app = createApp({ bodyHighWaterMark: 2 });
+    app.post("/stream", async (req: NovaRequest, res: NovaResponse) => {
+      markStarted?.();
+      res.send(await req.text());
+    });
+
+    const port = await listen(app);
+    const connection = await connect(port);
+    socket = connection.socket;
+    socket.write(
+      "POST /stream HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\nContent-Length: 5\r\n\r\nhe",
+    );
+    await waitWithTimeout(started, 500);
+
+    const ended = once(socket, "end");
+    socket.write("llo");
+    await waitWithTimeout(ended, 500);
+    expect(Buffer.concat(connection.chunks).toString("utf8")).toContain("hello");
+  });
+
+  it("does not count application backpressure as body input idleness", async () => {
+    app = createApp({ bodyHighWaterMark: 2, bodyIdleTimeout: 20, requestTimeout: 500 });
+    app.post("/slow-consumer", async (req: NovaRequest, res: NovaResponse) => {
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      res.send(await req.text());
+    });
+
+    const port = await listen(app);
+    const connection = await connect(port);
+    socket = connection.socket;
+    const ended = once(socket, "end");
+    socket.write(
+      "POST /slow-consumer HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\nContent-Length: 5\r\n\r\nhello",
+    );
+    await waitWithTimeout(ended, 500);
+    const response = Buffer.concat(connection.chunks).toString("utf8");
+    expect(response).toContain("HTTP/1.1 200 OK");
+    expect(response).toContain("hello");
+  });
+
+  it("streams fragmented chunk data and publishes trailers separately", async () => {
+    app = createApp({ bodyHighWaterMark: 3 });
+    app.post("/chunked", async (req: NovaRequest, res: NovaResponse) => {
+      const text = await req.text();
+      res.json({ text, trailer: req.trailers.getAll("x-check") });
+    });
+
+    const port = await listen(app);
+    const connection = await connect(port);
+    socket = connection.socket;
+    const ended = once(socket, "end");
+    socket.write(
+      "POST /chunked HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhe",
+    );
+    socket.write("llo\r\n0\r\nX-Check: one\r\nX-Check: two\r\n\r\n");
+    await waitWithTimeout(ended, 500);
+
+    const response = Buffer.concat(connection.chunks).toString("utf8");
+    expect(response).toContain('{"text":"hello","trailer":["one","two"]}');
+  });
+
+  it("closes instead of dispatching the next request when the body was not consumed", async () => {
+    let nextRouteCalled = false;
+    app = createApp();
+    app.post("/ignored", (_req: NovaRequest, res: NovaResponse) => res.send("ignored"));
+    app.get("/next", (_req: NovaRequest, res: NovaResponse) => {
+      nextRouteCalled = true;
+      res.send("next");
+    });
+
+    const port = await listen(app);
+    const connection = await connect(port);
+    socket = connection.socket;
+    const ended = once(socket, "end");
+    socket.write(
+      "POST /ignored HTTP/1.1\r\nHost: localhost\r\nContent-Length: 4\r\n\r\ndata" +
+        "GET /next HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
+    );
+    await waitWithTimeout(ended, 500);
+    expect(nextRouteCalled).toBe(false);
+  });
+
+  it("handles Expect 100-continue before waiting for body bytes", async () => {
+    app = createApp();
+    app.post("/continue", async (req: NovaRequest, res: NovaResponse) =>
+      res.send(await req.text()),
+    );
+
+    const port = await listen(app);
+    const connection = await connect(port);
+    socket = connection.socket;
+    const interim = once(socket, "data");
+    socket.write(
+      "POST /continue HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\nExpect: 100-continue\r\nContent-Length: 2\r\n\r\n",
+    );
+    await waitWithTimeout(interim, 500);
+    expect(Buffer.concat(connection.chunks).toString("utf8")).toContain("HTTP/1.1 100 Continue");
+
+    const ended = once(socket, "end");
+    socket.write("ok");
+    await waitWithTimeout(ended, 500);
+    expect(Buffer.concat(connection.chunks).toString("utf8")).toContain("ok");
+  });
+
+  it("reports an incomplete fixed body when the client ends input early", async () => {
+    app = createApp();
+    app.post("/incomplete", async (req: NovaRequest, res: NovaResponse) =>
+      res.send(await req.text()),
+    );
+
+    const port = await listen(app);
+    const connection = await connect(port);
+    socket = connection.socket;
+    const ended = once(socket, "end");
+    socket.end("POST /incomplete HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5\r\n\r\nno");
+    await waitWithTimeout(ended, 500);
+    expect(Buffer.concat(connection.chunks).toString("utf8")).toContain("HTTP/1.1 400 Bad Request");
   });
 
   it("aborts a started response when the handler returns without ending it", async () => {

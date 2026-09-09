@@ -1,7 +1,7 @@
 /**
  * NovaRequest — HTTP 请求对象
  *
- * 封装 HttpParser 解析结果，提供高层访问接口：
+ * 封装 HTTP/1.1 消息结构，提供高层访问接口：
  *   - query: URLSearchParams（懒解析）
  *   - cookies: Record<string, string>（懒解析）
  *   - ip: string（支持 X-Forwarded-For，可配置 trustProxy）
@@ -12,7 +12,9 @@
  */
 
 import type { Socket } from "net";
-import type { ParsedRequest } from "./http-parser";
+import type { BodyReadOptions, IncomingBody } from "./http1/body";
+import type { HeaderBlock } from "./http1/headers";
+import type { ConnectionIntent, ParsedRequest, RequestTarget } from "./http1/types";
 
 /** Nova HTTP 请求对象 */
 export class NovaRequest {
@@ -24,12 +26,18 @@ export class NovaRequest {
   readonly pathname: string;
   /** HTTP 版本 */
   readonly httpVersion: "1.0" | "1.1";
+  /** 原始 request-target */
+  readonly rawTarget: string;
+  /** 已验证的 request-target 形式 */
+  readonly target: RequestTarget;
   /** 请求头（键全小写） */
-  readonly headers: Map<string, string>;
-  /** 原始请求体 Buffer */
-  readonly body: Buffer;
-  /** 是否应保持 Keep-Alive */
-  readonly keepAlive: boolean;
+  readonly headers: HeaderBlock;
+  /** 流式请求体 */
+  readonly body: IncomingBody;
+  /** 单独保存且不参与前置协议决策的 Trailer */
+  readonly trailers: HeaderBlock;
+  /** 连接生命周期意图 */
+  readonly connection: ConnectionIntent;
   /** 底层 TCP Socket（用于获取 remoteAddress 等） */
   readonly socket: Socket;
 
@@ -61,16 +69,19 @@ export class NovaRequest {
     private readonly _trustProxy: boolean = false,
   ) {
     this.method = parsed.method;
-    this.path = parsed.path;
-    this.httpVersion = parsed.httpVersion;
+    this.rawTarget = parsed.rawTarget;
+    this.target = parsed.target;
+    this.path = resolveApplicationPath(parsed.target);
+    this.httpVersion = parsed.version;
     this.headers = parsed.headers;
     this.body = parsed.body;
-    this.keepAlive = parsed.keepAlive;
+    this.trailers = parsed.trailers;
+    this.connection = parsed.connection;
     this.socket = socket;
 
     // 解析 pathname
-    const qIdx = parsed.path.indexOf("?");
-    this.pathname = qIdx === -1 ? parsed.path : parsed.path.substring(0, qIdx);
+    const qIdx = this.path.indexOf("?");
+    this.pathname = qIdx === -1 ? this.path : this.path.substring(0, qIdx);
   }
 
   /**
@@ -166,7 +177,22 @@ export class NovaRequest {
    * 请求体大小（字节）
    */
   get bodySize(): number {
-    return this.body.byteLength;
+    return this.body.bytesReceived;
+  }
+
+  /** 将流式请求体显式物化为 Buffer */
+  buffer(options: BodyReadOptions = {}): Promise<Buffer> {
+    return this.body.buffer(options);
+  }
+
+  /** 将流式请求体显式物化为字符串 */
+  text(encoding: BufferEncoding = "utf8", options: BodyReadOptions = {}): Promise<string> {
+    return this.body.text(encoding, options);
+  }
+
+  /** 将流式请求体显式物化并解析为 JSON */
+  json<T = unknown>(options: BodyReadOptions = {}): Promise<T> {
+    return this.body.json<T>(options);
   }
 
   /** 请求取消信号，客户端断开、超时或服务关闭时触发 */
@@ -188,5 +214,17 @@ export class NovaRequest {
     if (this._abortController !== undefined) {
       this._abortController.abort(reason);
     }
+  }
+}
+
+function resolveApplicationPath(target: RequestTarget): string {
+  if (target.form === "origin" || target.form === "asterisk" || target.form === "authority") {
+    return target.raw;
+  }
+  try {
+    const url = new URL(target.raw);
+    return `${url.pathname}${url.search}`;
+  } catch {
+    return target.raw;
   }
 }

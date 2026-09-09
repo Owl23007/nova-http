@@ -6,12 +6,15 @@
  * - `nova-http/middlewares`
  */
 
-export { createApp, createRequestTimer, Nova } from "./core";
+export { createApp, createRequestTimer, HeaderBlock, IncomingBody, Nova } from "./core";
 export { bodyParser, staticFiles } from "./middlewares";
 
 export type {
   BodyParsedContext,
-  ConnectionConfig,
+  BodyPlan,
+  BodyReadOptions,
+  ConnectionIntent,
+  Http1ConnectionConfig,
   ConnectContext,
   DisconnectContext,
   ErrorContext,
@@ -21,6 +24,7 @@ export type {
   HookHandler,
   HookName,
   HttpMethod,
+  HttpVersion,
   ListenContext,
   Middleware,
   NextFunction,
@@ -29,7 +33,9 @@ export type {
   NovaRequest,
   NovaResponse,
   ParsedRequest,
-  ParseError,
+  RequestHead,
+  RequestTarget,
+  Http1Error,
   RequestContext,
   ResponseContext,
   RouteBuilder,
