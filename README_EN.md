@@ -182,7 +182,7 @@ Frequently used request properties include:
 | `req.signal`   | Aborted on disconnect, timeout, or server shutdown |
 
 `RequestLocals` is the declaration-merging extension point for `req.context`. Undeclared keys are
-`unknown`; middleware and plugins can declare their own namespaced state for precise IDE support.
+type errors; middleware and plugins can declare their own namespaced state for precise IDE support.
 `bodyParser()` declares the optional `context.bodyParserData?: BodyParserData` field.
 
 Request bodies are single-consumer streams. Use `for await (const chunk of req.body)` for the zero-copy path, or explicitly materialize with `req.buffer()`, `req.text()`, or `req.json()`.
@@ -363,3 +363,11 @@ pnpm lint
 ## License
 
 [MIT](./LICENSE) © Owl23007
+
+### Request semantics
+
+- `rawTarget` preserves the original request-target. The protocol layer extracts `path` including query; `pathname` excludes query. Escapes and dot segments remain unchanged. The duplicate `target` property is removed.
+- `cookies` uses a null-prototype object and preserves percent-encoded values without URI decoding.
+- `bodyBytesReceived` counts bytes received so far, not the final body size; `bodySize` is removed.
+- `isJson` and `bodyParser` recognize `application/json` and `application/*+json`, ignoring media type case and parameters.
+- `trustProxy` defaults to `false`. Use `true` to trust all proxies, a non-negative integer for trusted hops, or `(address, hop) => boolean`. Hop 0 is the socket peer. X-Forwarded-For is traversed right to left until the first untrusted address; an invalid IP stops traversal. There is no X-Real-IP fallback. Hop counts require consistent ingress chain lengths; `true` requires the ingress proxy to sanitize client-supplied forwarding headers.
