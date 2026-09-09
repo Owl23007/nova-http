@@ -8,7 +8,8 @@ let socket: Socket | undefined;
 
 async function listen(testApp: Nova): Promise<number> {
   await testApp.listen(0, "127.0.0.1");
-  const address = (testApp as any)._server.address();
+  const address = testApp.address();
+  if (address === null || typeof address === "string") throw new Error("Missing TCP address");
   return address.port;
 }
 

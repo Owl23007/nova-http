@@ -1,17 +1,17 @@
 import { describe, expect, it } from "vitest";
+import { HeaderBlock } from "../../src/message";
 import {
   buildRequestHead,
   createHeadScanState,
   DEFAULT_PARSER_LIMITS,
-  HeaderBlock,
   parseHead,
   parseTrailers,
   resolveFraming,
   scanHead,
   SegmentedInput,
   takeScannedBlock,
-} from "../../src/core";
-import type { Http1Error, ParsedHead } from "../../src/core";
+} from "../../src/protocol/http1";
+import type { Http1Error, ParsedHead } from "../../src/protocol/http1";
 
 function parseRawHead(raw: string): ParsedHead | Http1Error {
   return parseHead(Buffer.from(raw, "latin1"), DEFAULT_PARSER_LIMITS);

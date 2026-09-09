@@ -14,7 +14,7 @@ app.get("/hello/:name", (req, res) => {
 });
 
 app.post("/echo", (req, res) => {
-  res.json({ received: req.bodyParsed });
+  res.json({ received: req.context.bodyParserData?.body });
 });
 
 app.use((err, _req, res, _next) => {

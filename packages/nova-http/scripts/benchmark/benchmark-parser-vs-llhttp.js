@@ -12,7 +12,7 @@ const {
   parseHead,
   scanHead,
   takeScannedBlock,
-} = require(path.resolve(__dirname, "../../dist/src/core/index.js"));
+} = require(path.resolve(__dirname, "../../dist/src/protocol/http1/index.js"));
 
 const warmupIterations = Number(process.env.BENCH_PARSER_WARMUP || 50_000);
 const measureIterations = Number(process.env.BENCH_PARSER_ITERATIONS || 300_000);

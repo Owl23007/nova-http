@@ -1,13 +1,7 @@
 import { http1Error, type Http1Error, type Http1ErrorPhase } from "./errors";
-import { HeaderBlock, type HeaderField } from "./headers";
-import type {
-  BodyPlan,
-  ConnectionIntent,
-  HttpVersion,
-  ParsedHead,
-  RequestHead,
-  RequestTarget,
-} from "./types";
+import { HeaderBlock, type HeaderField } from "../../message/headers";
+import type { BodyPlan, HttpVersion, ParsedHead, RequestHead, RequestTarget } from "./types";
+import type { ConnectionIntent } from "../../message/connection";
 import type { SegmentedInput } from "./input";
 
 export interface ParserLimits {

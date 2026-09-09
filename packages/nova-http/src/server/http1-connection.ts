@@ -1,8 +1,10 @@
 import type { Socket } from "net";
-import { HeaderBlock } from "./headers";
-import { IncomingBody } from "./body";
-import { http1Error, type Http1Error } from "./errors";
-import { SegmentedInput } from "./input";
+import { HeaderBlock } from "../message/headers";
+import { IncomingBody } from "../message/body";
+import type { IncomingRequestMeta } from "../message/request";
+import type { ConnectionInfo } from "../message/connection";
+import { http1Error, type Http1Error } from "../protocol/http1/errors";
+import { SegmentedInput } from "../protocol/http1/input";
 import {
   buildRequestHead,
   createHeadScanState,
@@ -15,19 +17,21 @@ import {
   takeScannedBlock,
   type HeadScanState,
   type ParserLimits,
-} from "./parser";
-import type { ParsedRequest, RequestHead } from "./types";
-import { NovaRequest } from "../request";
-import { NovaResponse } from "../response";
+} from "../protocol/http1/parser";
+import type { RequestHead } from "../protocol/http1/types";
+import { serializeResponseHead } from "../protocol/http1/response";
+import { NovaRequest } from "../core/request";
+import { NovaResponse } from "../core/response";
+import { Http1ResponseSink } from "./http1-response-sink";
 
 export type ContinueDecision = true | { readonly status: number; readonly message: string };
 
 export interface Http1ConnectionContext {
   readonly config: Http1ConnectionConfig;
   dispatch(req: NovaRequest, res: NovaResponse): Promise<void>;
-  onConnect(socket: Socket): void;
-  onClose(socket: Socket): void;
-  onError(err: Error, socket: Socket): void;
+  onConnect(peer: ConnectionInfo): void;
+  onClose(peer: ConnectionInfo): void;
+  onError(err: Error, peer: ConnectionInfo): void;
 }
 
 export interface Http1ConnectionConfig {
@@ -57,7 +61,7 @@ type InputState =
   | { kind: "message-complete" };
 
 /** 协调 HTTP 输入、应用处理、背压、超时和连接复用 */
-export class Http1Connection {
+export class Http1ConnectionCoordinator {
   private readonly _input = new SegmentedInput();
   private readonly _limits: ParserLimits;
   private _inputState: InputState = {
@@ -76,15 +80,22 @@ export class Http1Connection {
   private _applicationTimer: ReturnType<typeof setTimeout> | null = null;
   private _currentRequest: NovaRequest | null = null;
   private _currentResponse: NovaResponse | null = null;
-  private _parsedRequest: ParsedRequest | null = null;
+  private _parsedRequest: IncomingRequestMeta | null = null;
+  private readonly _peer: ConnectionInfo;
 
   constructor(
     private readonly _socket: Socket,
     private readonly _context: Http1ConnectionContext,
   ) {
+    this._peer = {
+      remoteAddress: _socket.remoteAddress,
+      remotePort: _socket.remotePort,
+      localAddress: _socket.localAddress,
+      localPort: _socket.localPort,
+    };
     this._limits = { ...DEFAULT_PARSER_LIMITS, ..._context.config.parserLimits };
     this._setupSocket();
-    this._context.onConnect(_socket);
+    this._context.onConnect(this._peer);
     this._armInputDeadline("headers", _context.config.headersTimeout);
   }
 
@@ -197,7 +208,16 @@ export class Http1Connection {
       this._context.config.bodyHighWaterMark,
       () => this._schedulePump(),
     );
-    const parsed: ParsedRequest = { ...head, body, trailers };
+    const parsed: IncomingRequestMeta = {
+      method: head.method,
+      target: head.rawTarget,
+      version: head.version,
+      headers: head.headers,
+      body,
+      trailers,
+      connection: head.connection,
+      peer: this._peer,
+    };
     this._parsedRequest = parsed;
 
     if (head.bodyPlan.type === "none") {
@@ -220,8 +240,15 @@ export class Http1Connection {
       this._armInputDeadline("body", this._context.config.bodyIdleTimeout);
     }
 
-    const request = new NovaRequest(parsed, this._socket, this._context.config.trustProxy);
-    const response = new NovaResponse(this._socket, request);
+    const request = new NovaRequest(parsed, this._context.config.trustProxy);
+    const sink = new Http1ResponseSink(
+      this._socket,
+      head.method,
+      head.version,
+      head.connection.close,
+      request.signal,
+    );
+    const response = new NovaResponse(request, sink);
     response._setStreamStartHandler(() => this._clearApplicationDeadline());
     request._startAt = process.hrtime.bigint();
     this._handling = true;
@@ -417,7 +444,7 @@ export class Http1Connection {
     try {
       decision = this._context.config.checkContinue?.(head) ?? true;
     } catch (error: unknown) {
-      this._context.onError(toError(error), this._socket);
+      this._context.onError(toError(error), this._peer);
       this._sendErrorAndClose(500, "Internal Server Error");
       return false;
     }
@@ -425,7 +452,7 @@ export class Http1Connection {
       if (!Number.isInteger(decision.status) || decision.status < 400 || decision.status > 599) {
         this._context.onError(
           new RangeError("checkContinue must return a 4xx or 5xx status"),
-          this._socket,
+          this._peer,
         );
         this._sendErrorAndClose(500, "Internal Server Error");
         return false;
@@ -480,7 +507,7 @@ export class Http1Connection {
     response: NovaResponse,
   ): Promise<void> {
     const actual = toError(error);
-    this._context.onError(actual, this._socket);
+    this._context.onError(actual, this._peer);
     if (!response.headersSent) {
       response.status(500).send("Internal Server Error");
       await response._waitForFinish().catch(() => undefined);
@@ -613,10 +640,17 @@ export class Http1Connection {
     this._currentResponse?._abort(error, false);
     if (this._socket.destroyed) return;
     const body = Buffer.from(message, "utf8");
-    const reason = statusReason(status);
-    const head = `HTTP/1.1 ${status} ${reason}\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: ${body.length}\r\nConnection: close\r\n\r\n`;
+    const head = serializeResponseHead(
+      "1.1",
+      status,
+      new Map([
+        ["content-type", "text/plain; charset=utf-8"],
+        ["content-length", String(body.length)],
+        ["connection", "close"],
+      ]),
+    );
     this._socket.cork();
-    this._socket.write(head, "latin1");
+    this._socket.write(head);
     this._socket.write(body);
     this._socket.uncork();
     this._socket.end();
@@ -629,7 +663,7 @@ export class Http1Connection {
     this._parsedRequest?.body._fail(error);
     this._currentResponse?._abort(error, false);
     const code = (error as NodeJS.ErrnoException).code;
-    if (code !== "ECONNRESET" && code !== "EPIPE") this._context.onError(error, this._socket);
+    if (code !== "ECONNRESET" && code !== "EPIPE") this._context.onError(error, this._peer);
     if (!this._socket.destroyed) this._socket.destroy();
   }
 
@@ -643,7 +677,7 @@ export class Http1Connection {
     this._currentRequest = null;
     this._currentResponse = null;
     this._parsedRequest = null;
-    this._context.onClose(this._socket);
+    this._context.onClose(this._peer);
   }
 
   gracefulClose(): void {
@@ -686,29 +720,4 @@ function connectionError(code: string, message: string): Error {
 
 function toError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
-}
-
-function statusReason(status: number): string {
-  switch (status) {
-    case 500:
-      return "Internal Server Error";
-    case 400:
-      return "Bad Request";
-    case 408:
-      return "Request Timeout";
-    case 413:
-      return "Payload Too Large";
-    case 414:
-      return "URI Too Long";
-    case 417:
-      return "Expectation Failed";
-    case 431:
-      return "Request Header Fields Too Large";
-    case 501:
-      return "Not Implemented";
-    case 505:
-      return "HTTP Version Not Supported";
-    default:
-      return "Error";
-  }
 }

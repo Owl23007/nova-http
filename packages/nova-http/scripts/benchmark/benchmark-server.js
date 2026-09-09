@@ -43,7 +43,7 @@ app.get("/json", (_req, res) => {
 
 app.post("/echo", (req, res) => {
   res.json({
-    received: req.bodyParsed ?? null,
+    received: req.context.bodyParserData?.body ?? null,
   });
 });
 

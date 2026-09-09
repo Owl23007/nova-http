@@ -2,8 +2,8 @@
  * bodyParser 中间件
  *
  * 解析 HTTP 请求体，支持：
- *   - application/json         → req.bodyParsed: any
- *   - application/x-www-form-urlencoded → req.bodyParsed: Record<string, string>
+ *   - application/json         → req.context.bodyParserData.body: unknown
+ *   - application/x-www-form-urlencoded → req.context.bodyParserData.body: Record<string, string>
  *
  * 工作原理：
  *   bodyParser 通过 req.buffer() 显式物化流式请求体
@@ -19,7 +19,29 @@
  *   app.use(bodyParser({ types: ['json'] }))        // 仅解析 JSON
  */
 
-import type { NextFunction, NovaRequest, NovaResponse } from "../core";
+import type { MiddlewareContext, NextFunction, NovaRequest, NovaResponse } from "../core";
+
+export interface BodyParserData {
+  body: unknown;
+  contentType: string;
+}
+
+export interface BodyParsedContext extends BodyParserData {
+  req: NovaRequest;
+  res: NovaResponse;
+}
+
+declare module "../core/hooks" {
+  interface HookEvents {
+    "bodyParser:parsed": BodyParsedContext;
+  }
+}
+
+declare module "../core/request" {
+  interface RequestLocals {
+    bodyParserData?: BodyParserData;
+  }
+}
 
 // 配置项
 
@@ -54,8 +76,13 @@ export function bodyParser(
 ): (req: NovaRequest, res: NovaResponse, next: NextFunction) => Promise<void> {
   const config = normalizeBodyParserOptions(options);
 
-  return async (req: NovaRequest, res: NovaResponse, next: NextFunction): Promise<void> => {
-    if (req.bodyParsed !== undefined) {
+  return async function (
+    this: MiddlewareContext | void,
+    req: NovaRequest,
+    res: NovaResponse,
+    next: NextFunction,
+  ): Promise<void> {
+    if (req.context.bodyParserData !== undefined) {
       next();
       return;
     }
@@ -95,7 +122,16 @@ export function bodyParser(
       return;
     }
 
-    req.bodyParsed = result.value;
+    const data: BodyParserData = {
+      body: result.value,
+      contentType,
+    };
+    req.context.bodyParserData = data;
+    this?.hooks.emitHook("bodyParser:parsed", {
+      req,
+      res,
+      ...data,
+    });
     next();
   };
 }

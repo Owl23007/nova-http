@@ -6,16 +6,17 @@
  * - `nova-http/middlewares`
  */
 
-export { createApp, createRequestTimer, HeaderBlock, IncomingBody, Nova } from "./core";
+export { createApp, Nova } from "./app/nova";
+export { createRequestTimer, HeaderBlock, IncomingBody } from "./core";
+export { getMimeType, sendFile } from "./static";
 export { bodyParser, staticFiles } from "./middlewares";
 
 export type {
-  BodyParsedContext,
-  BodyPlan,
   BodyReadOptions,
   ConnectionIntent,
-  Http1ConnectionConfig,
+  ConnectionInfo,
   ConnectContext,
+  CoreHookEvents,
   DisconnectContext,
   ErrorContext,
   ErrorMiddleware,
@@ -24,25 +25,38 @@ export type {
   HookHandler,
   HookName,
   HttpMethod,
-  HttpVersion,
   ListenContext,
   Middleware,
+  MiddlewareContext,
   NextFunction,
   NotFoundContext,
-  NovaConfig,
   NovaRequest,
   NovaResponse,
   ParsedRequest,
-  RequestHead,
-  RequestTarget,
-  Http1Error,
   RequestContext,
+  RequestLocals,
   ResponseContext,
   RouteBuilder,
   RouteContext,
   RouteMatch,
+  ServerHookEvents,
   StreamChunk,
   StreamSource,
 } from "./core";
-export type { BodyParserOptions } from "./middlewares/body-parser";
+export type { NovaConfig } from "./app/nova";
+export type { ContinueDecision, Http1ConnectionConfig } from "./server";
+export type {
+  BodyPlan,
+  Http1Error,
+  HttpVersion,
+  ParsedHead,
+  RequestHead,
+  RequestTarget,
+} from "./protocol/http1";
+export type {
+  BodyParsedContext,
+  BodyParserData,
+  BodyParserOptions,
+} from "./middlewares/body-parser";
 export type { StaticFilesOptions } from "./middlewares/static-files";
+export type { SendFileOptions } from "./static";

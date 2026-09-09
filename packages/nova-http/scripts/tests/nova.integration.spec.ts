@@ -18,7 +18,8 @@ let tempDir: string | undefined;
 
 async function listen(testApp: Nova): Promise<number> {
   await testApp.listen(0, "127.0.0.1");
-  const address = (testApp as any)._server.address();
+  const address = testApp.address();
+  if (address === null || typeof address === "string") throw new Error("Missing TCP address");
   return address.port;
 }
 
@@ -88,9 +89,15 @@ describe("Nova integration", () => {
 
   it("IT-04 POST 请求体", async () => {
     app = createApp();
+    let observedBody: unknown;
+    app.addHook("bodyParser:parsed", ({ req, body, contentType }) => {
+      expect(req.pathname).toBe("/users");
+      expect(contentType).toBe("application/json");
+      observedBody = body;
+    });
     app.use(bodyParser());
     app.post("/users", (req: NovaRequest, res: NovaResponse) => {
-      res.json({ received: req.bodyParsed });
+      res.json({ received: req.context.bodyParserData?.body });
     });
 
     const port = await listen(app);
@@ -110,6 +117,7 @@ describe("Nova integration", () => {
 
     expect(response).toContain("HTTP/1.1 200 OK");
     expect(response).toContain('{"received":{"name":"nova"}}');
+    expect(observedBody).toEqual({ name: "nova" });
   });
 
   it("IT-05 404 响应", async () => {
@@ -283,7 +291,7 @@ describe("Nova integration", () => {
       res.json({ id: req.params.id });
     });
     app.post("/echo", (req: NovaRequest, res: NovaResponse) => {
-      res.json({ received: req.bodyParsed });
+      res.json({ received: req.context.bodyParserData?.body });
     });
 
     const port = await listen(app);

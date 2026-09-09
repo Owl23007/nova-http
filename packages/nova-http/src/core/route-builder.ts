@@ -1,4 +1,4 @@
-import type { HttpMethod } from "./http1/types";
+import type { HttpMethod } from "../message/request";
 import type { Middleware } from "./middleware-chain";
 import type { Handler } from "./router";
 
