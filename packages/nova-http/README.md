@@ -43,7 +43,7 @@ await app.listen(3000);
 - Node.js `Readable` and async-iterable streaming
 - Backpressure-aware response writes
 - Backpressure-aware streaming request bodies
-- Ten lifecycle hooks for logs and metrics
+- Nine built-in lifecycle hooks plus typed, namespaced middleware extension events
 - Keep-Alive, header timeouts, request timeouts, and body-size limits
 
 ## Streaming
