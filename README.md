@@ -149,18 +149,18 @@ function createApp(config?: NovaConfig): Nova;
 
 **`NovaConfig` 选项：**
 
-| 字段                | 类型      | 默认值          | 说明                                                                  |
-| ------------------- | --------- | --------------- | --------------------------------------------------------------------- |
-| `port`              | `number`  | `3000`          | `app.listen()` 未传端口时使用的默认端口                               |
-| `host`              | `string`  | `"0.0.0.0"`     | `app.listen()` 未传主机时使用的默认地址                               |
-| `maxConnections`    | `number`  | `0`             | 最大并发连接数，`0` 表示不限制                                        |
-| `maxBodySize`       | `number`  | `1048576` (1MB) | 请求体最大字节数，超出则返回 413                                      |
-| `keepAliveTimeout`  | `number`  | `65000`         | Keep-Alive 空闲超时（毫秒）                                           |
-| `headersTimeout`    | `number`  | `60000`         | 接收完整请求头的超时（毫秒），防 Slowloris                            |
-| `requestTimeout`    | `number`  | `600000`        | 普通 handler 的处理超时（毫秒），进入流式模式后停止计时；`0` 表示禁用 |
-| `bodyIdleTimeout`   | `number`  | `30000`         | 请求体连续无输入的超时（毫秒）；`0` 表示禁用                          |
-| `bodyHighWaterMark` | `number`  | `65536`         | 请求体 Readable 的背压水位                                            |
-| `trustProxy`        | `boolean` | `false`         | 信任代理 IP 请求头，影响 `req.ip`                                     |
+| 字段                | 类型         | 默认值          | 说明                                                                  |
+| ------------------- | ------------ | --------------- | --------------------------------------------------------------------- |
+| `port`              | `number`     | `3000`          | `app.listen()` 未传端口时使用的默认端口                               |
+| `host`              | `string`     | `"0.0.0.0"`     | `app.listen()` 未传主机时使用的默认地址                               |
+| `maxConnections`    | `number`     | `0`             | 最大并发连接数，`0` 表示不限制                                        |
+| `maxBodySize`       | `number`     | `1048576` (1MB) | 请求体最大字节数，超出则返回 413                                      |
+| `keepAliveTimeout`  | `number`     | `65000`         | Keep-Alive 空闲超时（毫秒）                                           |
+| `headersTimeout`    | `number`     | `60000`         | 接收完整请求头的超时（毫秒），防 Slowloris                            |
+| `requestTimeout`    | `number`     | `600000`        | 普通 handler 的处理超时（毫秒），进入流式模式后停止计时；`0` 表示禁用 |
+| `bodyIdleTimeout`   | `number`     | `30000`         | 请求体连续无输入的超时（毫秒）；`0` 表示禁用                          |
+| `bodyHighWaterMark` | `number`     | `65536`         | 请求体 Readable 的背压水位                                            |
+| `trustProxy`        | `TrustProxy` | `false`         | 信任代理 IP 请求头，影响 `req.ip`                                     |
 
 服务生命周期和已注册路由可通过应用实例管理：
 
@@ -282,7 +282,7 @@ app.use((err: Error, _req, res, _next) => {
 | `peer`        | `ConnectionInfo`         | 与传输实现无关的远端/本地地址信息               |
 | `signal`      | `AbortSignal`            | 客户端断开、超时或服务关闭时触发                |
 
-`RequestLocals` 是 `req.context` 的声明合并扩展点。未声明字段的类型为 `unknown`；middleware/plugin
+`RequestLocals` 是 `req.context` 的声明合并扩展点。未声明字段会产生类型错误；middleware/plugin
 可以声明自己拥有的 namespaced 状态，获得完整的 IDE 提示。`bodyParser()` 已声明可选的
 `context.bodyParserData?: BodyParserData`。
 
@@ -682,3 +682,11 @@ app.use("/api/users", usersApp);
 ## 许可证
 
 MIT © Owl23007
+
+### 请求语义
+
+- `rawTarget` 保留原始 request-target；`path` 是协议层提取的路径及 query，`pathname` 不含 query。它们不解码、不消除点路径段；不再提供重复的 `target`。
+- `cookies` 使用无原型对象，保留百分号编码值，不自动执行 URI 解码。
+- `bodyBytesReceived` 表示当前已接收字节数，不代表完整 body 大小；原 `bodySize` 已移除。
+- `isJson` 和 `bodyParser` 支持 `application/json` 及 `application/*+json`；媒体类型匹配忽略大小写和参数。
+- `trustProxy` 默认为 `false`；`true` 信任全部代理；非负整数表示从 socket 对端开始信任的跳数；`(address, hop) => boolean` 判断每一跳，socket 对端的 hop 为 0。沿 X-Forwarded-For 从右向左取第一个不受信任的地址，遇到无效 IP 停止，不使用 X-Real-IP 回退。使用跳数时须确保所有入口的代理链长度符合配置；`true` 要求入口代理清理客户端提供的转发头。
