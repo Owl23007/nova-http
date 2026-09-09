@@ -9,19 +9,14 @@ export { Router } from "./router";
 export { HeaderBlock, IncomingBody } from "../message";
 
 export type {
-  CoreHookEvents,
-  ConnectContext,
-  DisconnectContext,
-  ErrorContext,
+  ErrorHookContext,
   HookEvents,
   HookHandler,
   HookName,
-  ListenContext,
-  NotFoundContext,
-  RequestContext,
-  ResponseContext,
-  RouteContext,
-  ServerHookEvents,
+  NotFoundHookContext,
+  RequestHookContext,
+  ResponseHookContext,
+  RouteHookContext,
 } from "./hooks";
 export type { StreamChunk, StreamSource } from "./response";
 export type { RequestLocals } from "./request";

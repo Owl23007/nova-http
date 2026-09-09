@@ -382,8 +382,9 @@ Hook handler 接收一个上下文对象，并可返回 `void` 或 `Promise<void
 | `onListen`     | 服务开始监听                    | `{ host, port }`                       |
 | `onClose`      | 服务关闭                        | 无参数                                 |
 
-`HookEvents` 是声明合并扩展点。第三方 middleware 可以声明 namespaced 事件，并通过 middleware
-调用上下文发送它：
+`core/hooks` 提供事件总线、core 生命周期 payload 和 `HookEvents` 声明合并扩展点。
+Server 和 middleware/plugin 各自在事件所属模块中声明 payload 类型。第三方 middleware
+可以声明 namespaced 事件，并通过 middleware 调用上下文发送它：
 
 ```typescript
 declare module "nova-http" {
