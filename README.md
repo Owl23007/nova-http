@@ -95,7 +95,7 @@ npm run build
 TCP 连接到达
     │
     ▼
-Http1Connection            ← 输入与应用生命周期 / 超时 / 连接复用
+Http1ConnectionCoordinator ← 输入与应用生命周期 / 超时 / 连接复用
     │
     ▼
 SegmentedInput             ← 分段 TCP 字节流，追加时不 concat
@@ -264,24 +264,27 @@ app.use((err: Error, _req, res, _next) => {
 
 ### `NovaRequest`
 
-| 属性          | 类型                     | 说明                                           |
-| ------------- | ------------------------ | ---------------------------------------------- |
-| `method`      | `HttpMethod`             | HTTP 方法，如 `'GET'`                          |
-| `path`        | `string`                 | 原始路径字符串（含查询字符串）                 |
-| `pathname`    | `string`                 | 不含查询字符串的路径                           |
-| `httpVersion` | `'1.0' \| '1.1'`         | HTTP 版本                                      |
-| `headers`     | `HeaderBlock`            | 保留顺序和重复项的请求字段                     |
-| `body`        | `IncomingBody`           | 支持背压的 Node.js `Readable` 请求体           |
-| `trailers`    | `HeaderBlock`            | 消息体完成后可用的独立 Trailer 字段            |
-| `bodyParsed`  | `any`                    | `bodyParser()` 解析后的结构化数据              |
-| `params`      | `Record<string, string>` | 路径参数，如 `{ id: '42' }`                    |
-| `query`       | `URLSearchParams`        | 查询字符串（惰性解析）                         |
-| `cookies`     | `Record<string, string>` | Cookie 键值对（惰性解析）                      |
-| `ip`          | `string`                 | 客户端 IP（`trustProxy` 时读 X-Forwarded-For） |
-| `context`     | `Record<string, any>`    | 中间件间共享的请求上下文                       |
-| `connection`  | `ConnectionIntent`       | close / upgrade / CONNECT 连接意图             |
-| `socket`      | `net.Socket`             | 底层 TCP socket                                |
-| `signal`      | `AbortSignal`            | 客户端断开、超时或服务关闭时触发               |
+| 属性          | 类型                     | 说明                                            |
+| ------------- | ------------------------ | ----------------------------------------------- |
+| `method`      | `HttpMethod`             | HTTP 方法，如 `'GET'`                           |
+| `path`        | `string`                 | 原始路径字符串（含查询字符串）                  |
+| `pathname`    | `string`                 | 不含查询字符串的路径                            |
+| `httpVersion` | `'1.0' \| '1.1'`         | HTTP 版本                                       |
+| `headers`     | `HeaderBlock`            | 保留顺序和重复项的请求字段                      |
+| `body`        | `IncomingBody`           | 支持背压的 Node.js `Readable` 请求体            |
+| `trailers`    | `HeaderBlock`            | 消息体完成后可用的独立 Trailer 字段             |
+| `params`      | `Record<string, string>` | 路径参数，如 `{ id: '42' }`                     |
+| `query`       | `URLSearchParams`        | 查询字符串（惰性解析）                          |
+| `cookies`     | `Record<string, string>` | Cookie 键值对（惰性解析）                       |
+| `ip`          | `string`                 | 客户端 IP（`trustProxy` 时读 X-Forwarded-For）  |
+| `context`     | `RequestLocals`          | 可由 middleware/plugin 类型扩展的请求级共享状态 |
+| `connection`  | `ConnectionIntent`       | close / upgrade / CONNECT 连接意图              |
+| `peer`        | `ConnectionInfo`         | 与传输实现无关的远端/本地地址信息               |
+| `signal`      | `AbortSignal`            | 客户端断开、超时或服务关闭时触发                |
+
+`RequestLocals` 是 `req.context` 的声明合并扩展点。未声明字段的类型为 `unknown`；middleware/plugin
+可以声明自己拥有的 namespaced 状态，获得完整的 IDE 提示。`bodyParser()` 已声明可选的
+`context.bodyParserData?: BodyParserData`。
 
 请求体默认不物化，可直接 `for await (const chunk of req.body)` 消费，或使用 `await req.buffer()`、`await req.text()`、`await req.json()`
 未消费完请求体时连接不会被复用
@@ -319,8 +322,8 @@ await res.stream(source: Readable | AsyncIterable<StreamChunk>)
 // 重定向
 res.redirect(location: string, status?: number)
 
-// 文件发送（支持 Range 206、ETag 缓存、流式传输）
-await res.sendFile(absolutePath: string)
+// 文件发送是独立的 static adapter
+await sendFile(req, res, absolutePath)
 ```
 
 流式写入会自动处理 HTTP/1.1 chunked framing 与 socket 背压，业务只需发送原始数据块。
@@ -358,20 +361,41 @@ app.removeHook(hookName, handler);
 
 Hook handler 接收一个上下文对象，并可返回 `void` 或 `Promise<void>`。Hook 用于日志和指标等观测任务；异步 handler 以 fire-and-forget 方式执行，不会阻塞请求链路。
 
+下表是框架内置的 core 与 server 生命周期事件。Middleware/plugin 可以通过 namespace 定义扩展
+事件，不需要把业务语义加入 core。
+
 **可用钩子：**
 
 | 钩子名         | 触发时机                        | 上下文字段                             |
 | -------------- | ------------------------------- | -------------------------------------- |
-| `onConnect`    | TCP 连接建立                    | `{ socket, timestamp }`                |
-| `onDisconnect` | TCP 连接断开                    | `{ socket, timestamp }`                |
+| `onConnect`    | TCP 连接建立                    | `{ connection, timestamp }`            |
+| `onDisconnect` | TCP 连接断开                    | `{ connection, timestamp }`            |
 | `onRequest`    | HTTP 请求解析完成，进入中间件前 | `{ req, res, timestamp }`              |
 | `onRoute`      | 路由匹配成功后                  | `{ req, res, routePath, params }`      |
-| `onBodyParsed` | `bodyParser()` 完成解析后       | `{ req, res, contentType, bodySize }`  |
 | `onResponse`   | 响应发送完成                    | `{ req, res, durationMs, statusCode }` |
-| `onError`      | 请求、解析、socket 或 hook 出错 | `{ error, req?, res?, socket? }`       |
+| `onError`      | 请求、解析、连接或 hook 出错    | `{ error, req?, res?, connection? }`   |
 | `onNotFound`   | 路由未命中                      | `{ req, res }`                         |
 | `onListen`     | 服务开始监听                    | `{ host, port }`                       |
 | `onClose`      | 服务关闭                        | 无参数                                 |
+
+`HookEvents` 是声明合并扩展点。第三方 middleware 可以声明 namespaced 事件，并通过 middleware
+调用上下文发送它：
+
+```typescript
+declare module "nova-http" {
+  interface HookEvents {
+    "cache:hit": { req: NovaRequest; key: string };
+  }
+}
+
+const cacheMiddleware: Middleware = function (req, _res, next) {
+  this?.hooks.emitHook("cache:hit", { req, key: req.pathname });
+  next();
+};
+```
+
+扩展事件无需运行时注册。事件用于观察且不阻塞请求流程；鉴权、拒绝请求等控制流逻辑应由
+middleware 完成。
 
 **示例：**
 
@@ -401,6 +425,10 @@ app.addHook("onResponse", timer.onResponse);
 解析 `application/json` 和 `application/x-www-form-urlencoded` 请求体。
 
 ```typescript
+app.addHook("bodyParser:parsed", ({ req, body, contentType }) => {
+  console.log(req.pathname, contentType, body);
+});
+
 app.use(
   bodyParser({
     maxSize: 1 * 1024 * 1024, // 最大解析大小，默认 1MB
@@ -411,7 +439,16 @@ app.use(
 );
 ```
 
-解析结果写入 `req.bodyParsed`。
+解析结果写入 `req.context.bodyParserData`：
+
+```typescript
+app.post("/users", (req, res) => {
+  const body = req.context.bodyParserData?.body; // unknown | undefined
+});
+```
+
+随后发送观察型扩展事件 `bodyParser:parsed`。该事件不会阻塞请求链路；未匹配支持的
+Content-Type、空请求体或解析失败时不会发送。
 
 #### `staticFiles(root, options?)`
 
@@ -483,19 +520,12 @@ nova/
 ├── packages/
 │   ├── nova-http/
 │   │   ├── src/
-│   │   │   ├── core/
-│   │   │   │   ├── http1/
-│   │   │   │   │   ├── input.ts          分段 TCP 字节输入
-│   │   │   │   │   ├── parser.ts         head 扫描、语法和 framing
-│   │   │   │   │   ├── headers.ts        保留重复项的字段集合
-│   │   │   │   │   ├── body.ts           Readable 请求体
-│   │   │   │   │   └── connection.ts     HTTP/1.1 连接协调器
-│   │   │   │   ├── request.ts             请求对象与惰性属性
-│   │   │   │   ├── response.ts            响应与流式写入
-│   │   │   │   ├── router.ts              Radix Tree 路由器
-│   │   │   │   ├── middleware-chain.ts    异步中间件组合器
-│   │   │   │   ├── hooks.ts               生命周期 hook
-│   │   │   │   └── nova.ts                应用主类
+│   │   │   ├── app/                       公共组合门面
+│   │   │   ├── core/                      路由、中间件与应用分发内核
+│   │   │   ├── message/                   协议与应用交换的数据和端口契约
+│   │   │   ├── protocol/http1/            纯 HTTP/1 解析与响应序列化
+│   │   │   ├── server/                    Node TCP、超时、背压与连接协调适配器
+│   │   │   ├── static/                    文件、MIME 与 Range 适配器
 │   │   │   ├── middlewares/                内置中间件
 │   │   │   └── index.ts                    稳定公共 API
 │   │   └── cli/                            CLI 与 TS/JS 模板
@@ -504,6 +534,10 @@ nova/
 ├── scripts/                                 仓库级校验脚本
 └── package.json                             pnpm workspace 脚本
 ```
+
+依赖方向由边界契约固定：`core → message`、`protocol/http1 → message`，`server` 负责组合
+`core + protocol/http1 + message`，最外层 `app` 再组装 server 和可选适配器。`core` 不依赖
+HTTP/1 或 Node Socket，HTTP/1 协议实现也不依赖应用内核或 Socket。该约束由架构测试持续校验。
 
 ### 关键设计决策
 
@@ -574,9 +608,11 @@ app.use(
 ### 5. 流式大文件
 
 ```typescript
+import { sendFile } from "nova-http/static";
+
 app.get("/download/:file", async (req, res) => {
   // sendFile 自动处理 Range、ETag、drain 背压
-  await res.sendFile(path.join(STORAGE_DIR, req.params["file"]!));
+  await sendFile(req, res, path.join(STORAGE_DIR, req.params["file"]!));
 });
 ```
 

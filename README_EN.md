@@ -166,20 +166,24 @@ app.use("/api/users", users);
 
 Frequently used request properties include:
 
-| Property         | Description                                        |
-| ---------------- | -------------------------------------------------- |
-| `req.method`     | HTTP method                                        |
-| `req.path`       | Original path including the query string           |
-| `req.pathname`   | Path without the query string                      |
-| `req.headers`    | Ordered `HeaderBlock` preserving duplicate fields  |
-| `req.body`       | Backpressure-aware `IncomingBody` readable stream  |
-| `req.bodyParsed` | Value produced by `bodyParser()`                   |
-| `req.params`     | Route parameters                                   |
-| `req.query`      | Lazily parsed `URLSearchParams`                    |
-| `req.cookies`    | Lazily parsed cookie values                        |
-| `req.ip`         | Client IP address                                  |
-| `req.context`    | Per-request data shared by middleware              |
-| `req.signal`     | Aborted on disconnect, timeout, or server shutdown |
+| Property       | Description                                        |
+| -------------- | -------------------------------------------------- |
+| `req.method`   | HTTP method                                        |
+| `req.path`     | Original path including the query string           |
+| `req.pathname` | Path without the query string                      |
+| `req.headers`  | Ordered `HeaderBlock` preserving duplicate fields  |
+| `req.body`     | Backpressure-aware `IncomingBody` readable stream  |
+| `req.params`   | Route parameters                                   |
+| `req.query`    | Lazily parsed `URLSearchParams`                    |
+| `req.cookies`  | Lazily parsed cookie values                        |
+| `req.ip`       | Client IP address                                  |
+| `req.peer`     | Transport-neutral local and remote address details |
+| `req.context`  | Typed request-local state extended by middleware   |
+| `req.signal`   | Aborted on disconnect, timeout, or server shutdown |
+
+`RequestLocals` is the declaration-merging extension point for `req.context`. Undeclared keys are
+`unknown`; middleware and plugins can declare their own namespaced state for precise IDE support.
+`bodyParser()` declares the optional `context.bodyParserData?: BodyParserData` field.
 
 Request bodies are single-consumer streams. Use `for await (const chunk of req.body)` for the zero-copy path, or explicitly materialize with `req.buffer()`, `req.text()`, or `req.json()`.
 
@@ -193,10 +197,11 @@ res.json({ ok: true });
 res.html("<h1>Hello</h1>");
 res.redirect("/login");
 
-await res.sendFile(absolutePath);
+await sendFile(req, res, absolutePath);
 ```
 
-`sendFile()` supports conditional requests, byte ranges, and backpressure-aware streaming.
+Import `sendFile` from `nova-http/static`. It supports conditional requests, byte ranges, and
+backpressure-aware streaming without coupling the application response object to the filesystem.
 
 ## Streaming responses
 
@@ -231,9 +236,13 @@ Nova applies HTTP/1.1 chunked framing when the content length is unknown and wai
 
 ### `bodyParser(options?)`
 
-Parses JSON and URL-encoded request bodies into `req.bodyParsed`:
+Parses JSON and URL-encoded request bodies into `req.context.bodyParserData`:
 
 ```typescript
+app.addHook("bodyParser:parsed", ({ req, body, contentType }) => {
+  console.log(req.pathname, contentType, body);
+});
+
 app.use(
   bodyParser({
     maxSize: 1_048_576,
@@ -245,6 +254,11 @@ app.use(
 ```
 
 `maxBodySize` is the connection body policy, while `bodyParser.maxSize` limits explicit materialization before parsing. The smaller limit wins; both default to 1 MB. Consume the stream directly with `for await`, or use `req.buffer()`, `req.text()`, and `req.json()`.
+
+The parsed value is available as `req.context.bodyParserData?.body` with type `unknown | undefined`.
+The middleware then emits the observational extension event `bodyParser:parsed`. It does not block
+the request pipeline and is not emitted for unsupported content types, empty request bodies, or
+parse failures.
 
 ### `staticFiles(root, options?)`
 
@@ -275,7 +289,12 @@ app.addHook("onResponse", ({ req, statusCode, durationMs }) => {
 });
 ```
 
-Available hooks are `onConnect`, `onDisconnect`, `onRequest`, `onRoute`, `onBodyParsed`, `onResponse`, `onError`, `onNotFound`, `onListen`, and `onClose`. Handlers can be removed with `app.removeHook(name, handler)`.
+Core defines `onRequest`, `onRoute`, `onResponse`, `onError`, and `onNotFound`; the server layer defines `onConnect`, `onDisconnect`, `onListen`, and `onClose`. Middleware and plugins can add typed, namespaced extension events such as `bodyParser:parsed` without adding their semantics to core. Handlers can be removed with `app.removeHook(name, handler)`.
+
+`HookEvents` is a declaration-merging extension point. Extension authors declare their event on
+`nova-http` and emit it through `this.hooks.emitHook(...)` from a normal function middleware. No
+runtime event-type registry is required. Hooks are non-blocking observations; request control flow
+belongs in middleware.
 
 Nova also provides a request-timer helper:
 
