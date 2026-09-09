@@ -65,6 +65,9 @@ describe("HTTP/1.1 head parser", () => {
     expect(parseRawHead("GET / HTTP/1.1\r\nHost: bad host\r\n\r\n")).toMatchObject({
       code: "HPE_INVALID_HOST",
     });
+    expect(parseRawHead("GET / HTTP/1.1\r\nHost: :80\r\n\r\n")).toMatchObject({
+      code: "HPE_INVALID_HOST",
+    });
     expect(parseRawHead("GET * HTTP/1.1\r\nHost: a\r\n\r\n")).toMatchObject({
       code: "HPE_INVALID_TARGET_FORM",
     });
@@ -72,6 +75,36 @@ describe("HTTP/1.1 head parser", () => {
     expect(
       expectHead("CONNECT example.com:443 HTTP/1.1\r\nHost: example.com:443\r\n\r\n").target.form,
     ).toBe("authority");
+    expect(
+      parseRawHead("CONNECT [not-an-ip]:443 HTTP/1.1\r\nHost: example.com\r\n\r\n"),
+    ).toMatchObject({ code: "HPE_INVALID_TARGET_FORM" });
+  });
+
+  it.each([
+    "http:///admin",
+    "http://:80/admin",
+    "http://host:bad/admin",
+    "http://user@host/admin",
+    "http://%ZZ/admin",
+    "http://[not-an-ip]/admin",
+  ])("拒绝 authority 非法的 absolute-form %s", (target) => {
+    expect(parseRawHead(`GET ${target} HTTP/1.1\r\nHost: example.com\r\n\r\n`)).toMatchObject({
+      code: "HPE_INVALID_TARGET",
+      status: 400,
+    });
+  });
+
+  it("解析 absolute-form 的协议语义", () => {
+    const head = expectHead(
+      "GET HTTP://[::1]:8080/a/../b?x=1 HTTP/1.1\r\nHost: example.com\r\n\r\n",
+    );
+    expect(head.target).toMatchObject({
+      form: "absolute",
+      scheme: "HTTP",
+      authority: "[::1]:8080",
+      path: "/a/../b?x=1",
+    });
+    expect(head.path).toBe("/a/../b?x=1");
   });
 
   it("跨任意 TCP 分段单调找到完整 head", () => {
