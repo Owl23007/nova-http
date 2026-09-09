@@ -140,7 +140,7 @@ export class Application {
       this._emitResponse(req, res);
     } catch (error: unknown) {
       // 1. 处理分发过程中发生的错误，调用 onError 钩子
-      this.hooks.callHook("onError", { error, req, res });
+      this.hooks.emitHook("onError", { error, req, res });
       // 2. 如果响应未发送，发送 500 错误响应
       if (!res.headersSent) {
         res.status(500).send("Internal Server Error");
@@ -170,7 +170,7 @@ export class Application {
     fallthroughOnNotFound: boolean,
   ): Promise<boolean> {
     // 1. 调用 onRequest 钩子，记录请求开始时间
-    this.hooks.callHook("onRequest", { req, res, timestamp: Date.now() });
+    this.hooks.emitHook("onRequest", { req, res, timestamp: Date.now() });
 
     // 2. 调用中间件链处理请求
     await this._chain.dispatch(req, res, this._middlewareContext);
@@ -185,7 +185,7 @@ export class Application {
     if (match) {
       req.params = match.params;
       // 调用 onRoute 钩子，记录路由匹配信息
-      this.hooks.callHook("onRoute", { req, res, routePath: req.pathname, params: match.params });
+      this.hooks.emitHook("onRoute", { req, res, routePath: req.pathname, params: match.params });
       // 调用匹配到的处理器
       await match.handler.call(this._middlewareContext, req, res);
       // 如果处理器已发送响应，触发响应观察者并返回
@@ -200,7 +200,7 @@ export class Application {
       return true;
     }
     if (fallthroughOnNotFound) return false;
-    this.hooks.callHook("onNotFound", { req, res });
+    this.hooks.emitHook("onNotFound", { req, res });
     // 如果未匹配到路由且不允许继续传递请求，返回 404 Not Found 响应
     if (!res.headersSent) res.status(404).send("Not Found");
     return true;
@@ -234,7 +234,7 @@ export class Application {
     const durationMs = req._startAt
       ? Number(process.hrtime.bigint() - req._startAt) / 1_000_000
       : 0;
-    this.hooks.callHook("onResponse", { req, res, durationMs, statusCode: res.statusCode });
+    this.hooks.emitHook("onResponse", { req, res, durationMs, statusCode: res.statusCode });
   }
 
   /** 注册响应观察者，用于在响应结束时触发 onResponse 钩子 */

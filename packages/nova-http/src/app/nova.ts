@@ -51,15 +51,15 @@ export class Nova extends Application {
       },
       dispatch: (req, res) => this.dispatch(req, res),
       onConnect: (connection) =>
-        this.hooks.callHook("onConnect", { connection, timestamp: Date.now() }),
+        this.hooks.emitHook("onConnect", { connection, timestamp: Date.now() }),
       onClose: (connection) =>
-        this.hooks.callHook("onDisconnect", { connection, timestamp: Date.now() }),
-      onError: (error, connection) => this.hooks.callHook("onError", { error, connection }),
+        this.hooks.emitHook("onDisconnect", { connection, timestamp: Date.now() }),
+      onError: (error, connection) => this.hooks.emitHook("onError", { error, connection }),
     };
     this.nodeServer = new NodeHttpServer(connectionContext, this._fullConfig.maxConnections, {
-      onError: (error) => this.hooks.callHook("onError", { error }),
-      onListen: (port, host) => this.hooks.callHook("onListen", { port, host }),
-      onClose: () => this.hooks.callHook("onClose", undefined as void),
+      onError: (error) => this.hooks.emitHook("onError", { error }),
+      onListen: (port, host) => this.hooks.emitHook("onListen", { port, host }),
+      onClose: () => this.hooks.emitHook("onClose", undefined as void),
     });
   }
 

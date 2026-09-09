@@ -14,13 +14,10 @@
  *   - onListen      服务器开始监听
  *   - onNotFound    路由未匹配（404）
  *
- * 使用示例：
- *   app.addHook('onRequest', ({ req }) => {
- *     req._startAt = process.hrtime.bigint()
- *   })
- *   app.addHook('onResponse', ({ req, res, durationMs }) => {
- *     console.log(`${req.method} ${req.pathname} ${durationMs.toFixed(2)}ms`)
- *   })
+ * 1. 支持同步与异步 hook 处理器，允许在钩子中执行异步操作
+ * 2. 支持注册自定义钩子事件，通过 TypeScript declaration merging 扩展 HookEvents
+ * 3. 支持为同一 hook 注册多个处理器，按注册顺序依次执行，完成顺序不受保证
+ * 4. 支持在钩子处理器中抛出异常，异常会被 onError 钩子捕获并上报
  */
 
 import { EventEmitter } from "events";
@@ -98,11 +95,9 @@ export interface ServerHookEvents {
 }
 
 /**
- * 可由 middleware/plugin 通过 TypeScript declaration merging 扩展的事件映射。
- * Core 只负责事件基础设施，不需要理解扩展事件的业务语义。
+ * 可由 middleware/plugin 通过 TypeScript declaration merging 扩展的事件映射
  */
 export interface HookEvents extends CoreHookEvents, ServerHookEvents {}
-
 export type HookName = keyof HookEvents;
 export type HookHandler<K extends HookName> = (ctx: HookEvents[K]) => void | Promise<void>;
 
@@ -137,12 +132,12 @@ export class Hooks extends EventEmitter {
   }
 
   /**
-   * 发送观察型 hook/event，不等待异步 listener。
-   * 同步钩子直接执行；异步钩子的 Promise 会被静默处理（不阻塞主流程）
+   * 发送观察型 hook/event，不等待异步 listener
+   * 同步钩子直接执行；异步钩子的 Promise 会被静默处理
    */
   emitHook<K extends HookName>(name: K, ctx: HookEvents[K]): void {
     // EventEmitter.emit 同步调用所有监听器
-    // 对于异步监听器，我们捕获 Promise 并不等待（fire-and-forget）
+    // 对于异步监听器，捕获 Promise 并不等待
     const listeners = this.rawListeners(name) as Array<
       (ctx: HookEvents[K]) => void | Promise<void>
     >;
@@ -163,11 +158,6 @@ export class Hooks extends EventEmitter {
         }
       }
     }
-  }
-
-  /** @internal Core 兼容入口；middleware/plugin 应使用 emitHook。 */
-  callHook<K extends HookName>(name: K, ctx: HookEvents[K]): void {
-    this.emitHook(name, ctx);
   }
 
   /**
