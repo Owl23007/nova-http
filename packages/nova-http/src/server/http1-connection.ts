@@ -20,6 +20,7 @@ import {
 } from "../protocol/http1/parser";
 import type { RequestHead } from "../protocol/http1/types";
 import { serializeResponseHead } from "../protocol/http1/response";
+import { resolveClientIp, type TrustProxy } from "./proxy";
 import { NovaRequest } from "../core/request";
 import { NovaResponse } from "../core/response";
 import { Http1ResponseSink } from "./http1-response-sink";
@@ -41,7 +42,7 @@ export interface Http1ConnectionConfig {
   requestTimeout: number;
   maxBodySize: number;
   bodyHighWaterMark: number;
-  trustProxy: boolean;
+  trustProxy: TrustProxy;
   parserLimits?: Partial<ParserLimits>;
   checkContinue?: (head: RequestHead) => ContinueDecision;
 }
@@ -174,8 +175,10 @@ export class Http1ConnectionCoordinator {
               http1Error("limit", "HPE_BODY_TOO_LARGE", 413, "body", "Payload Too Large"),
             );
           }
+          const clientIp = this._resolveClientIp(head);
+          if (clientIp === undefined) return;
           if (!this._handleExpect(head)) return;
-          this._startRequest(head);
+          this._startRequest(head, clientIp);
           continue;
         }
 
@@ -201,7 +204,17 @@ export class Http1ConnectionCoordinator {
     }
   }
 
-  private _startRequest(head: RequestHead): void {
+  private _resolveClientIp(head: RequestHead): string | undefined {
+    try {
+      return resolveClientIp(this._peer, head.headers, this._context.config.trustProxy);
+    } catch (error: unknown) {
+      this._context.onError(toError(error), this._peer);
+      this._sendErrorAndClose(500, "Internal Server Error");
+      return undefined;
+    }
+  }
+
+  private _startRequest(head: RequestHead, clientIp: string): void {
     const trailers = new HeaderBlock();
     const body = new IncomingBody(
       head.bodyPlan.type !== "none",
@@ -210,7 +223,9 @@ export class Http1ConnectionCoordinator {
     );
     const parsed: IncomingRequestMeta = {
       method: head.method,
-      target: head.rawTarget,
+      clientIp,
+      rawTarget: head.rawTarget,
+      path: head.path,
       version: head.version,
       headers: head.headers,
       body,
@@ -240,7 +255,7 @@ export class Http1ConnectionCoordinator {
       this._armInputDeadline("body", this._context.config.bodyIdleTimeout);
     }
 
-    const request = new NovaRequest(parsed, this._context.config.trustProxy);
+    const request = new NovaRequest(parsed);
     const sink = new Http1ResponseSink(
       this._socket,
       head.method,

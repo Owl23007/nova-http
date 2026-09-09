@@ -29,3 +29,11 @@ app.get("/example", (req: NovaRequest, res: NovaResponse) => {
 
 // @ts-expect-error Unknown extension events remain type errors.
 app.addHook("example:missing", () => {});
+
+// @ts-ignore 仅用于验证 RequestLocals 的声明合并类型
+function checkRequestLocals(req: NovaRequest) {
+  // @ts-expect-error 未声明的字段必须报错
+  req.context.missing = 1;
+  // @ts-expect-error 已声明字段保留值类型约束
+  req.context.example = { value: "wrong" };
+}

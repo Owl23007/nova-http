@@ -10,15 +10,14 @@
  * 允许开发者将自定义属性挂载到 `req.context`，保持类型安全
  */
 
+import { isJsonMediaType, mediaType } from "../message/media-type";
 import type { BodyReadOptions, IncomingBody } from "../message/body";
 import type { ConnectionInfo, ConnectionIntent } from "../message/connection";
 import type { HeaderBlock } from "../message/headers";
 import type { IncomingRequestMeta } from "../message/request";
 
 /** 可由 middleware/plugin 通过 declaration merging 扩展的请求级共享状态 */
-export interface RequestLocals {
-  [key: string]: unknown;
-}
+export interface RequestLocals {}
 
 /** Nova HTTP 请求对象 */
 export class NovaRequest {
@@ -32,8 +31,6 @@ export class NovaRequest {
   readonly httpVersion: string;
   /** 原始 request-target */
   readonly rawTarget: string;
-  /** 已验证的 request-target 形式 */
-  readonly target: string;
   /** 请求头（键全小写） */
   readonly headers: HeaderBlock;
   /** 流式请求体 */
@@ -44,6 +41,8 @@ export class NovaRequest {
   readonly connection: ConnectionIntent;
   /** 与传输实现无关的对端连接信息 */
   readonly peer: ConnectionInfo;
+  /** 服务端适配层按代理信任策略确定的客户端 IP */
+  readonly ip: string;
 
   /** 路由器注入的动态路径参数，如 /users/:id → { id: '123' } */
   params: Record<string, string> = {};
@@ -58,20 +57,16 @@ export class NovaRequest {
 
   private _query: URLSearchParams | undefined;
   private _cookies: Record<string, string> | undefined;
-  private _ip: string | undefined;
   private _abortController: AbortController | undefined;
   private _aborted: boolean = false;
   private _abortReason: unknown;
 
   /** 创建请求对象 */
-  constructor(
-    parsed: IncomingRequestMeta,
-    private readonly _trustProxy: boolean = false,
-  ) {
+  constructor(parsed: IncomingRequestMeta) {
     this.method = parsed.method;
-    this.rawTarget = parsed.target;
-    this.target = parsed.target;
-    this.path = resolveApplicationPath(parsed.target);
+    this.ip = parsed.clientIp;
+    this.rawTarget = parsed.rawTarget;
+    this.path = parsed.path;
     this.httpVersion = parsed.version;
     this.headers = parsed.headers;
     this.body = parsed.body;
@@ -103,7 +98,7 @@ export class NovaRequest {
    */
   get cookies(): Record<string, string> {
     if (this._cookies === undefined) {
-      this._cookies = {};
+      this._cookies = Object.create(null) as Record<string, string>;
       const cookieHeader = this.headers.get("cookie");
       if (cookieHeader) {
         for (const pair of cookieHeader.split(";")) {
@@ -112,44 +107,12 @@ export class NovaRequest {
           const key = pair.substring(0, eqIdx).trim();
           const val = pair.substring(eqIdx + 1).trim();
           if (key) {
-            // 解码 URL 编码的 cookie 值
-            try {
-              this._cookies[key] = decodeURIComponent(val);
-            } catch {
-              this._cookies[key] = val;
-            }
+            this._cookies[key] = val;
           }
         }
       }
     }
     return this._cookies;
-  }
-
-  /**
-   * 客户端 IP 地址
-   * 若 trustProxy=true，优先读取 X-Forwarded-For 的第一个 IP
-   */
-  get ip(): string {
-    if (this._ip === undefined) {
-      if (this._trustProxy) {
-        const xForwardedFor = this.headers.get("x-forwarded-for");
-        if (xForwardedFor) {
-          const firstIp = xForwardedFor.split(",")[0].trim();
-          if (firstIp) {
-            this._ip = firstIp;
-            return this._ip;
-          }
-        }
-        // 尝试 X-Real-IP
-        const xRealIp = this.headers.get("x-real-ip");
-        if (xRealIp) {
-          this._ip = xRealIp.trim();
-          return this._ip;
-        }
-      }
-      this._ip = this.peer.remoteAddress ?? "0.0.0.0";
-    }
-    return this._ip;
   }
 
   /**
@@ -163,20 +126,22 @@ export class NovaRequest {
    * 判断请求是否为 JSON 请求体
    */
   get isJson(): boolean {
-    return (this.headers.get("content-type") ?? "").includes("application/json");
+    return isJsonMediaType(this.headers.get("content-type") ?? "");
   }
 
   /**
    * 判断请求是否为 form 请求体
    */
   get isForm(): boolean {
-    return (this.headers.get("content-type") ?? "").includes("application/x-www-form-urlencoded");
+    return (
+      mediaType(this.headers.get("content-type") ?? "") === "application/x-www-form-urlencoded"
+    );
   }
 
   /**
-   * 请求体大小（字节）
+   * 当前已接收的请求体字节数（不代表完整 body 大小）
    */
-  get bodySize(): number {
+  get bodyBytesReceived(): number {
     return this.body.bytesReceived;
   }
 
@@ -214,15 +179,5 @@ export class NovaRequest {
     if (this._abortController !== undefined) {
       this._abortController.abort(reason);
     }
-  }
-}
-
-function resolveApplicationPath(target: string): string {
-  if (target.startsWith("/") || target === "*" || !target.includes("://")) return target;
-  try {
-    const url = new URL(target);
-    return `${url.pathname}${url.search}`;
-  } catch {
-    return target;
   }
 }

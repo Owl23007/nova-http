@@ -7,3 +7,5 @@ export type {
   Http1ConnectionContext,
 } from "./http1-connection";
 export type { ConnectHookContext, DisconnectHookContext, ListenHookContext } from "./hooks";
+
+export type { TrustProxy } from "./proxy";
