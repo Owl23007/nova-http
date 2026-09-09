@@ -128,6 +128,26 @@ describe("Middleware", () => {
     expect(calls).toEqual(["middleware", "error-middleware"]);
   });
 
+  it("emits onNotFound only after the default 404 response is determined", async () => {
+    app = createApp();
+    let hookError: unknown;
+
+    app.addHook("onError", ({ error }) => {
+      hookError = error;
+    });
+    app.addHook("onNotFound", ({ res }) => {
+      res.status(200).send("overridden");
+    });
+
+    const port = await listen(app);
+    const response = await request(port, "/missing");
+
+    expect(response).toContain("HTTP/1.1 404 Not Found");
+    expect(response).toContain("\r\n\r\nNot Found");
+    expect(response).not.toContain("overridden");
+    expect(hookError).toBeInstanceOf(Error);
+  });
+
   it("precompiles route middleware without accumulating handlers between requests", async () => {
     app = createApp();
     const calls: string[] = [];
