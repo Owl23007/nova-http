@@ -200,9 +200,10 @@ export class Application {
       return true;
     }
     if (fallthroughOnNotFound) return false;
-    this.hooks.emitHook("onNotFound", { req, res });
     // 如果未匹配到路由且不允许继续传递请求，返回 404 Not Found 响应
-    if (!res.headersSent) res.status(404).send("Not Found");
+    res.status(404).send("Not Found");
+    // 404 响应已确定后再发送观察事件，避免 hook 参与控制流
+    this.hooks.emitHook("onNotFound", { req, res });
     return true;
   }
 
