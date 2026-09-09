@@ -200,8 +200,12 @@ async function startNova(port) {
   app.get("/health", (_req, res) => res.send("ok"));
   app.get("/json", (_req, res) => res.json(FIXED_JSON));
   app.get("/json-heavy", (_req, res) => res.json(HEAVY_JSON));
-  app.post("/echo-small", (req, res) => res.json({ received: req.bodyParsed ?? null }));
-  app.post("/echo-large", (req, res) => res.json({ received: req.bodyParsed ?? null }));
+  app.post("/echo-small", (req, res) =>
+    res.json({ received: req.context.bodyParserData?.body ?? null }),
+  );
+  app.post("/echo-large", (req, res) =>
+    res.json({ received: req.context.bodyParserData?.body ?? null }),
+  );
 
   await app.listen(port, host);
   return { close: () => app.close() };

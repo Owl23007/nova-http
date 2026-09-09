@@ -3,7 +3,7 @@ export function createOrdersSubApp(createApp) {
 
   orders.post("/", (req, res) => {
     // 写接口保留基本业务校验，压测时能同时覆盖 bodyParser、校验和 SQLite 写入
-    const body = req.bodyParsed;
+    const body = req.context.bodyParserData?.body;
     if (!body || typeof body !== "object" || Array.isArray(body)) {
       res.status(400).json({ error: "body must be a JSON object" });
       return;

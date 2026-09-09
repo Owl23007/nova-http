@@ -1,4 +1,4 @@
-import type { HttpMethod } from "./http1/types";
+import type { HttpMethod } from "../message/request";
 import type { NovaRequest } from "./request";
 import type { NovaResponse } from "./response";
 

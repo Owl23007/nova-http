@@ -43,6 +43,16 @@
       "require": "./dist/src/core/index.js",
       "default": "./dist/src/core/index.js"
     },
+    "./protocol/http1": {
+      "types": "./dist/src/protocol/http1/index.d.ts",
+      "require": "./dist/src/protocol/http1/index.js",
+      "default": "./dist/src/protocol/http1/index.js"
+    },
+    "./static": {
+      "types": "./dist/src/static/index.d.ts",
+      "require": "./dist/src/static/index.js",
+      "default": "./dist/src/static/index.js"
+    },
     "./middlewares": {
       "types": "./dist/src/middlewares/index.d.ts",
       "require": "./dist/src/middlewares/index.js",

@@ -56,7 +56,7 @@ export function getUser(req: NovaRequest, res: NovaResponse): void {
  * 创建新用户
  */
 export function createUser(req: NovaRequest, res: NovaResponse): void {
-  const body = req.bodyParsed as Record<string, unknown> | null;
+  const body = req.context.bodyParserData?.body as Record<string, unknown> | undefined;
 
   if (!body || typeof body !== "object") {
     res.status(400).json({ error: "请求体必须为 JSON 对象" });
@@ -105,7 +105,7 @@ export function updateUser(req: NovaRequest, res: NovaResponse): void {
     return;
   }
 
-  const body = req.bodyParsed as Record<string, unknown> | null;
+  const body = req.context.bodyParserData?.body as Record<string, unknown> | undefined;
 
   if (!body || typeof body !== "object") {
     res.status(400).json({ error: "请求体必须为 JSON 对象" });

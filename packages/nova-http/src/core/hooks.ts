@@ -1,15 +1,13 @@
 /**
  * Hooks — 全链路可观测钩子系统
  *
- * 基于 Node.js 内置 EventEmitter，零依赖
- * 提供 18 个观测点，覆盖请求从建立连接到响应发送的完整生命周期
+ * 覆盖框架核心请求生命周期与服务器生命周期
  *
  * 钩子列表：
  *   - onConnect     TCP 连接建立
  *   - onDisconnect  TCP 连接断开
- *   - onRequest     HTTP 请求解析完成（headers + body 均可用）
- *   - onRoute       路由匹配完成（params 已注入）
- *   - onBodyParsed  bodyParser 解析完成（req.bodyParsed 可用）
+ *   - onRequest     HTTP 请求头解析完成，请求对象已创建
+ *   - onRoute       路由匹配完成
  *   - onResponse    响应发送完成
  *   - onError       错误发生（中间件异常 / 解析错误 / socket 错误）
  *   - onClose       服务器关闭
@@ -26,19 +24,19 @@
  */
 
 import { EventEmitter } from "events";
-import type { Socket } from "net";
+import type { ConnectionInfo } from "../message/connection";
 import type { NovaRequest } from "./request";
 import type { NovaResponse } from "./response";
 
 // 钩子上下文类型
 
 export interface ConnectContext {
-  socket: Socket;
+  connection: ConnectionInfo;
   timestamp: number;
 }
 
 export interface DisconnectContext {
-  socket: Socket;
+  connection: ConnectionInfo;
   timestamp: number;
 }
 
@@ -55,17 +53,10 @@ export interface RouteContext {
   params: Record<string, string>;
 }
 
-export interface BodyParsedContext {
-  req: NovaRequest;
-  res: NovaResponse;
-  contentType: string;
-  bodySize: number;
-}
-
 export interface ResponseContext {
   req: NovaRequest;
   res: NovaResponse;
-  /** 从请求完成到响应发送的耗时（毫秒），需配合 onRequest 设置 req._startAt */
+  /** 从请求完成到响应发送的耗时，需配合 onRequest 设置 req._startAt */
   durationMs: number;
   statusCode: number;
 }
@@ -74,7 +65,7 @@ export interface ErrorContext {
   error: unknown;
   req?: NovaRequest;
   res?: NovaResponse;
-  socket?: Socket;
+  connection?: ConnectionInfo;
 }
 
 export interface NotFoundContext {
@@ -89,28 +80,41 @@ export interface ListenContext {
 
 // 钩子名称到上下文的映射
 
-export interface HookEvents {
-  onConnect: ConnectContext;
-  onDisconnect: DisconnectContext;
+/** Nova 核心本身定义的生命周期事件。 */
+export interface CoreHookEvents {
   onRequest: RequestContext;
   onRoute: RouteContext;
-  onBodyParsed: BodyParsedContext;
   onResponse: ResponseContext;
   onError: ErrorContext;
   onNotFound: NotFoundContext;
+}
+
+/** Nova server 层定义的生命周期事件。 */
+export interface ServerHookEvents {
+  onConnect: ConnectContext;
+  onDisconnect: DisconnectContext;
   onListen: ListenContext;
   onClose: void;
 }
 
+/**
+ * 可由 middleware/plugin 通过 TypeScript declaration merging 扩展的事件映射。
+ * Core 只负责事件基础设施，不需要理解扩展事件的业务语义。
+ */
+export interface HookEvents extends CoreHookEvents, ServerHookEvents {}
+
 export type HookName = keyof HookEvents;
 export type HookHandler<K extends HookName> = (ctx: HookEvents[K]) => void | Promise<void>;
 
-// Hooks 类
-
+/**
+ * Hooks Nova 全链路可观测钩子系统
+ *
+ * 基于 Node.js 内置 EventEmitter
+ */
 export class Hooks extends EventEmitter {
   constructor() {
     super();
-    // 允许大量监听器（每个钩子可能有多个处理器）
+    // 默认监听器上线设置为 100
     this.setMaxListeners(100);
   }
 
@@ -133,10 +137,10 @@ export class Hooks extends EventEmitter {
   }
 
   /**
-   * 触发钩子（内部使用）
+   * 发送观察型 hook/event，不等待异步 listener。
    * 同步钩子直接执行；异步钩子的 Promise 会被静默处理（不阻塞主流程）
    */
-  callHook<K extends HookName>(name: K, ctx: HookEvents[K]): void {
+  emitHook<K extends HookName>(name: K, ctx: HookEvents[K]): void {
     // EventEmitter.emit 同步调用所有监听器
     // 对于异步监听器，我们捕获 Promise 并不等待（fire-and-forget）
     const listeners = this.rawListeners(name) as Array<
@@ -149,21 +153,25 @@ export class Hooks extends EventEmitter {
           result.catch((err: unknown) => {
             // 钩子内部异常不影响主流程，但通过 onError 上报
             if (name !== "onError") {
-              this.callHook("onError", { error: err } as HookEvents["onError"]);
+              this.emitHook("onError", { error: err } as HookEvents["onError"]);
             }
           });
         }
       } catch (err: unknown) {
         if (name !== "onError") {
-          this.callHook("onError", { error: err } as HookEvents["onError"]);
+          this.emitHook("onError", { error: err } as HookEvents["onError"]);
         }
       }
     }
   }
 
+  /** @internal Core 兼容入口；middleware/plugin 应使用 emitHook。 */
+  callHook<K extends HookName>(name: K, ctx: HookEvents[K]): void {
+    this.emitHook(name, ctx);
+  }
+
   /**
-   * 触发钩子并等待所有异步处理器完成（串行执行）
-   * 用于需要等待钩子完成才继续的场景（如 onRequest 中的鉴权前置）
+   * @deprecated Hook/event 只应用于观察。需要影响请求控制流时请使用 middleware。
    */
   async callHookAsync<K extends HookName>(name: K, ctx: HookEvents[K]): Promise<void> {
     const listeners = this.rawListeners(name) as Array<

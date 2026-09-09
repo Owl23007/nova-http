@@ -33,7 +33,7 @@ function getUser(req, res) {
 }
 
 function createUser(req, res) {
-  const body = req.bodyParsed;
+  const body = req.context.bodyParserData?.body;
   if (!body || typeof body !== "object") {
     res.status(400).json({ error: "请求体必须为 JSON 对象" });
     return;
@@ -73,7 +73,7 @@ function updateUser(req, res) {
     return;
   }
 
-  const body = req.bodyParsed;
+  const body = req.context.bodyParserData?.body;
   if (!body || typeof body !== "object") {
     res.status(400).json({ error: "请求体必须为 JSON 对象" });
     return;

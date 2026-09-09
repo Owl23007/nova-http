@@ -1,6 +1,7 @@
 import { stat } from "fs/promises";
 import { basename, join, normalize, resolve, sep } from "path";
 import type { NextFunction, NovaRequest, NovaResponse } from "../core";
+import { sendFile } from "../static/send-file";
 
 /**
  * 静态文件中间件配置项
@@ -38,7 +39,7 @@ export interface StaticFilesOptions {
   /**
    * 是否启用 ETag
    *
-   * 当前 ETag 由 `res.sendFile()` 统一生成
+   * ETag 由 static 服务适配器生成
    *
    * @defaultValue `true`
    */
@@ -47,7 +48,7 @@ export interface StaticFilesOptions {
   /**
    * 是否启用 Last-Modified
    *
-   * 当前 Last-Modified 由 `res.sendFile()` 统一生成
+   * Last-Modified 由 static 服务适配器生成
    *
    * @defaultValue `true`
    */
@@ -154,7 +155,7 @@ export function staticFiles(
             return;
           }
           setCacheHeaders();
-          await res.sendFile(indexPath);
+          await sendFile(req, res, indexPath, options);
         } catch {
           next();
         }
@@ -167,7 +168,7 @@ export function staticFiles(
       }
 
       setCacheHeaders();
-      await res.sendFile(targetPath);
+      await sendFile(req, res, targetPath, options);
     } catch (err: unknown) {
       if (isNodeError(err)) {
         if (err.code === "ENOENT" || err.code === "ENOTDIR") {

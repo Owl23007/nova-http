@@ -1,20 +1,24 @@
 /**
  * NovaRequest — HTTP 请求对象
  *
- * 封装 HTTP/1.1 消息结构，提供高层访问接口：
- *   - query: URLSearchParams（懒解析）
- *   - cookies: Record<string, string>（懒解析）
- *   - ip: string（支持 X-Forwarded-For，可配置 trustProxy）
+ * 封装与协议无关的入站消息契约，提供高层访问接口：
+ *   - query: URLSearchParams 懒解析
+ *   - cookies: Record<string, string> 懒解析
+ *   - ip: string 支持 X-Forwarded-For，可配置 trustProxy
  *   - params: 由路由器注入的动态路径参数
- *   - bodyParsed: 由 bodyParser 中间件注入的解析后 body
  *
  * 允许开发者将自定义属性挂载到 `req.context`，保持类型安全
  */
 
-import type { Socket } from "net";
-import type { BodyReadOptions, IncomingBody } from "./http1/body";
-import type { HeaderBlock } from "./http1/headers";
-import type { ConnectionIntent, ParsedRequest, RequestTarget } from "./http1/types";
+import type { BodyReadOptions, IncomingBody } from "../message/body";
+import type { ConnectionInfo, ConnectionIntent } from "../message/connection";
+import type { HeaderBlock } from "../message/headers";
+import type { IncomingRequestMeta } from "../message/request";
+
+/** 可由 middleware/plugin 通过 declaration merging 扩展的请求级共享状态 */
+export interface RequestLocals {
+  [key: string]: unknown;
+}
 
 /** Nova HTTP 请求对象 */
 export class NovaRequest {
@@ -25,11 +29,11 @@ export class NovaRequest {
   /** 不含 query string 的纯路径 */
   readonly pathname: string;
   /** HTTP 版本 */
-  readonly httpVersion: "1.0" | "1.1";
+  readonly httpVersion: string;
   /** 原始 request-target */
   readonly rawTarget: string;
   /** 已验证的 request-target 形式 */
-  readonly target: RequestTarget;
+  readonly target: string;
   /** 请求头（键全小写） */
   readonly headers: HeaderBlock;
   /** 流式请求体 */
@@ -38,17 +42,14 @@ export class NovaRequest {
   readonly trailers: HeaderBlock;
   /** 连接生命周期意图 */
   readonly connection: ConnectionIntent;
-  /** 底层 TCP Socket（用于获取 remoteAddress 等） */
-  readonly socket: Socket;
+  /** 与传输实现无关的对端连接信息 */
+  readonly peer: ConnectionInfo;
 
   /** 路由器注入的动态路径参数，如 /users/:id → { id: '123' } */
   params: Record<string, string> = {};
 
-  /** bodyParser 中间件注入的解析后请求体 */
-  bodyParsed: any = undefined;
-
   /** 开发者自定义上下文（中间件间共享状态）*/
-  context: Record<string, any> = {};
+  context: RequestLocals = {};
 
   /** 内部：请求开始时间戳（ns），供钩子系统使用 */
   _startAt: bigint = 0n;
@@ -64,12 +65,11 @@ export class NovaRequest {
 
   /** 创建请求对象 */
   constructor(
-    parsed: ParsedRequest,
-    socket: Socket,
+    parsed: IncomingRequestMeta,
     private readonly _trustProxy: boolean = false,
   ) {
     this.method = parsed.method;
-    this.rawTarget = parsed.rawTarget;
+    this.rawTarget = parsed.target;
     this.target = parsed.target;
     this.path = resolveApplicationPath(parsed.target);
     this.httpVersion = parsed.version;
@@ -77,7 +77,7 @@ export class NovaRequest {
     this.body = parsed.body;
     this.trailers = parsed.trailers;
     this.connection = parsed.connection;
-    this.socket = socket;
+    this.peer = parsed.peer;
 
     // 解析 pathname
     const qIdx = this.path.indexOf("?");
@@ -147,7 +147,7 @@ export class NovaRequest {
           return this._ip;
         }
       }
-      this._ip = this.socket.remoteAddress ?? "0.0.0.0";
+      this._ip = this.peer.remoteAddress ?? "0.0.0.0";
     }
     return this._ip;
   }
@@ -217,14 +217,12 @@ export class NovaRequest {
   }
 }
 
-function resolveApplicationPath(target: RequestTarget): string {
-  if (target.form === "origin" || target.form === "asterisk" || target.form === "authority") {
-    return target.raw;
-  }
+function resolveApplicationPath(target: string): string {
+  if (target.startsWith("/") || target === "*" || !target.includes("://")) return target;
   try {
-    const url = new URL(target.raw);
+    const url = new URL(target);
     return `${url.pathname}${url.search}`;
   } catch {
-    return target.raw;
+    return target;
   }
 }

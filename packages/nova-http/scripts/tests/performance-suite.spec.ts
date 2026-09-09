@@ -40,8 +40,9 @@ async function createTestApp(): Promise<PerformanceApp> {
 
 async function listen(app: Nova): Promise<number> {
   await app.listen(0, "127.0.0.1");
-  // 测试端口使用 0 自动分配，需要读取底层 server 的实际端口
-  const address = (app as any)["_server"].address();
+  // 测试端口使用 0 自动分配，需要读取 server adapter 的实际端口
+  const address = app.address();
+  if (address === null || typeof address === "string") throw new Error("Missing TCP address");
   return address.port;
 }
 

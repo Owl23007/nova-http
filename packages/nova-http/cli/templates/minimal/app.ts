@@ -22,7 +22,7 @@ app.get("/hello/:name", (req: NovaRequest, res: NovaResponse) => {
 });
 
 app.post("/echo", (req: NovaRequest, res: NovaResponse) => {
-  res.json({ received: req.bodyParsed });
+  res.json({ received: req.context.bodyParserData?.body });
 });
 
 // 全局错误处理

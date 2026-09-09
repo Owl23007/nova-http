@@ -13,7 +13,8 @@ let app: Nova | undefined;
 
 async function listen(testApp: Nova): Promise<number> {
   await testApp.listen(0, "127.0.0.1");
-  const address = (testApp as any)._server.address();
+  const address = testApp.address();
+  if (address === null || typeof address === "string") throw new Error("Missing TCP address");
   return address.port;
 }
 
@@ -125,5 +126,32 @@ describe("Middleware", () => {
     expect(response).toContain("HTTP/1.1 500 Internal Server Error");
     expect(response).toContain("test error");
     expect(calls).toEqual(["middleware", "error-middleware"]);
+  });
+
+  it("precompiles route middleware without accumulating handlers between requests", async () => {
+    app = createApp();
+    const calls: string[] = [];
+
+    app.get(
+      "/compiled",
+      (_req, _res, next) => {
+        calls.push("first");
+        next();
+      },
+      (_req, _res, next) => {
+        calls.push("second");
+        next();
+      },
+      (_req: NovaRequest, res: NovaResponse) => {
+        calls.push("terminal");
+        res.send("ok");
+      },
+    );
+
+    const port = await listen(app);
+    await request(port, "/compiled");
+    await request(port, "/compiled");
+
+    expect(calls).toEqual(["first", "second", "terminal", "first", "second", "terminal"]);
   });
 });

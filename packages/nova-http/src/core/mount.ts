@@ -1,4 +1,9 @@
-import type { ErrorMiddleware, Middleware, NextFunction } from "./middleware-chain";
+import type {
+  ErrorMiddleware,
+  Middleware,
+  MiddlewareContext,
+  NextFunction,
+} from "./middleware-chain";
 import type { NovaRequest } from "./request";
 import type { NovaResponse } from "./response";
 
@@ -28,18 +33,29 @@ export function createPrefixedMiddleware(
 
   if (middleware.length === 4) {
     const errorMiddleware = middleware as ErrorMiddleware;
-    return (err: unknown, req: NovaRequest, res: NovaResponse, next: NextFunction) => {
+    return function (
+      this: MiddlewareContext | void,
+      err: unknown,
+      req: NovaRequest,
+      res: NovaResponse,
+      next: NextFunction,
+    ) {
       if (matchesMountPrefix(req.pathname, normalizedPrefix)) {
-        return errorMiddleware(err, req, res, next);
+        return errorMiddleware.call(this, err, req, res, next);
       }
       next();
     };
   }
 
   const normalMiddleware = middleware as Middleware;
-  return (req: NovaRequest, res: NovaResponse, next: NextFunction) => {
+  return function (
+    this: MiddlewareContext | void,
+    req: NovaRequest,
+    res: NovaResponse,
+    next: NextFunction,
+  ) {
     if (matchesMountPrefix(req.pathname, normalizedPrefix)) {
-      return normalMiddleware(req, res, next);
+      return normalMiddleware.call(this, req, res, next);
     }
     next();
   };
@@ -92,8 +108,8 @@ export function matchesMountPrefix(pathname: string, prefix: string): boolean {
 /**
  * 为子应用创建带重写路径的请求对象
  *
- * 该函数复用原请求原型，仅覆盖 `path`、`pathname` 和 `params`，避免复制 socket、
- * headers、body 等请求上下文
+ * 该函数复用原请求原型，仅覆盖 `path`、`pathname` 和 `params`
+ * 避免复制连接信息、headers、body 等请求上下文
  */
 export function createMountedRequest(req: NovaRequest, prefix: string): NovaRequest {
   if (prefix === "/") {

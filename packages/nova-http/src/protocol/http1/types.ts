@@ -1,5 +1,5 @@
-import type { IncomingBody } from "./body";
-import type { HeaderBlock } from "./headers";
+import type { HeaderBlock } from "../../message/headers";
+import type { ConnectionIntent } from "../../message/connection";
 
 export type HttpVersion = "1.0" | "1.1";
 export type HttpMethod = string;
@@ -23,18 +23,7 @@ export type BodyPlan =
   | { readonly type: "fixed"; readonly length: number }
   | { readonly type: "chunked" };
 
-export interface ConnectionIntent {
-  readonly close: boolean;
-  readonly connect: boolean;
-  readonly upgrade?: string;
-}
-
 export interface RequestHead extends ParsedHead {
   readonly bodyPlan: BodyPlan;
   readonly connection: ConnectionIntent;
-}
-
-export interface ParsedRequest extends RequestHead {
-  readonly body: IncomingBody;
-  readonly trailers: HeaderBlock;
 }

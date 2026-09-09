@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { Hooks, type RequestLocals } from "../../src/core";
 import { bodyParser } from "../../src/middlewares";
 
 function makeReq(body: string, contentType: string) {
@@ -10,7 +11,7 @@ function makeReq(body: string, contentType: string) {
       }
       return value;
     },
-    bodyParsed: undefined,
+    context: {} as RequestLocals,
     headers: new Map([["content-type", contentType]]),
   };
 }
@@ -40,7 +41,10 @@ describe("bodyParser", () => {
     });
 
     expect(nextCalled).toBe(true);
-    expect(req.bodyParsed).toEqual({ name: "nova" });
+    expect(req.context.bodyParserData).toEqual({
+      body: { name: "nova" },
+      contentType: "application/json",
+    });
   });
 
   it("UT-BODY-02 解析 urlencoded 请求体", async () => {
@@ -49,7 +53,7 @@ describe("bodyParser", () => {
 
     await bodyParser()(req as any, res as any, () => {});
 
-    expect(req.bodyParsed).toEqual({ name: "nova", tag: ["http", "test"] });
+    expect(req.context.bodyParserData?.body).toEqual({ name: "nova", tag: ["http", "test"] });
   });
 
   it("UT-BODY-03 拒绝非法 JSON 请求体", async () => {
@@ -74,5 +78,71 @@ describe("bodyParser", () => {
 
     expect(res.code).toBe(413);
     expect(res.sent).toBe("Payload Too Large");
+  });
+
+  it("UT-BODY-05 解析成功后触发 namespaced extension hook", async () => {
+    const req = makeReq('{"name":"nova"}', "application/json");
+    const res = makeRes();
+    const hooks = new Hooks();
+    const calls: string[] = [];
+
+    hooks.addHook("bodyParser:parsed", ({ req: parsedReq, res: parsedRes, body, contentType }) => {
+      expect(parsedReq).toBe(req);
+      expect(parsedRes).toBe(res);
+      expect(body).toEqual({ name: "nova" });
+      expect(contentType).toBe("application/json");
+      calls.push("parsed");
+    });
+
+    await bodyParser().call({ hooks }, req as any, res as any, () => {
+      calls.push("next");
+    });
+
+    expect(calls).toEqual(["parsed", "next"]);
+  });
+
+  it("UT-BODY-06 未解析请求体时不触发 extension hook", async () => {
+    const req = makeReq("plain text", "text/plain");
+    const res = makeRes();
+    const hooks = new Hooks();
+    let parsedCalled = false;
+
+    hooks.addHook("bodyParser:parsed", () => {
+      parsedCalled = true;
+    });
+
+    await bodyParser().call({ hooks }, req as any, res as any, () => {});
+
+    expect(parsedCalled).toBe(false);
+  });
+
+  it("UT-BODY-07 extension hook 不阻塞 middleware 控制流", async () => {
+    const req = makeReq('{"name":"nova"}', "application/json");
+    const res = makeRes();
+    const hooks = new Hooks();
+    let release!: () => void;
+    let observationFinished = false;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const observation = new Promise<void>((resolve) => {
+      hooks.addHook("bodyParser:parsed", async () => {
+        await gate;
+        observationFinished = true;
+        resolve();
+      });
+    });
+
+    let nextCalled = false;
+    await bodyParser().call({ hooks }, req as any, res as any, () => {
+      nextCalled = true;
+    });
+
+    expect(nextCalled).toBe(true);
+    expect(observationFinished).toBe(false);
+
+    release();
+    await observation;
+    expect(observationFinished).toBe(true);
   });
 });

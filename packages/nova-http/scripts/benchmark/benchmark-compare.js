@@ -198,7 +198,7 @@ async function startNova(port) {
   app.use(bodyParser());
   app.get("/health", (_req, res) => res.send("ok"));
   app.get("/json", (_req, res) => res.json(FIXED_JSON));
-  app.post("/echo", (req, res) => res.json({ received: req.bodyParsed ?? null }));
+  app.post("/echo", (req, res) => res.json({ received: req.context.bodyParserData?.body ?? null }));
 
   await app.listen(port, host);
 
