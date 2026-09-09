@@ -1,5 +1,5 @@
 /** 应用程序核心模块，提供 Nova HTTP 框架的主要功能和类型定义 */
-export { createRequestTimer, Hooks } from "./hooks";
+export { Hooks } from "./hooks";
 export { Application } from "./application";
 export { MiddlewareChain, compose, composeRoute } from "./middleware-chain";
 export { NovaRequest } from "./request";

@@ -7,7 +7,7 @@
  */
 
 export { createApp, Nova } from "./app/nova";
-export { createRequestTimer, HeaderBlock, IncomingBody } from "./core";
+export { HeaderBlock, IncomingBody } from "./core";
 export { getMimeType, sendFile } from "./static";
 export { bodyParser, staticFiles } from "./middlewares";
 

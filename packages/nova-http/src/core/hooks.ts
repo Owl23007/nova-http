@@ -14,10 +14,11 @@
  *   - onListen      服务器开始监听
  *   - onNotFound    路由未匹配（404）
  *
- * 1. 支持同步与异步 hook 处理器，允许在钩子中执行异步操作
- * 2. 支持注册自定义钩子事件，通过 TypeScript declaration merging 扩展 HookEvents
- * 3. 支持为同一 hook 注册多个处理器，按注册顺序依次执行，完成顺序不受保证
- * 4. 支持在钩子处理器中抛出异常，异常会被 onError 钩子捕获并上报
+ * 1. Hook 为观察型事件，不参与请求控制流
+ * 2. Hook handler 可执行异步操作，但框架不会等待其完成
+ * 3. 支持通过 TypeScript declaration merging 扩展 HookEvents
+ * 4. 同一 Hook 的 handler 按注册顺序触发，异步任务的完成顺序不保证
+ * 5. Hook handler 的异常不会影响主流程，并通过 onError 上报
  */
 
 import { EventEmitter } from "events";
@@ -53,7 +54,7 @@ export interface RouteContext {
 export interface ResponseContext {
   req: NovaRequest;
   res: NovaResponse;
-  /** 从请求完成到响应发送的耗时，需配合 onRequest 设置 req._startAt */
+  /** 从请求进入应用层到响应发送完成的耗时 */
   durationMs: number;
   statusCode: number;
 }
@@ -136,75 +137,20 @@ export class Hooks extends EventEmitter {
    * 同步钩子直接执行；异步钩子的 Promise 会被静默处理
    */
   emitHook<K extends HookName>(name: K, ctx: HookEvents[K]): void {
-    // EventEmitter.emit 同步调用所有监听器
-    // 对于异步监听器，捕获 Promise 并不等待
-    const listeners = this.rawListeners(name) as Array<
-      (ctx: HookEvents[K]) => void | Promise<void>
-    >;
+    const listeners = this.rawListeners(name) as HookHandler<K>[];
     for (const listener of listeners) {
       try {
-        const result = listener(ctx);
-        if (result instanceof Promise) {
-          result.catch((err: unknown) => {
-            // 钩子内部异常不影响主流程，但通过 onError 上报
-            if (name !== "onError") {
-              this.emitHook("onError", { error: err } as HookEvents["onError"]);
-            }
-          });
-        }
-      } catch (err: unknown) {
+        Promise.resolve(listener(ctx)).catch((error: unknown) => {
+          // 钩子内部异常不影响主流程，但通过 onError 上报
+          if (name !== "onError") {
+            this.emitHook("onError", { error } as HookEvents["onError"]);
+          }
+        });
+      } catch (error: unknown) {
         if (name !== "onError") {
-          this.emitHook("onError", { error: err } as HookEvents["onError"]);
+          this.emitHook("onError", { error } as HookEvents["onError"]);
         }
       }
     }
   }
-
-  /**
-   * @deprecated Hook/event 只应用于观察。需要影响请求控制流时请使用 middleware。
-   */
-  async callHookAsync<K extends HookName>(name: K, ctx: HookEvents[K]): Promise<void> {
-    const listeners = this.rawListeners(name) as Array<
-      (ctx: HookEvents[K]) => void | Promise<void>
-    >;
-    for (const listener of listeners) {
-      await listener(ctx);
-    }
-  }
-}
-
-// 内置可选插件：请求计时器
-
-/**
- * requestTimer() — 内置请求计时中间件
- * 在 onRequest 钩子记录开始时间，在 onResponse 钩子注入 X-Response-Time 响应头
- *
- * @example
- * ```js
- * app.addHook('onRequest', requestTimerStart)
- * app.addHook('onResponse', requestTimerEnd)
- *```
-
- * 该函数不是中间件，而是返回两个钩子处理器
- */
-export function createRequestTimer(): {
-  onRequest: HookHandler<"onRequest">;
-  onResponse: HookHandler<"onResponse">;
-} {
-  return {
-    onRequest: ({ req }) => {
-      req._startAt = process.hrtime.bigint();
-    },
-    onResponse: ({ req, res }) => {
-      if (req._startAt) {
-        const durationNs = process.hrtime.bigint() - req._startAt;
-        const durationMs = Number(durationNs) / 1_000_000;
-        try {
-          res.setHeader("x-response-time", `${durationMs.toFixed(3)}ms`);
-        } catch {
-          /* 响应可能已发送 */
-        }
-      }
-    },
-  };
 }
