@@ -6,3 +6,4 @@ export type {
   Http1ConnectionConfig,
   Http1ConnectionContext,
 } from "./http1-connection";
+export type { ConnectHookContext, DisconnectHookContext, ListenHookContext } from "./hooks";

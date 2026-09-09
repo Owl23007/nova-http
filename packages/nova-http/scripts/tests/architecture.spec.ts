@@ -5,6 +5,14 @@ import { describe, expect, it } from "vitest";
 const sourceRoot = join(process.cwd(), "src");
 
 describe("architecture dependency rules", () => {
+  it("keeps core hooks independent from external event owners", () => {
+    const source = readFileSync(join(sourceRoot, "core/hooks.ts"), "utf8");
+    const relativeImports = [...source.matchAll(/from\s+["'](\.[^"']+)["']/g)].map(
+      (match) => match[1],
+    );
+    expect(relativeImports).toEqual(["./request", "./response"]);
+  });
+
   it("keeps the application kernel independent from protocol and server adapters", () => {
     expect(
       findForbiddenImports("core", ["protocol", "server", "net", "fs", "fs/promises"]),

@@ -291,10 +291,11 @@ app.addHook("onResponse", ({ req, statusCode, durationMs }) => {
 
 Core defines `onRequest`, `onRoute`, `onResponse`, `onError`, and `onNotFound`; the server layer defines `onConnect`, `onDisconnect`, `onListen`, and `onClose`. Middleware and plugins can add typed, namespaced extension events such as `bodyParser:parsed` without adding their semantics to core. Handlers can be removed with `app.removeHook(name, handler)`.
 
-`HookEvents` is a declaration-merging extension point. Extension authors declare their event on
-`nova-http` and emit it through `this.hooks.emitHook(...)` from a normal function middleware. No
-runtime event-type registry is required. Hooks are non-blocking observations; request control flow
-belongs in middleware.
+`core/hooks` contains the event bus, core lifecycle payloads, and the declaration-merging `HookEvents`
+extension point. Server and middleware/plugin modules declare payload types next to the events they
+own. Extension authors declare their event on `nova-http` and emit it through
+`this.hooks.emitHook(...)` from a normal function middleware. No runtime event-type registry is
+required. Hooks are non-blocking observations; request control flow belongs in middleware.
 
 ## CLI
 
