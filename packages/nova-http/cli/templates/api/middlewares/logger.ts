@@ -38,14 +38,11 @@ function pad(n: number, width: number): string {
 export function registerRequestLogger(app: Nova): void {
   const silent = process.env.LOG_LEVEL === "silent";
   const verbose = process.env.LOG_LEVEL === "verbose";
-  const startedAt = new WeakMap<object, bigint>();
 
   app.addHook("onRequest", ({ req }) => {
     if (silent) {
       return;
     }
-
-    startedAt.set(req, process.hrtime.bigint());
 
     if (verbose) {
       console.log(`${GRAY}→ ${req.method} ${req.pathname}${RESET}`);
@@ -58,19 +55,15 @@ export function registerRequestLogger(app: Nova): void {
   app.addHook("onResponse", ({ req, statusCode, durationMs }) => {
     if (silent) return;
 
-    const startNs = startedAt.get(req);
-    const elapsed = startNs ? Number(process.hrtime.bigint() - startNs) / 1_000_000 : durationMs;
-    startedAt.delete(req);
-
     const methodPad = `${req.method} `.padEnd(8, " ");
     const colorMethod = `${METHOD_COLORS[req.method] ?? ""}${BOLD}${methodPad}${RESET}`;
     const colorStatus = `${statusColor(statusCode)}${statusCode}${RESET}`;
     const colorTime =
-      elapsed < 50
-        ? `\x1b[32m${pad(Math.round(elapsed), 4)}ms${RESET}`
-        : elapsed < 200
-          ? `\x1b[33m${pad(Math.round(elapsed), 4)}ms${RESET}`
-          : `\x1b[31m${pad(Math.round(elapsed), 4)}ms${RESET}`;
+      durationMs < 50
+        ? `\x1b[32m${pad(Math.round(durationMs), 4)}ms${RESET}`
+        : durationMs < 200
+          ? `\x1b[33m${pad(Math.round(durationMs), 4)}ms${RESET}`
+          : `\x1b[31m${pad(Math.round(durationMs), 4)}ms${RESET}`;
 
     console.log(`  ${colorMethod}${req.pathname.padEnd(30, " ")} ${colorStatus}  ${colorTime}`);
   });

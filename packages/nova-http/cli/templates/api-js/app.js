@@ -1,4 +1,4 @@
-const { bodyParser, createApp, createRequestTimer } = require("nova-http");
+const { bodyParser, createApp } = require("nova-http");
 const fs = require("fs");
 const path = require("path");
 const { usersRouter } = require("./routes/users");
@@ -37,9 +37,6 @@ function readAppVersion() {
 
 const APP_VERSION = readAppVersion();
 
-const timer = createRequestTimer();
-app.addHook("onRequest", timer.onRequest);
-app.addHook("onResponse", timer.onResponse);
 registerRequestLogger(app);
 
 app.addHook("onListen", ({ host, port }) => {
@@ -53,10 +50,6 @@ app.addHook("onError", ({ error, req }) => {
   const e = error instanceof Error ? error : new Error(String(error));
   const routePath = req ? `${req.method} ${req.pathname}` : "unknown";
   console.error(`[错误] ${routePath}:`, e.message);
-});
-
-app.addHook("onNotFound", ({ res }) => {
-  res.status(404).json({ error: "接口不存在" });
 });
 
 app.use(bodyParser());
@@ -73,6 +66,10 @@ app.get("/", (_req, res) => {
 });
 
 app.use("/api", authMiddleware(), usersRouter);
+
+app.all("/*", (_req, res) => {
+  res.status(404).json({ error: "接口不存在" });
+});
 
 app.use((err, _req, res, _next) => {
   const error = err instanceof Error ? err : new Error(String(err));

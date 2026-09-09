@@ -1,7 +1,6 @@
 import {
   bodyParser,
   createApp,
-  createRequestTimer,
   type ErrorMiddleware,
   type NovaRequest,
   type NovaResponse,
@@ -46,10 +45,7 @@ function readAppVersion(): string {
 
 const APP_VERSION = readAppVersion();
 
-// 全链路钩子
-const timer = createRequestTimer();
-app.addHook("onRequest", timer.onRequest);
-app.addHook("onResponse", timer.onResponse);
+// 全链路观测
 registerRequestLogger(app);
 
 app.addHook("onListen", ({ host, port }) => {
@@ -63,10 +59,6 @@ app.addHook("onError", ({ error, req }) => {
   const e = error as Error;
   const path = req ? `${req.method} ${req.pathname}` : "unknown";
   console.error(`[错误] ${path}:`, e.message);
-});
-
-app.addHook("onNotFound", ({ res }) => {
-  res.status(404).json({ error: "接口不存在" });
 });
 
 // 全局中间件
@@ -85,6 +77,11 @@ app.get("/", (_req: NovaRequest, res: NovaResponse) => {
 });
 
 app.use("/api", authMiddleware(), usersRouter);
+
+// 自定义 404 响应行为
+app.all("/*", (_req: NovaRequest, res: NovaResponse) => {
+  res.status(404).json({ error: "接口不存在" });
+});
 
 // 全局错误处理
 const errorHandler: ErrorMiddleware = (err, _req, res, _next) => {
