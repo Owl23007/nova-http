@@ -109,7 +109,7 @@ export class Application {
     return this;
   }
 
-  /** 移除已注册的核心或扩展 hook listener。 */
+  /** 移除已注册的核心或扩展 hook listener */
   removeHook<K extends HookName>(name: K, handler: HookHandler<K>): this {
     this.hooks.removeHook(name, handler);
     return this;
@@ -165,6 +165,19 @@ export class Application {
    * @returns 当前应用是否已经处理该请求
    */
   private async _tryDispatch(
+    req: NovaRequest,
+    res: NovaResponse,
+    fallthroughOnNotFound: boolean,
+  ): Promise<boolean> {
+    try {
+      return await this._tryDispatchRequest(req, res, fallthroughOnNotFound);
+    } catch (error: unknown) {
+      await this._chain.dispatchError(error, req, res, this._middlewareContext);
+      return true;
+    }
+  }
+
+  private async _tryDispatchRequest(
     req: NovaRequest,
     res: NovaResponse,
     fallthroughOnNotFound: boolean,

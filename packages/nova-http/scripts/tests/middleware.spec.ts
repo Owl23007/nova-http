@@ -8,6 +8,7 @@ import {
   type NovaResponse,
   type NextFunction,
 } from "../../src";
+import { MiddlewareChain } from "../../src/core";
 
 let app: Nova | undefined;
 
@@ -173,5 +174,154 @@ describe("Middleware", () => {
     await request(port, "/compiled");
 
     expect(calls).toEqual(["first", "second", "terminal", "first", "second", "terminal"]);
+  });
+
+  it("allows next to advance the chain only once per middleware invocation", () => {
+    const chain = new MiddlewareChain();
+    const calls: string[] = [];
+
+    chain.use((_req: NovaRequest, _res: NovaResponse, next: NextFunction) => {
+      calls.push("first");
+      next();
+      next();
+    });
+    chain.use(() => {
+      calls.push("second");
+    });
+    chain.use(() => {
+      calls.push("third");
+    });
+
+    void chain.dispatch({} as NovaRequest, { headersSent: false } as NovaResponse);
+
+    expect(calls).toEqual(["first", "second"]);
+  });
+
+  it("allows next to advance the error chain only once per error middleware invocation", () => {
+    const chain = new MiddlewareChain();
+    const calls: string[] = [];
+
+    chain.use((_err: unknown, _req: NovaRequest, _res: NovaResponse, next: NextFunction) => {
+      calls.push("first");
+      next();
+      next();
+    });
+    chain.use((_err: unknown, _req: NovaRequest, _res: NovaResponse, _next: NextFunction) => {
+      calls.push("second");
+    });
+    chain.use((_err: unknown, _req: NovaRequest, _res: NovaResponse, _next: NextFunction) => {
+      calls.push("third");
+    });
+
+    void chain.dispatchError(
+      new Error("test"),
+      {} as NovaRequest,
+      { headersSent: false } as NovaResponse,
+    );
+
+    expect(calls).toEqual(["first", "second"]);
+  });
+
+  it("passes thrown and rejected error middleware errors down the chain", async () => {
+    app = createApp();
+    const calls: string[] = [];
+
+    app.use((err: unknown, _req: NovaRequest, _res: NovaResponse, _next: NextFunction) => {
+      calls.push(err instanceof Error ? err.message : "unknown");
+      throw new Error("replacement error");
+    });
+    app.use(async (err: unknown, _req: NovaRequest, _res: NovaResponse, _next: NextFunction) => {
+      calls.push(err instanceof Error ? err.message : "unknown");
+      throw new Error("async replacement error");
+    });
+    app.use((err: unknown, _req: NovaRequest, res: NovaResponse, _next: NextFunction) => {
+      calls.push(err instanceof Error ? err.message : "unknown");
+      res.status(503).send("recovered");
+    });
+    app.get("/failure", () => {
+      throw new Error("route error");
+    });
+
+    const port = await listen(app);
+    const response = await request(port, "/failure");
+
+    expect(response).toContain("HTTP/1.1 503 Service Unavailable");
+    expect(response).toContain("recovered");
+    expect(calls).toEqual(["route error", "replacement error", "async replacement error"]);
+  });
+
+  it("passes route middleware errors to application error middleware", async () => {
+    app = createApp();
+    const calls: string[] = [];
+
+    app.use((err: unknown, _req: NovaRequest, res: NovaResponse, _next: NextFunction) => {
+      calls.push(err instanceof Error ? err.message : "unknown");
+      res.status(422).send("handled");
+    });
+    app.get(
+      "/route-middleware-failure",
+      () => {
+        throw new Error("route middleware error");
+      },
+      (_req: NovaRequest, res: NovaResponse) => {
+        res.send("unreachable");
+      },
+    );
+
+    const port = await listen(app);
+    const response = await request(port, "/route-middleware-failure");
+
+    expect(response).toContain("HTTP/1.1 422 Unprocessable Entity");
+    expect(response).toContain("handled");
+    expect(response).not.toContain("unreachable");
+    expect(calls).toEqual(["route middleware error"]);
+  });
+
+  it("uses the final 500 response only after all error middleware is exhausted", async () => {
+    app = createApp();
+    let observedError: unknown;
+
+    app.addHook("onError", ({ error }) => {
+      observedError = error;
+    });
+    app.use((_err: unknown, _req: NovaRequest, _res: NovaResponse, next: NextFunction) => {
+      next(new Error("unhandled replacement"));
+    });
+    app.get("/unhandled", () => {
+      throw new Error("initial error");
+    });
+
+    const port = await listen(app);
+    const response = await request(port, "/unhandled");
+
+    expect(response).toContain("HTTP/1.1 500 Internal Server Error");
+    expect(response).toContain("Internal Server Error");
+    expect(observedError).toMatchObject({ message: "unhandled replacement" });
+  });
+
+  it("passes an unhandled child application error to the parent error middleware", async () => {
+    app = createApp();
+    const child = createApp();
+    const calls: string[] = [];
+
+    child.use((err: unknown, _req: NovaRequest, _res: NovaResponse, next: NextFunction) => {
+      calls.push(`child:${err instanceof Error ? err.message : "unknown"}`);
+      next(new Error("child replacement"));
+    });
+    child.get("/", () => {
+      throw new Error("child route error");
+    });
+    app.use("/child", child);
+    app.use((err: unknown, _req: NovaRequest, res: NovaResponse, _next: NextFunction) => {
+      calls.push(`parent:${err instanceof Error ? err.message : "unknown"}`);
+      res.status(502).send("handled by parent");
+    });
+
+    const port = await listen(app);
+    const response = await request(port, "/child");
+
+    expect(response).toContain("HTTP/1.1 502 Bad Gateway");
+    expect(response).toContain("handled by parent");
+    expect(calls).toEqual(["child:child route error", "parent:child replacement"]);
   });
 });
