@@ -361,6 +361,10 @@ app.removeHook(hookName, handler);
 
 Hook handler 接收一个上下文对象，并可返回 `void` 或 `Promise<void>`。Hook 用于日志和指标等观测任务；异步 handler 以 fire-and-forget 方式执行，不会阻塞请求链路。
 
+> Middleware 参与控制流，Hook 观察生命周期
+> 需要终止请求、决定是否 `next()`或修改业务请求/响应时，应使用 middleware 或终端 handler。
+> Hook 异常会被隔离，不会使已成功的请求失败。
+
 下表是框架内置的 core 与 server 生命周期事件。Middleware/plugin 可以通过 namespace 定义扩展
 事件，不需要把业务语义加入 core。
 
@@ -401,19 +405,9 @@ middleware 完成。
 
 ```typescript
 // 全链路耗时统计
-app.addHook("onRequest", ({ req }) => {
-  req.context["startedAt"] = process.hrtime.bigint();
+app.addHook("onResponse", ({ req, statusCode, durationMs }) => {
+  console.log(`${req.pathname} ${statusCode} ${durationMs.toFixed(3)}ms`);
 });
-
-app.addHook("onResponse", ({ req, statusCode }) => {
-  const ns = process.hrtime.bigint() - (req.context["startedAt"] as bigint);
-  console.log(`${req.pathname} ${statusCode} ${Number(ns) / 1e6}ms`);
-});
-
-// 或直接使用内置插件
-const timer = createRequestTimer();
-app.addHook("onRequest", timer.onRequest);
-app.addHook("onResponse", timer.onResponse);
 ```
 
 ---
