@@ -130,4 +130,18 @@ function validateNovaConfig(config: NovaConfig): void {
   if (config.checkContinue !== undefined && typeof config.checkContinue !== "function") {
     throw new TypeError("checkContinue must be a function");
   }
+
+  // 5. 验证 trustProxy 配置项
+  // trustProxy 用于控制是否信任代理服务器的 X-Forwarded-* 头部信息
+  const trustProxy = config.trustProxy;
+  if (trustProxy !== undefined) {
+    const type = typeof trustProxy;
+    if (typeof trustProxy === "number") {
+      if (!Number.isSafeInteger(trustProxy) || trustProxy < 0) {
+        throw new RangeError("trustProxy must be a non-negative safe integer");
+      }
+    } else if (type !== "boolean" && type !== "function") {
+      throw new TypeError("trustProxy must be a boolean, non-negative integer, or function");
+    }
+  }
 }

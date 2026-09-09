@@ -19,6 +19,7 @@
  *   app.use(bodyParser({ types: ['json'] }))        // 仅解析 JSON
  */
 
+import { isJsonMediaType, mediaType } from "../message/media-type";
 import type { MiddlewareContext, NextFunction, NovaRequest, NovaResponse } from "../core";
 
 export interface BodyParserData {
@@ -155,11 +156,14 @@ function selectBodyParser(
   contentType: string,
   config: BodyParserConfig,
 ): ((text: string) => ParseBodyResult) | null {
-  if (config.types.has("json") && contentType.includes("application/json")) {
+  if (config.types.has("json") && isJsonMediaType(contentType)) {
     return (text) => parseJsonBody(text, config.strict);
   }
 
-  if (config.types.has("urlencoded") && contentType.includes("application/x-www-form-urlencoded")) {
+  if (
+    config.types.has("urlencoded") &&
+    mediaType(contentType) === "application/x-www-form-urlencoded"
+  ) {
     return (text) => parseUrlEncodedBody(text, config.maxParams);
   }
 

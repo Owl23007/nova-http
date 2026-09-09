@@ -346,6 +346,33 @@ describe("connection lifecycle", () => {
     expect(Buffer.concat(connection.chunks).toString("utf8")).toContain("ok");
   });
 
+  it("isolates errors thrown by the trust proxy policy", async () => {
+    const policyError = new Error("trust policy failed");
+    let observedError: unknown;
+    app = createApp({
+      trustProxy: () => {
+        throw policyError;
+      },
+    });
+    app.addHook("onError", ({ error }) => {
+      observedError = error;
+    });
+
+    const port = await listen(app);
+    const connection = await connect(port);
+    socket = connection.socket;
+    const ended = once(socket, "end");
+    socket.write(
+      "GET / HTTP/1.1\r\nHost: localhost\r\nX-Forwarded-For: 192.0.2.1\r\nConnection: close\r\n\r\n",
+    );
+    await waitWithTimeout(ended, 500);
+
+    expect(observedError).toBe(policyError);
+    expect(Buffer.concat(connection.chunks).toString("utf8")).toContain(
+      "HTTP/1.1 500 Internal Server Error",
+    );
+  });
+
   it("reports an incomplete fixed body when the client ends input early", async () => {
     app = createApp();
     app.post("/incomplete", async (req: NovaRequest, res: NovaResponse) =>

@@ -44,6 +44,7 @@ export type {
   ContinueDecision,
   DisconnectHookContext,
   Http1ConnectionConfig,
+  TrustProxy,
   ListenHookContext,
 } from "./server";
 export type {

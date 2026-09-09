@@ -146,3 +146,21 @@ describe("bodyParser", () => {
     expect(observationFinished).toBe(true);
   });
 });
+
+it.each(["application/problem+json", "Application/JSON; charset=utf-8"])(
+  "parses JSON media type %s",
+  async (type) => {
+    const req = makeReq('{"ok":true}', type);
+    await bodyParser()(req as any, makeRes() as any, () => {});
+    expect(req.context.bodyParserData?.body).toEqual({ ok: true });
+  },
+);
+it.each([
+  "application/jsonp",
+  "text/plain; type=application/json",
+  "application/x-www-form-urlencoded-extra",
+])("skips unrelated media type %s", async (type) => {
+  const req = makeReq("invalid", type);
+  await bodyParser()(req as any, makeRes() as any, () => {});
+  expect(req.context.bodyParserData).toBeUndefined();
+});

@@ -57,7 +57,9 @@ function createResponse(
   body._complete();
   const request = new NovaRequest({
     method: options.method ?? "GET",
-    target: "/",
+    clientIp: "127.0.0.1",
+    rawTarget: "/",
+    path: "/",
     version: options.httpVersion ?? "1.1",
     headers: new HeaderBlock(),
     body,

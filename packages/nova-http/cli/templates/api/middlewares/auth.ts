@@ -18,6 +18,12 @@ interface JwtPayload {
   exp?: number;
 }
 
+declare module "nova-http" {
+  interface RequestLocals {
+    user?: JwtPayload;
+  }
+}
+
 export function authMiddleware(): Middleware {
   return function auth(req: NovaRequest, res: NovaResponse, next: NextFunction): void {
     const authHeader = req.headers.get("authorization") ?? "";
@@ -63,7 +69,7 @@ export function authMiddleware(): Middleware {
     }
 
     // 将用户信息注入请求上下文
-    req.context["user"] = payload;
+    req.context.user = payload;
 
     next();
   };
