@@ -279,11 +279,11 @@ app.use(
 
 Hooks are intended for observation such as logs and metrics. Async hook handlers are fire-and-forget and do not block request processing.
 
-```typescript
-app.addHook("onRequest", ({ req }) => {
-  req.context.startedAt = process.hrtime.bigint();
-});
+> Middleware participates in control flow; hooks observe the lifecycle. Use middleware or a terminal
+> handler when code must stop a request, decide whether to call `next()`, or change application request
+> or response semantics. Hook failures are isolated and do not fail an otherwise successful request.
 
+```typescript
 app.addHook("onResponse", ({ req, statusCode, durationMs }) => {
   console.log(`${req.method} ${req.pathname} ${statusCode} ${durationMs.toFixed(2)}ms`);
 });
@@ -295,16 +295,6 @@ Core defines `onRequest`, `onRoute`, `onResponse`, `onError`, and `onNotFound`; 
 `nova-http` and emit it through `this.hooks.emitHook(...)` from a normal function middleware. No
 runtime event-type registry is required. Hooks are non-blocking observations; request control flow
 belongs in middleware.
-
-Nova also provides a request-timer helper:
-
-```typescript
-import { createRequestTimer } from "nova-http";
-
-const timer = createRequestTimer();
-app.addHook("onRequest", timer.onRequest);
-app.addHook("onResponse", timer.onResponse);
-```
 
 ## CLI
 
