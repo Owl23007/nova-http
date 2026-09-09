@@ -250,7 +250,7 @@ export function parseHead(buffer: Buffer, limits: ParserLimits): ParsedHead | Ht
   if (
     hosts.length > 1 ||
     (version === "1.1" && hosts.length !== 1) ||
-    (hosts.length === 1 && !isValidHostField(hosts[0]))
+    (hosts.length === 1 && !isValidAuthority(hosts[0]))
   ) {
     return http1Error(
       "syntax",
@@ -260,7 +260,7 @@ export function parseHead(buffer: Buffer, limits: ParserLimits): ParsedHead | Ht
       "HTTP/1.1 requires exactly one non-empty Host field",
     );
   }
-  return { method, rawTarget, target, version, headers };
+  return { method, rawTarget, target, path: applicationPath(target), version, headers };
 }
 
 export function parseTrailers(buffer: Buffer, limits: ParserLimits): HeaderBlock | Http1Error {
@@ -537,7 +537,7 @@ function resolveTarget(method: string, raw: string): RequestTarget | Http1Error 
     return { form: "authority", raw };
   }
   if (raw.startsWith("/")) return { form: "origin", raw };
-  if (/^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(raw)) return { form: "absolute", raw };
+  if (/^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(raw)) return resolveAbsoluteTarget(raw);
   return http1Error(
     "syntax",
     "HPE_INVALID_TARGET_FORM",
@@ -547,46 +547,152 @@ function resolveTarget(method: string, raw: string): RequestTarget | Http1Error 
   );
 }
 
+function resolveAbsoluteTarget(raw: string): RequestTarget | Http1Error {
+  const schemeEnd = raw.indexOf("://");
+  const authorityStart = schemeEnd + 3;
+  const suffix = raw.slice(authorityStart);
+  const boundary = suffix.search(/[/?]/);
+  const authority = boundary === -1 ? suffix : suffix.slice(0, boundary);
+  if (!isValidAuthority(authority)) {
+    return http1Error(
+      "syntax",
+      "HPE_INVALID_TARGET",
+      400,
+      "request-line",
+      "Absolute request target contains an invalid authority",
+    );
+  }
+  const remainder = boundary === -1 ? "" : suffix.slice(boundary);
+  return {
+    form: "absolute",
+    raw,
+    scheme: raw.slice(0, schemeEnd),
+    authority,
+    path: remainder === "" ? "/" : remainder.startsWith("?") ? `/${remainder}` : remainder,
+  };
+}
+
 function isAuthorityForm(value: string): boolean {
   if (value.length === 0 || value.includes("/") || value.includes("?") || value.includes("@"))
     return false;
-  if (value.startsWith("[")) return /^\[[0-9A-Fa-f:.]+\]:[0-9]+$/.test(value);
-  return /^[^:\s]+:[0-9]+$/.test(value);
+  if (!isValidAuthority(value)) return false;
+  if (value.startsWith("[")) {
+    const closing = value.indexOf("]");
+    return value[closing + 1] === ":";
+  }
+  return value.includes(":");
 }
 
-function isValidHostField(value: string): boolean {
+function isValidAuthority(value: string): boolean {
   if (value.length === 0) return false;
   let hostEnd = value.length;
   if (value.startsWith("[")) {
     const closing = value.indexOf("]");
     if (closing <= 1) return false;
-    for (let i = 1; i < closing; i++) {
-      const code = value.charCodeAt(i);
-      const valid =
-        (code >= 0x30 && code <= 0x39) ||
-        (code >= 0x41 && code <= 0x5a) ||
-        (code >= 0x61 && code <= 0x7a) ||
-        ":.-_~!$&'()*+,;=".includes(value[i]);
-      if (!valid) return false;
-    }
+    if (!isValidIpLiteral(value.slice(1, closing))) return false;
     hostEnd = closing + 1;
   } else {
     const colon = value.lastIndexOf(":");
     hostEnd = colon === -1 ? value.length : colon;
     if (value.indexOf(":") !== colon) return false;
-    for (let i = 0; i < hostEnd; i++) {
-      const code = value.charCodeAt(i);
-      const valid =
-        (code >= 0x30 && code <= 0x39) ||
-        (code >= 0x41 && code <= 0x5a) ||
-        (code >= 0x61 && code <= 0x7a) ||
-        "-._~%!$&'()*+,;=".includes(value[i]);
-      if (!valid) return false;
-    }
+    if (!isValidRegName(value.slice(0, hostEnd))) return false;
   }
   if (hostEnd === value.length) return true;
   if (value[hostEnd] !== ":" || hostEnd + 1 === value.length) return false;
   return isDigits(value.substring(hostEnd + 1));
+}
+
+function isValidIpLiteral(value: string): boolean {
+  if (isValidIpv6Address(value)) return true;
+  if (value.length < 4 || (value[0] !== "v" && value[0] !== "V")) return false;
+  const dot = value.indexOf(".", 1);
+  if (dot <= 1 || dot === value.length - 1) return false;
+  for (let index = 1; index < dot; index++) {
+    if (hexValue(value.charCodeAt(index)) < 0) return false;
+  }
+  for (let index = dot + 1; index < value.length; index++) {
+    const code = value.charCodeAt(index);
+    if (!isUnreserved(code) && !"!$&'()*+,;=:".includes(value[index])) return false;
+  }
+  return true;
+}
+
+function isValidIpv6Address(value: string): boolean {
+  const compression = value.indexOf("::");
+  if (compression !== -1 && value.indexOf("::", compression + 2) !== -1) return false;
+
+  let parts: string[];
+  if (compression === -1) {
+    if (value.startsWith(":") || value.endsWith(":")) return false;
+    parts = value.split(":");
+  } else {
+    const left = value.slice(0, compression);
+    const right = value.slice(compression + 2);
+    parts = [...(left === "" ? [] : left.split(":")), ...(right === "" ? [] : right.split(":"))];
+  }
+  if (parts.some((part) => part.length === 0)) return false;
+
+  let units = 0;
+  for (let index = 0; index < parts.length; index++) {
+    const part = parts[index];
+    if (part.includes(".")) {
+      if (index !== parts.length - 1 || !isValidIpv4Address(part)) return false;
+      units += 2;
+      continue;
+    }
+    if (part.length > 4) return false;
+    for (let offset = 0; offset < part.length; offset++) {
+      if (hexValue(part.charCodeAt(offset)) < 0) return false;
+    }
+    units++;
+  }
+  return compression === -1 ? units === 8 : units < 8;
+}
+
+function isValidIpv4Address(value: string): boolean {
+  const parts = value.split(".");
+  if (parts.length !== 4) return false;
+  return parts.every(
+    (part) =>
+      part.length > 0 &&
+      (part.length === 1 || part[0] !== "0") &&
+      isDigits(part) &&
+      Number(part) <= 255,
+  );
+}
+
+function isValidRegName(value: string): boolean {
+  return value.length > 0 && isUriComponent(value, 0, false);
+}
+
+function isUriComponent(value: string, start: number, allowColon: boolean): boolean {
+  for (let index = start; index < value.length; index++) {
+    const code = value.charCodeAt(index);
+    if (isUnreserved(code) || "!$&'()*+,;=".includes(value[index])) continue;
+    if (allowColon && code === 0x3a) continue;
+    if (
+      code !== 0x25 ||
+      index + 2 >= value.length ||
+      hexValue(value.charCodeAt(index + 1)) < 0 ||
+      hexValue(value.charCodeAt(index + 2)) < 0
+    ) {
+      return false;
+    }
+    index += 2;
+  }
+  return true;
+}
+
+function isUnreserved(code: number): boolean {
+  return (
+    (code >= 0x30 && code <= 0x39) ||
+    (code >= 0x41 && code <= 0x5a) ||
+    (code >= 0x61 && code <= 0x7a) ||
+    code === 0x2d ||
+    code === 0x2e ||
+    code === 0x5f ||
+    code === 0x7e
+  );
 }
 
 function splitCommaValues(values: readonly string[]): string[] {
@@ -693,4 +799,9 @@ function hexValue(byte: number): number {
   if (byte >= 0x41 && byte <= 0x46) return byte - 0x41 + 10;
   if (byte >= 0x61 && byte <= 0x66) return byte - 0x61 + 10;
   return -1;
+}
+
+/** 仅移除 scheme 和 authority 部分，保留点路径段、转义字符和空查询字符串 */
+function applicationPath(target: RequestTarget): string {
+  return target.form === "absolute" ? target.path : target.raw;
 }

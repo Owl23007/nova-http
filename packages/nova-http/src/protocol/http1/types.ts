@@ -6,7 +6,13 @@ export type HttpMethod = string;
 
 export type RequestTarget =
   | { readonly form: "origin"; readonly raw: string }
-  | { readonly form: "absolute"; readonly raw: string }
+  | {
+      readonly form: "absolute";
+      readonly raw: string;
+      readonly scheme: string;
+      readonly authority: string;
+      readonly path: string;
+    }
   | { readonly form: "authority"; readonly raw: string }
   | { readonly form: "asterisk"; readonly raw: "*" };
 
@@ -14,6 +20,7 @@ export interface ParsedHead {
   readonly method: string;
   readonly rawTarget: string;
   readonly target: RequestTarget;
+  readonly path: string;
   readonly version: HttpVersion;
   readonly headers: HeaderBlock;
 }
