@@ -3,7 +3,13 @@ import { bodyParser } from "../../src/middlewares";
 
 function makeReq(body: string, contentType: string) {
   return {
-    body: Buffer.from(body, "utf8"),
+    buffer: async ({ maxSize }: { maxSize?: number } = {}) => {
+      const value = Buffer.from(body, "utf8");
+      if (maxSize !== undefined && value.length > maxSize) {
+        throw new RangeError("Request body exceeds the configured limit");
+      }
+      return value;
+    },
     bodyParsed: undefined,
     headers: new Map([["content-type", contentType]]),
   };
@@ -24,12 +30,12 @@ function makeRes() {
 }
 
 describe("bodyParser", () => {
-  it("UT-BODY-01 解析 JSON 请求体", () => {
+  it("UT-BODY-01 解析 JSON 请求体", async () => {
     const req = makeReq('{"name":"nova"}', "application/json");
     const res = makeRes();
     let nextCalled = false;
 
-    bodyParser()(req as any, res as any, () => {
+    await bodyParser()(req as any, res as any, () => {
       nextCalled = true;
     });
 
@@ -37,21 +43,21 @@ describe("bodyParser", () => {
     expect(req.bodyParsed).toEqual({ name: "nova" });
   });
 
-  it("UT-BODY-02 解析 urlencoded 请求体", () => {
+  it("UT-BODY-02 解析 urlencoded 请求体", async () => {
     const req = makeReq("name=nova&tag=http&tag=test", "application/x-www-form-urlencoded");
     const res = makeRes();
 
-    bodyParser()(req as any, res as any, () => {});
+    await bodyParser()(req as any, res as any, () => {});
 
     expect(req.bodyParsed).toEqual({ name: "nova", tag: ["http", "test"] });
   });
 
-  it("UT-BODY-03 拒绝非法 JSON 请求体", () => {
+  it("UT-BODY-03 拒绝非法 JSON 请求体", async () => {
     const req = makeReq("{bad", "application/json");
     const res = makeRes();
     let nextCalled = false;
 
-    bodyParser()(req as any, res as any, () => {
+    await bodyParser()(req as any, res as any, () => {
       nextCalled = true;
     });
 
@@ -60,11 +66,11 @@ describe("bodyParser", () => {
     expect(res.sent).toBe("Invalid JSON body");
   });
 
-  it("UT-BODY-04 拒绝超过配置限制的请求体", () => {
+  it("UT-BODY-04 拒绝超过配置限制的请求体", async () => {
     const req = makeReq("abcdef", "application/json");
     const res = makeRes();
 
-    bodyParser({ maxSize: 3 })(req as any, res as any, () => {});
+    await bodyParser({ maxSize: 3 })(req as any, res as any, () => {});
 
     expect(res.code).toBe(413);
     expect(res.sent).toBe("Payload Too Large");

@@ -42,6 +42,7 @@ await app.listen(3000);
 - Static files with ETags, `Last-Modified`, and range requests
 - Node.js `Readable` and async-iterable streaming
 - Backpressure-aware response writes
+- Backpressure-aware streaming request bodies
 - Ten lifecycle hooks for logs and metrics
 - Keep-Alive, header timeouts, request timeouts, and body-size limits
 

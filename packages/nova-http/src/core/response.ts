@@ -55,7 +55,7 @@ export class NovaResponse {
     public readonly socket: Socket,
     private readonly _req: NovaRequest,
   ) {
-    this._connectionReusable = _req.keepAlive;
+    this._connectionReusable = !_req.connection.close;
     this._headers.set("server", "Nova");
   }
 

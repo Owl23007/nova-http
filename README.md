@@ -95,16 +95,22 @@ npm run build
 TCP 连接到达
     │
     ▼
-ConnectionHandler          ← 超时管理 / Keep-Alive / 背压
+Http1Connection            ← 输入与应用生命周期 / 超时 / 连接复用
     │
     ▼
-BufferReader               ← 滑动窗口 Buffer，零拷贝追加
+SegmentedInput             ← 分段 TCP 字节流，追加时不 concat
     │
     ▼
-HttpParser (10 状态)       ← 请求行 / 头部 / 定长/分块 Body
+Head scanner/parser        ← 严格 CRLF / 有界 head 连续化 / HeaderBlock
     │
     ▼
-Nova._dispatch()           ← 全局中间件链
+Message framing            ← 独立解决 TE / CL 优先级与冲突
+    │
+    ▼
+IncomingBody               ← Readable 零拷贝视图 / 背压 / fixed 与 chunked 解码
+    │
+    ▼
+Nova._dispatch()           ← head 完成后立即进入中间件链
     │
     ▼
 Router.find()              ← Radix Tree，O(k) 匹配
@@ -119,19 +125,17 @@ NovaResponse writer        ← fixed/chunked framing + 背压控制
 TCP 响应 / Keep-Alive 复用
 ```
 
-### HTTP 解析器状态机
+### HTTP 输入模型
 
 ```text
-IDLE
-  └=> REQUEST_LINE    解析 "GET /path HTTP/1.1\r\n"
-        └=> HEADERS   逐行解析请求头，检测 Content-Length / Transfer-Encoding
-              └=> BODY_DETECT
-                    ├=> BODY_FIXED                           定长 Body
-                    ├=> BODY_CHUNKED → CHUNK_SIZE
-                    │                    ├=> CHUNK_DATA       读取数据并继续下一块
-                    │                    └=> CHUNK_TRAILERS   读取尾部字段
-                    └=> DONE                                请求解析完成
+READ_HEAD → HEAD_READY → READ_BODY → MESSAGE_COMPLETE
+                │             │
+                │             └─ fixed/chunked 数据视图推入 Readable
+                └─ handler 可在 body 未完成时开始消费
 ```
+
+请求头在单个 TCP Buffer 内时使用 `subarray()`，跨段时最多复制一次
+请求体保持流式路径，`Readable.push()` 返回 `false` 时会停止解码并暂停 socket
 
 ---
 
@@ -145,16 +149,18 @@ function createApp(config?: NovaConfig): Nova;
 
 **`NovaConfig` 选项：**
 
-| 字段               | 类型      | 默认值          | 说明                                                                  |
-| ------------------ | --------- | --------------- | --------------------------------------------------------------------- |
-| `port`             | `number`  | `3000`          | `app.listen()` 未传端口时使用的默认端口                               |
-| `host`             | `string`  | `"0.0.0.0"`     | `app.listen()` 未传主机时使用的默认地址                               |
-| `maxConnections`   | `number`  | `0`             | 最大并发连接数，`0` 表示不限制                                        |
-| `maxBodySize`      | `number`  | `1048576` (1MB) | 请求体最大字节数，超出则返回 413                                      |
-| `keepAliveTimeout` | `number`  | `65000`         | Keep-Alive 空闲超时（毫秒）                                           |
-| `headersTimeout`   | `number`  | `60000`         | 接收完整请求头的超时（毫秒），防 Slowloris                            |
-| `requestTimeout`   | `number`  | `600000`        | 普通 handler 的处理超时（毫秒），进入流式模式后停止计时；`0` 表示禁用 |
-| `trustProxy`       | `boolean` | `false`         | 信任代理 IP 请求头，影响 `req.ip`                                     |
+| 字段                | 类型      | 默认值          | 说明                                                                  |
+| ------------------- | --------- | --------------- | --------------------------------------------------------------------- |
+| `port`              | `number`  | `3000`          | `app.listen()` 未传端口时使用的默认端口                               |
+| `host`              | `string`  | `"0.0.0.0"`     | `app.listen()` 未传主机时使用的默认地址                               |
+| `maxConnections`    | `number`  | `0`             | 最大并发连接数，`0` 表示不限制                                        |
+| `maxBodySize`       | `number`  | `1048576` (1MB) | 请求体最大字节数，超出则返回 413                                      |
+| `keepAliveTimeout`  | `number`  | `65000`         | Keep-Alive 空闲超时（毫秒）                                           |
+| `headersTimeout`    | `number`  | `60000`         | 接收完整请求头的超时（毫秒），防 Slowloris                            |
+| `requestTimeout`    | `number`  | `600000`        | 普通 handler 的处理超时（毫秒），进入流式模式后停止计时；`0` 表示禁用 |
+| `bodyIdleTimeout`   | `number`  | `30000`         | 请求体连续无输入的超时（毫秒）；`0` 表示禁用                          |
+| `bodyHighWaterMark` | `number`  | `65536`         | 请求体 Readable 的背压水位                                            |
+| `trustProxy`        | `boolean` | `false`         | 信任代理 IP 请求头，影响 `req.ip`                                     |
 
 服务生命周期和已注册路由可通过应用实例管理：
 
@@ -264,19 +270,21 @@ app.use((err: Error, _req, res, _next) => {
 | `path`        | `string`                 | 原始路径字符串（含查询字符串）                 |
 | `pathname`    | `string`                 | 不含查询字符串的路径                           |
 | `httpVersion` | `'1.0' \| '1.1'`         | HTTP 版本                                      |
-| `headers`     | `Map<string, string>`    | 请求头（键已小写化）                           |
-| `body`        | `Buffer`                 | 原始请求体 Buffer                              |
+| `headers`     | `HeaderBlock`            | 保留顺序和重复项的请求字段                     |
+| `body`        | `IncomingBody`           | 支持背压的 Node.js `Readable` 请求体           |
+| `trailers`    | `HeaderBlock`            | 消息体完成后可用的独立 Trailer 字段            |
 | `bodyParsed`  | `any`                    | `bodyParser()` 解析后的结构化数据              |
 | `params`      | `Record<string, string>` | 路径参数，如 `{ id: '42' }`                    |
 | `query`       | `URLSearchParams`        | 查询字符串（惰性解析）                         |
 | `cookies`     | `Record<string, string>` | Cookie 键值对（惰性解析）                      |
 | `ip`          | `string`                 | 客户端 IP（`trustProxy` 时读 X-Forwarded-For） |
 | `context`     | `Record<string, any>`    | 中间件间共享的请求上下文                       |
-| `keepAlive`   | `boolean`                | 是否为 Keep-Alive 连接                         |
+| `connection`  | `ConnectionIntent`       | close / upgrade / CONNECT 连接意图             |
 | `socket`      | `net.Socket`             | 底层 TCP socket                                |
 | `signal`      | `AbortSignal`            | 客户端断开、超时或服务关闭时触发               |
 
-请求对象还提供 `req.getHeader(name)`、`req.isJson`、`req.isForm` 和 `req.bodySize` 等便捷访问器。
+请求体默认不物化，可直接 `for await (const chunk of req.body)` 消费，或使用 `await req.buffer()`、`await req.text()`、`await req.json()`
+未消费完请求体时连接不会被复用
 
 ---
 
@@ -476,11 +484,14 @@ nova/
 │   ├── nova-http/
 │   │   ├── src/
 │   │   │   ├── core/
-│   │   │   │   ├── buffer-reader.ts       滑动窗口 TCP Buffer 读取器
-│   │   │   │   ├── http-parser.ts         10 状态 HTTP/1.1 解析器
+│   │   │   │   ├── http1/
+│   │   │   │   │   ├── input.ts          分段 TCP 字节输入
+│   │   │   │   │   ├── parser.ts         head 扫描、语法和 framing
+│   │   │   │   │   ├── headers.ts        保留重复项的字段集合
+│   │   │   │   │   ├── body.ts           Readable 请求体
+│   │   │   │   │   └── connection.ts     HTTP/1.1 连接协调器
 │   │   │   │   ├── request.ts             请求对象与惰性属性
 │   │   │   │   ├── response.ts            响应与流式写入
-│   │   │   │   ├── connection-handler.ts  TCP 连接生命周期管理
 │   │   │   │   ├── router.ts              Radix Tree 路由器
 │   │   │   │   ├── middleware-chain.ts    异步中间件组合器
 │   │   │   │   ├── hooks.ts               生命周期 hook
@@ -530,7 +541,7 @@ const app = createApp({ maxBodySize: uploadLimit });
 app.post("/upload", bodyParser({ maxSize: uploadLimit }), handler);
 ```
 
-`maxBodySize` 限制 HTTP parser 接收的原始 body，`bodyParser.maxSize` 是解析前的二次限制；两者同时使用时以较小值为准。默认均为 1MB。
+`maxBodySize` 是连接层的 body policy，不参与消息 framing 判定；`bodyParser.maxSize` 是显式物化前的二次限制，两者同时使用时以较小值为准
 
 ### 3. 使用钩子而非中间件做观测
 

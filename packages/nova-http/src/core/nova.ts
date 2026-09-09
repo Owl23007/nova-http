@@ -1,9 +1,9 @@
 import { createServer, Server, Socket } from "net";
 import {
-  ConnectionHandler,
-  type ConnectionConfig,
-  type ConnectionHandlerContext,
-} from "./connection-handler";
+  Http1Connection,
+  type Http1ConnectionConfig,
+  type Http1ConnectionContext,
+} from "./http1/connection";
 import { Hooks } from "./hooks";
 import { MiddlewareChain } from "./middleware-chain";
 import { createMountedMiddleware, createPrefixedMiddleware } from "./mount";
@@ -11,7 +11,7 @@ import { BUILTIN_HTTP_METHODS, createRouteBuilder } from "./route-builder";
 import { Router } from "./router";
 import type { ErrorMiddleware, Middleware } from "./middleware-chain";
 import type { HookHandler, HookName } from "./hooks";
-import type { HttpMethod } from "./http-parser";
+import type { HttpMethod } from "./http1/types";
 import type { NovaRequest } from "./request";
 import { NovaResponse } from "./response";
 import type { Handler } from "./router";
@@ -22,7 +22,7 @@ export type { RouteBuilder } from "./route-builder";
 /**
  * Nova 应用配置项
  */
-export interface NovaConfig extends Partial<ConnectionConfig> {
+export interface NovaConfig extends Partial<Http1ConnectionConfig> {
   /**
    * 默认监听的 TCP 端口
    *
@@ -76,10 +76,10 @@ export class Nova {
   private _server: Server | null = null;
 
   /** 活跃连接集合（用于优雅关闭） */
-  private readonly _connections: Set<ConnectionHandler> = new Set();
+  private readonly _connections: Set<Http1Connection> = new Set();
 
   /** 创建连接处理器时复用的配置与生命周期回调 */
-  private readonly connectionContext: ConnectionHandlerContext;
+  private readonly connectionContext: Http1ConnectionContext;
 
   /** 私有配置完整项 */
   private readonly _fullConfig: Required<NovaConfig>;
@@ -90,6 +90,7 @@ export class Nova {
    * @param config - 应用配置项
    */
   constructor(config: NovaConfig = {}) {
+    validateNovaConfig(config);
     this._fullConfig = {
       port: config.port ?? 3000,
       host: config.host ?? "0.0.0.0",
@@ -97,16 +98,24 @@ export class Nova {
       headersTimeout: config.headersTimeout ?? 60_000,
       keepAliveTimeout: config.keepAliveTimeout ?? 65_000,
       requestTimeout: config.requestTimeout ?? 600_000,
+      bodyIdleTimeout: config.bodyIdleTimeout ?? 30_000,
       maxBodySize: config.maxBodySize ?? 1_048_576, // 1MB
+      bodyHighWaterMark: config.bodyHighWaterMark ?? 64 * 1024,
       trustProxy: config.trustProxy ?? false,
+      parserLimits: config.parserLimits ?? {},
+      checkContinue: config.checkContinue ?? (() => true),
     };
 
-    const connectionConfig: ConnectionConfig = {
+    const connectionConfig: Http1ConnectionConfig = {
       headersTimeout: this._fullConfig.headersTimeout,
       keepAliveTimeout: this._fullConfig.keepAliveTimeout,
       requestTimeout: this._fullConfig.requestTimeout,
+      bodyIdleTimeout: this._fullConfig.bodyIdleTimeout,
       maxBodySize: this._fullConfig.maxBodySize,
+      bodyHighWaterMark: this._fullConfig.bodyHighWaterMark,
       trustProxy: this._fullConfig.trustProxy,
+      parserLimits: this._fullConfig.parserLimits,
+      checkContinue: this._fullConfig.checkContinue,
     };
 
     this.connectionContext = {
@@ -211,7 +220,7 @@ export class Nova {
   /**
    * 注册指定 HTTP 方法的路由
    *
-   * 适用于 WebDAV 等扩展方法。方法名会在路由器内部统一规范化为大写
+   * 适用于 WebDAV 等扩展方法，方法名按 HTTP 规范保持大小写敏感
    *
    * @param method - HTTP 方法名
    * @param path - 路由路径
@@ -288,9 +297,9 @@ export class Nova {
     const listenHost = host ?? this._fullConfig.host;
 
     return new Promise((resolve, reject) => {
-      // 客户端结束请求方向后仍可能等待长响应，半关闭连接必须由 ConnectionHandler 主动收尾
+      // 客户端结束请求方向后仍可能等待长响应，半关闭连接必须由 Http1Connection 主动收尾
       const server = createServer({ allowHalfOpen: true }, (socket: Socket) => {
-        const handler = new ConnectionHandler(socket, this.connectionContext);
+        const handler = new Http1Connection(socket, this.connectionContext);
         this._connections.add(handler);
 
         // 连接关闭时从集合中移除（通过 socket close 事件）
@@ -508,4 +517,35 @@ function toError(error: unknown): Error {
  */
 export function createApp(config?: NovaConfig): Nova {
   return new Nova(config);
+}
+
+function validateNovaConfig(config: NovaConfig): void {
+  const nonNegative = [
+    ["headersTimeout", config.headersTimeout],
+    ["keepAliveTimeout", config.keepAliveTimeout],
+    ["bodyIdleTimeout", config.bodyIdleTimeout],
+    ["requestTimeout", config.requestTimeout],
+    ["maxBodySize", config.maxBodySize],
+  ] as const;
+  for (const [name, value] of nonNegative) {
+    if (value !== undefined && (!Number.isSafeInteger(value) || value < 0)) {
+      throw new RangeError(`${name} must be a non-negative safe integer`);
+    }
+  }
+  if (
+    config.bodyHighWaterMark !== undefined &&
+    (!Number.isSafeInteger(config.bodyHighWaterMark) || config.bodyHighWaterMark <= 0)
+  ) {
+    throw new RangeError("bodyHighWaterMark must be a positive safe integer");
+  }
+  if (config.parserLimits !== undefined) {
+    for (const [name, value] of Object.entries(config.parserLimits)) {
+      if (value !== undefined && (!Number.isSafeInteger(value) || value <= 0)) {
+        throw new RangeError(`parserLimits.${name} must be a positive safe integer`);
+      }
+    }
+  }
+  if (config.checkContinue !== undefined && typeof config.checkContinue !== "function") {
+    throw new TypeError("checkContinue must be a function");
+  }
 }

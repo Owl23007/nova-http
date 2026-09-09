@@ -2,11 +2,23 @@
  * 核心模块统一导出
  */
 
-export { BufferReader } from "./buffer-reader";
-export { ConnectionHandler } from "./connection-handler";
+export { IncomingBody } from "./http1/body";
+export { Http1Connection } from "./http1/connection";
+export { HeaderBlock } from "./http1/headers";
+export { SegmentedInput } from "./http1/input";
+export {
+  buildRequestHead,
+  createHeadScanState,
+  DEFAULT_PARSER_LIMITS,
+  parseHead,
+  parseTrailers,
+  resolveConnectionIntent,
+  resolveFraming,
+  scanHead,
+  takeScannedBlock,
+} from "./http1/parser";
 export { createRequestTimer, Hooks } from "./hooks";
 export { getMimeType, getStatusText, parseRange } from "./http-metadata";
-export { HttpParser, ParseErrorCode } from "./http-parser";
 export { MiddlewareChain, compose } from "./middleware-chain";
 export { Nova, createApp } from "./nova";
 export { NovaRequest } from "./request";
@@ -14,7 +26,15 @@ export { NovaResponse } from "./response";
 export { BUILTIN_HTTP_METHODS, createRouteBuilder } from "./route-builder";
 export { Router } from "./router";
 
-export type { ConnectionConfig, ConnectionHandlerContext } from "./connection-handler";
+export type {
+  ContinueDecision,
+  Http1ConnectionConfig,
+  Http1ConnectionContext,
+} from "./http1/connection";
+export type { BodyReadOptions } from "./http1/body";
+export type { Http1Error, Http1ErrorPhase, Http1ErrorType } from "./http1/errors";
+export type { HeaderField } from "./http1/headers";
+export type { HeadScanResult, HeadScanState, ParserLimits } from "./http1/parser";
 export type {
   BodyParsedContext,
   ConnectContext,
@@ -30,12 +50,15 @@ export type {
   RouteContext,
 } from "./hooks";
 export type {
+  BodyPlan,
+  ConnectionIntent,
   HttpMethod,
-  HttpParserOptions,
+  HttpVersion,
+  ParsedHead,
   ParsedRequest,
-  ParseError,
-  ParseResult,
-} from "./http-parser";
+  RequestHead,
+  RequestTarget,
+} from "./http1/types";
 export type { RangeResult } from "./http-metadata";
 export type { StreamChunk, StreamSource } from "./response";
 export type { ErrorMiddleware, Middleware, NextFunction } from "./middleware-chain";

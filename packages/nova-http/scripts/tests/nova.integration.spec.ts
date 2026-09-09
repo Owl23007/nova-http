@@ -259,6 +259,20 @@ describe("Nova integration", () => {
     expect(response).toContain("custom method");
   });
 
+  it("treats HTTP methods as case-sensitive", async () => {
+    app = createApp();
+    app.get("/case", (_req: NovaRequest, res: NovaResponse) => res.send("upper"));
+    app.method("get", "/case", (_req: NovaRequest, res: NovaResponse) => res.send("lower"));
+
+    const port = await listen(app);
+    const response = await request(
+      port,
+      "get /case HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
+    );
+    expect(response).toContain("lower");
+    expect(response).not.toContain("upper");
+  });
+
   it("serves routes, parameters and JSON bodies over TCP", async () => {
     app = createApp();
     app.use(bodyParser());

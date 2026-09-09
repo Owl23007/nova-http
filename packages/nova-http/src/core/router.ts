@@ -1,4 +1,4 @@
-import type { HttpMethod } from "./http-parser";
+import type { HttpMethod } from "./http1/types";
 import type { NovaRequest } from "./request";
 import type { NovaResponse } from "./response";
 
@@ -70,12 +70,12 @@ export class Router {
 
   /**
    * 注册路由
-   * @param method HTTP 方法，注册时会统一转换为大写 token
+   * @param method HTTP 方法，大小写敏感
    * @param path 路由路径，如 '/users/:id/posts'
    * @param handler 处理函数
    */
   add(method: HttpMethod, path: string, handler: Handler): void {
-    const normalizedMethod = normalizeHttpMethod(method);
+    const normalizedMethod = validateHttpMethod(method);
     const normalizedPath = normalizePath(path);
     this._routes.push({ method: normalizedMethod, path: normalizedPath });
 
@@ -110,7 +110,7 @@ export class Router {
    * @returns 匹配结果（handler + params），未匹配返回 null
    */
   find(method: HttpMethod, pathname: string): RouteMatch | null {
-    const normalizedMethod = normalizeHttpMethod(method);
+    const normalizedMethod = validateHttpMethod(method);
     const normalizedPath = normalizePath(pathname);
     const segments = splitPath(normalizedPath);
 
@@ -232,12 +232,11 @@ function safeDecodeURIComponent(value: string): string {
   }
 }
 
-function normalizeHttpMethod(method: HttpMethod): HttpMethod {
-  const normalized = method.toUpperCase();
-  if (!isHttpToken(normalized)) {
-    throw new TypeError(`非法的 HTTP 方法: ${method.substring(0, 20)}`);
+function validateHttpMethod(method: HttpMethod): HttpMethod {
+  if (!isHttpToken(method)) {
+    throw new TypeError(`Invalid HTTP method: ${method.substring(0, 20)}`);
   }
-  return normalized;
+  return method;
 }
 
 function isHttpToken(text: string): boolean {

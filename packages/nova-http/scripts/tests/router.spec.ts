@@ -79,13 +79,13 @@ describe("Router", () => {
     expect(router.find("GET", "/users/profile/")?.handler).toBe(handler);
   });
 
-  it("UT-ROUTE-08 方法匹配忽略大小写", () => {
+  it("UT-ROUTE-08 方法匹配保持 HTTP 的大小写敏感语义", () => {
     const router = new Router();
     const handler = () => {};
 
     router.add("get", "/users", handler);
 
-    expect(router.find("GET", "/users")?.handler).toBe(handler);
+    expect(router.find("GET", "/users")).toBeNull();
     expect(router.find("get", "/users")?.handler).toBe(handler);
   });
 
@@ -140,15 +140,15 @@ describe("Router", () => {
     expect(router.findAllowedMethods("/users").sort()).toEqual(["GET", "POST"]);
   });
 
-  it("UT-ROUTE-13 支持注册扩展 HTTP 方法并统一规范为大写", () => {
+  it("UT-ROUTE-13 支持按原样注册扩展 HTTP 方法", () => {
     const router = new Router();
     const handler = () => {};
 
     router.add("propfind", "/files", handler);
 
-    expect(router.find("PROPFIND", "/files")?.handler).toBe(handler);
+    expect(router.find("PROPFIND", "/files")).toBeNull();
     expect(router.find("propfind", "/files")?.handler).toBe(handler);
-    expect(router.findAllowedMethods("/files")).toEqual(["PROPFIND"]);
-    expect(router.routes).toEqual([{ method: "PROPFIND", path: "/files" }]);
+    expect(router.findAllowedMethods("/files")).toEqual(["propfind"]);
+    expect(router.routes).toEqual([{ method: "propfind", path: "/files" }]);
   });
 });
