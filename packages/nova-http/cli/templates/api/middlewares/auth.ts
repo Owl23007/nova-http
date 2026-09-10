@@ -19,7 +19,7 @@ interface JwtPayload {
 }
 
 declare module "nova-http" {
-  interface RequestLocals {
+  interface RequestContext {
     user?: JwtPayload;
   }
 }

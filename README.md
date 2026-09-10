@@ -280,12 +280,12 @@ app.use((err: Error, _req, res, _next) => {
 | `query`       | `URLSearchParams`        | 查询字符串（惰性解析）                          |
 | `cookies`     | `Record<string, string>` | Cookie 键值对（惰性解析）                       |
 | `ip`          | `string`                 | 客户端 IP（`trustProxy` 时读 X-Forwarded-For）  |
-| `context`     | `RequestLocals`          | 可由 middleware/plugin 类型扩展的请求级共享状态 |
+| `context`     | `RequestContext`         | 可由 middleware/plugin 类型扩展的请求级共享状态 |
 | `connection`  | `ConnectionIntent`       | close / upgrade / CONNECT 连接意图              |
 | `peer`        | `ConnectionInfo`         | 与传输实现无关的远端/本地地址信息               |
 | `signal`      | `AbortSignal`            | 客户端断开、超时或服务关闭时触发                |
 
-`RequestLocals` 是 `req.context` 的声明合并扩展点。未声明字段会产生类型错误；middleware/plugin
+`RequestContext` 是 `req.context` 的声明合并扩展点。未声明字段会产生类型错误；middleware/plugin
 可以声明自己拥有的 namespaced 状态，获得完整的 IDE 提示。`bodyParser()` 已声明可选的
 `context.bodyParserData?: BodyParserData`。
 

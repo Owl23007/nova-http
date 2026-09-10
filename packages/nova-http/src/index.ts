@@ -30,7 +30,7 @@ export type {
   NovaResponse,
   ParsedRequest,
   RequestHookContext,
-  RequestLocals,
+  RequestContext,
   ResponseHookContext,
   RouteBuilder,
   RouteHookContext,

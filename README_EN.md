@@ -185,7 +185,7 @@ Frequently used request properties include:
 | `req.context`  | Typed request-local state extended by middleware   |
 | `req.signal`   | Aborted on disconnect, timeout, or server shutdown |
 
-`RequestLocals` is the declaration-merging extension point for `req.context`. Undeclared keys are
+`RequestContext` is the declaration-merging extension point for `req.context`. Undeclared keys are
 type errors; middleware and plugins can declare their own namespaced state for precise IDE support.
 `bodyParser()` declares the optional `context.bodyParserData?: BodyParserData` field.
 
