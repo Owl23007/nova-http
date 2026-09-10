@@ -1,6 +1,6 @@
 import type { HttpMethod } from "../message/request";
-import type { Middleware } from "./middleware-chain";
-import type { Handler } from "./router";
+import type { Middleware } from "./handler";
+import type { Handler } from "./handler";
 
 /**
  * Nova 内置支持批量注册的 HTTP 方法

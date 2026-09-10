@@ -52,11 +52,11 @@ export type HookHandler<K extends HookName> = (ctx: HookEvents[K]) => void | Pro
  *
  * 基于 Node.js 内置 EventEmitter 实现， hook 事件抛出 error 时会通过 onError 事件上报
  */
-export class Hooks extends EventEmitter {
+export class Hooks {
+  private readonly emitter = new EventEmitter();
   constructor() {
-    super();
-    // 默认监听器上线设置为 100
-    this.setMaxListeners(100);
+    // 默认监听器上限设置为 100
+    this.emitter.setMaxListeners(100);
   }
 
   /**
@@ -65,7 +65,7 @@ export class Hooks extends EventEmitter {
    * @param handler 处理函数
    */
   addHook<K extends HookName>(name: K, handler: HookHandler<K>): this {
-    this.on(name, handler as (...args: unknown[]) => void);
+    this.emitter.on(name, handler as (...args: unknown[]) => void);
     return this;
   }
 
@@ -73,7 +73,7 @@ export class Hooks extends EventEmitter {
    * 移除钩子处理器
    */
   removeHook<K extends HookName>(name: K, handler: HookHandler<K>): this {
-    this.off(name, handler as (...args: unknown[]) => void);
+    this.emitter.off(name, handler as (...args: unknown[]) => void);
     return this;
   }
 
@@ -82,7 +82,7 @@ export class Hooks extends EventEmitter {
    * 同步钩子直接执行；异步钩子的 Promise 会被静默处理
    */
   emitHook<K extends HookName>(name: K, ctx: HookEvents[K]): void {
-    const listeners = this.rawListeners(name) as HookHandler<K>[];
+    const listeners = this.emitter.listeners(name) as HookHandler<K>[];
     for (const listener of listeners) {
       try {
         Promise.resolve(listener(ctx)).catch((error: unknown) => {

@@ -1,11 +1,5 @@
 import type { HttpMethod } from "../message/request";
-import type { NovaRequest } from "./request";
-import type { NovaResponse } from "./response";
-
-// 类型定义
-
-/** 路由处理函数 */
-export type Handler = (req: NovaRequest, res: NovaResponse) => void | Promise<void>;
+import type { Handler } from "./handler";
 
 /** 路由匹配结果 */
 export interface RouteMatch {

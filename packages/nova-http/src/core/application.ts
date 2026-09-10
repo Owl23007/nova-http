@@ -2,14 +2,17 @@ import type { HttpMethod } from "../message/request";
 import { Hooks } from "./hooks";
 import type { HookHandler, HookName } from "./hooks";
 import { composeRoute, MiddlewareChain } from "./middleware-chain";
-import type { ErrorMiddleware, Middleware, MiddlewareContext } from "./middleware-chain";
+import type { ErrorMiddleware, Middleware, MiddlewareContext } from "./handler";
 import { createMountedMiddleware, createPrefixedMiddleware, normalizeMountPrefix } from "./mount";
 import type { NovaRequest } from "./request";
 import { NovaResponse } from "./response";
 import { BUILTIN_HTTP_METHODS, createRouteBuilder } from "./route-builder";
 import type { RouteBuilder } from "./route-builder";
 import { Router } from "./router";
-import type { Handler } from "./router";
+import type { Handler } from "./handler";
+
+/** 分发层持有参与应用的完成观察者，响应对象只负责输出 */
+const responseObservers = new WeakMap<NovaResponse, Map<Application, () => void>>();
 
 /** Nova 应用程序内核，提供路由、钩子、请求分发等功能 */
 export class Application {
@@ -137,7 +140,7 @@ export class Application {
         await res._waitForFinish();
       }
       // 4. 调用响应观察者，触发 onResponse 钩子
-      res._emitResponseObservers();
+      this._emitResponseObservers(res);
       this._emitResponse(req, res);
     } catch (error: unknown) {
       // 1. 处理分发过程中发生的错误，调用 onError 钩子
@@ -146,13 +149,15 @@ export class Application {
       if (!res.headersSent) {
         res.status(500).send("Internal Server Error");
         await res._waitForFinish();
-        res._emitResponseObservers();
+        this._emitResponseObservers(res);
         this._emitResponse(req, res);
         return;
       }
       // 3. 如果响应已发送但未结束，终止响应并关闭连接
       res._abort(toError(error), true);
       await res._waitForFinish().catch(() => undefined); // 忽略等待过程中可能发生的错误
+    } finally {
+      responseObservers.delete(res);
     }
   }
 
@@ -252,9 +257,23 @@ export class Application {
     this.hooks.emitHook("onResponse", { req, res, durationMs, statusCode: res.statusCode });
   }
 
+  /** 响应成功完成后通知参与分发的子应用 */
+  private _emitResponseObservers(res: NovaResponse): void {
+    const observers = responseObservers.get(res);
+    responseObservers.delete(res);
+    if (observers !== undefined) {
+      for (const observer of observers.values()) observer();
+    }
+  }
+
   /** 注册响应观察者，用于在响应结束时触发 onResponse 钩子 */
   private _observeResponse(req: NovaRequest, res: NovaResponse): void {
-    res._addResponseObserver(this, () => this._emitResponse(req, res));
+    let observers = responseObservers.get(res);
+    if (observers === undefined) {
+      observers = new Map();
+      responseObservers.set(res, observers);
+    }
+    if (!observers.has(this)) observers.set(this, () => this._emitResponse(req, res));
   }
 }
 

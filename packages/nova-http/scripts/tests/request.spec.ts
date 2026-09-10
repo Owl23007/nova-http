@@ -1,3 +1,4 @@
+import { createMountedRequest } from "../../src/core/mount";
 import { describe, expect, it } from "vitest";
 import { HeaderBlock, IncomingBody, NovaRequest } from "../../src/core";
 import { parseHead, DEFAULT_PARSER_LIMITS } from "../../src/protocol/http1";
@@ -120,5 +121,69 @@ describe("request semantics", () => {
     expect(() => request("/", { "x-forwarded-for": "192.0.2.1" }, (() => "yes") as never)).toThrow(
       TypeError,
     );
+  });
+});
+
+describe("请求边界", () => {
+  it.each(["parent", "child", "late"])("挂载视图共享取消状态，首次访问信号为 %s", (first) => {
+    const parent = request("/api/nested/item?q=1");
+    const child = createMountedRequest(parent, "/api");
+    const nested = createMountedRequest(child, "/nested");
+    if (first === "parent") void parent.signal;
+    if (first === "child") void nested.signal;
+    const reason = new Error("取消请求");
+    parent._abort(reason);
+    expect(nested.signal).toBe(parent.signal);
+    expect(child.signal.reason).toBe(reason);
+    expect(nested.signal.aborted).toBe(true);
+    expect(nested.pathname).toBe("/item");
+    expect(parent.pathname).toBe("/api/nested/item");
+  });
+
+  it("从挂载视图取消时保留共享的首次取消原因", () => {
+    const parent = request("/api/item");
+    const child = createMountedRequest(parent, "/api");
+    const reason = new Error("取消子请求");
+    child._abort(reason);
+    parent._abort(new Error("再次取消"));
+    expect(parent.signal.reason).toBe(reason);
+    expect(child.signal).toBe(parent.signal);
+  });
+
+  it("请求头持有独立且不可变的字段快照", () => {
+    const fields = [{ name: "X-Test", value: "safe" }];
+    const headers = new HeaderBlock(fields);
+    expect(headers.get("x-test")).toBe("safe");
+    fields[0].value = "changed";
+    fields.push({ name: "extra", value: "value" });
+    expect(headers.fields).toEqual([{ name: "x-test", value: "safe" }]);
+    expect(Object.isFrozen(headers.fields)).toBe(true);
+    expect(Object.isFrozen([...headers][0])).toBe(true);
+    const trailers = [{ name: "X-Trailer", value: "done" }];
+    headers._replace(trailers);
+    trailers[0].value = "changed";
+    expect(headers.get("x-test")).toBeUndefined();
+    expect(headers.get("x-trailer")).toBe("done");
+  });
+});
+
+describe("请求视图", () => {
+  it("路径和解析缓存独立，请求数据与上下文共享", () => {
+    const parent = request("/api/item?q=parent", { cookie: "token=original" });
+    parent.params = { outer: "value" };
+    const view = parent._createView("/item?q=child");
+    expect(Object.getPrototypeOf(view)).toBe(NovaRequest.prototype);
+    expect(view.rawTarget).toBe(parent.rawTarget);
+    expect(view.pathname).toBe("/item");
+    expect(view.params).toEqual({});
+    expect(view.context).toBe(parent.context);
+    expect(view.body).toBe(parent.body);
+    expect(view.headers).toBe(parent.headers);
+    expect(view.trailers).toBe(parent.trailers);
+    view.query.set("q", "changed");
+    view.cookies.token = "changed";
+    expect(parent.query.get("q")).toBe("parent");
+    expect(parent.cookies.token).toBe("original");
+    expect(view.signal).toBe(parent.signal);
   });
 });

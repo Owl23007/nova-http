@@ -1,6 +1,8 @@
+import { Application } from "../../src/core";
+import type { ResponseSink } from "../../src/message/response-sink";
 import { EventEmitter } from "events";
 import type { Socket } from "net";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { HeaderBlock, IncomingBody, NovaRequest, NovaResponse } from "../../src/core";
 import { Http1ResponseSink } from "../../src/server/http1-response-sink";
 
@@ -280,5 +282,164 @@ describe("NovaResponse", () => {
     expect(() => response.setHeader("transfer-encoding", "chunked")).toThrow(
       expect.objectContaining({ code: "ERR_MANAGED_RESPONSE_HEADER" }),
     );
+  });
+});
+
+describe("响应边界", () => {
+  it("读取响应头后修改数组不能注入字段或修改已提交的头", async () => {
+    const { response, socket } = createResponse();
+    response.setHeader("x-values", ["safe"]);
+    (response.getHeader("x-values") as string[]).push("bad\r\nx-injected: yes");
+    const committed = response.flushHeaders();
+    (response.getHeader("x-values") as string[])[0] = "changed";
+    await committed;
+    await response.end();
+    expect(response.getHeader("x-values")).toEqual(["safe"]);
+    expect(socket.output()).toContain("x-values: safe\r\n");
+    expect(socket.output()).not.toContain("x-injected");
+    expect(socket.output()).not.toContain("changed");
+  });
+
+  it.each(["end", "send"])("%s 在输出阶段取消后不得恢复成功或继续写入", async (mode) => {
+    for (const stage of ["commit", "write", "end"] as const) {
+      const { request } = createResponse();
+      let release!: () => void;
+      let entered!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const started = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      const sink: ResponseSink = {
+        reusable: true,
+        bodyBytesWritten: 0,
+        assertHeaderAllowed() {},
+        commit: vi.fn(async () => {}),
+        write: vi.fn(async () => {}),
+        end: vi.fn(async () => {}),
+        abort: vi.fn(),
+      };
+      sink[stage] = vi.fn(async () => {
+        entered();
+        await gate;
+      });
+      const response = new NovaResponse(request, sink);
+      if (mode === "send") response.send("body");
+      const finished = mode === "end" ? response.end("body") : response._waitForFinish();
+      const reason = new Error("取消输出");
+      const rejection = expect(finished).rejects.toBe(reason);
+      await started;
+      request._abort(reason);
+      release();
+      await rejection;
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(response.writableEnded).toBe(false);
+      expect(response._canReuseConnection).toBe(false);
+      await expect(response._waitForFinish()).rejects.toBe(reason);
+      if (stage === "commit") expect(sink.write).not.toHaveBeenCalled();
+      if (stage !== "end") expect(sink.end).not.toHaveBeenCalled();
+    }
+  });
+
+  it("取消后不执行排队中的输出", async () => {
+    const { response, request, socket } = createResponse();
+    const pending = response.write("queued");
+    const reason = new Error("取消排队写入");
+    request._abort(reason);
+    await expect(pending).rejects.toBe(reason);
+    expect(socket.output()).toBe("");
+  });
+
+  it.each(["end", "write", "send"])("已取消请求的 %s 不再输出", async (mode) => {
+    const { response, request } = createResponse();
+    const reason = new Error("提前取消");
+    request._abort(reason);
+    if (mode === "send") response.send("body");
+    const pending =
+      mode === "end"
+        ? response.end()
+        : mode === "write"
+          ? response.write("body")
+          : response._waitForFinish();
+    await expect(pending).rejects.toBe(reason);
+    expect(response.writableEnded).toBe(false);
+  });
+});
+
+describe("应用完成通知", () => {
+  it("嵌套应用各自收到一次完成通知且保留对应路径视图", async () => {
+    const parent = new Application();
+    const child = new Application();
+    const nested = new Application();
+    const calls: string[] = [];
+    for (const [name, app] of [
+      ["parent", parent],
+      ["child", child],
+      ["nested", nested],
+    ] as const) {
+      app.addHook("onResponse", ({ req, res }) => {
+        expect(res.writableEnded).toBe(true);
+        calls.push(`${name}:${req.pathname}`);
+      });
+    }
+    nested.get("/", (_req: NovaRequest, res: NovaResponse) => {
+      res.send("done");
+    });
+    child.use("/nested", nested);
+    parent.use("/api", child);
+    const original = createResponse();
+    const req = original.request._createView("/api/nested");
+    await parent.dispatch(req, original.response);
+    expect(calls).toEqual(["nested:/", "child:/nested", "parent:/api/nested"]);
+  });
+
+  it("中止响应不发布成功通知且不影响后续请求", async () => {
+    const parent = new Application();
+    const child = new Application();
+    const calls: string[] = [];
+    parent.addHook("onResponse", () => {
+      calls.push("parent");
+    });
+    child.addHook("onResponse", () => {
+      calls.push("child");
+    });
+    child.get("/abort", async (_req: NovaRequest, res: NovaResponse) => {
+      await res.write("partial");
+      throw new Error("输出失败");
+    });
+    child.get("/ok", (_req: NovaRequest, res: NovaResponse) => {
+      res.send("done");
+    });
+    parent.use("/api", child);
+    const failed = createResponse();
+    await parent.dispatch(failed.request._createView("/api/abort"), failed.response);
+    expect(calls).toEqual([]);
+    const succeeded = createResponse();
+    await parent.dispatch(succeeded.request._createView("/api/ok"), succeeded.response);
+    expect(calls).toEqual(["child", "parent"]);
+  });
+});
+
+describe("响应成功终态", () => {
+  it.each(["end", "send"])("%s 完成后的取消不改变写队列结果", async (mode) => {
+    const { response, request, socket } = createResponse();
+    if (mode === "send") {
+      response.send("done");
+      await response._waitForFinish();
+    } else {
+      await response.end("done");
+    }
+    const output = socket.output();
+    request._abort(new Error("完成后断开"));
+    expect(request.signal.aborted).toBe(true);
+    expect(response.writableEnded).toBe(true);
+    await expect(response.flushHeaders()).resolves.toBeUndefined();
+    await expect(response._waitForFinish()).resolves.toBeUndefined();
+    await expect(response.end()).resolves.toBeUndefined();
+    await expect(response.write("late")).rejects.toMatchObject({
+      code: "ERR_STREAM_WRITE_AFTER_END",
+    });
+    expect(socket.output()).toBe(output);
   });
 });
