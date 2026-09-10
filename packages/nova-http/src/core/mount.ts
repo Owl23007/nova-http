@@ -93,8 +93,24 @@ export function createMountedMiddleware(prefix: string, dispatch: MountedDispatc
  * @returns 无尾部斜杠的前缀，根路径保持为 `/`
  */
 export function normalizeMountPrefix(prefix: string): string {
-  if (!prefix || prefix === "/") return "/";
-  return prefix.endsWith("/") ? prefix.slice(0, -1) : prefix;
+  if (prefix.length === 0 || prefix[0] !== "/" || prefix.startsWith("//")) {
+    throw new TypeError(`Invalid mount prefix: ${prefix || "<empty>"}`);
+  }
+  if (prefix.includes("?") || prefix.includes("#")) {
+    throw new TypeError("Mount prefix must not contain a query string or fragment");
+  }
+
+  for (const segment of prefix.split("/")) {
+    if (segment.startsWith(":")) {
+      throw new TypeError("Mount prefix does not support route parameters");
+    }
+    if (segment === "*") {
+      throw new TypeError("Mount prefix does not support wildcards");
+    }
+  }
+
+  if (prefix === "/") return prefix;
+  return prefix.replace(/\/+$/, "");
 }
 
 /**

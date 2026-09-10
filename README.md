@@ -230,6 +230,9 @@ app.use("/api", middleware);
 app.use("/api", authMiddleware(), logMiddleware());
 ```
 
+挂载路径仅支持以 `/` 开头的字面路径前缀，不支持路由参数或通配符。例如，
+`app.use("/users/:id", middleware)` 和 `app.use("/files/*", middleware)` 会在注册时抛出错误。
+
 **中间件签名：**
 
 ```typescript

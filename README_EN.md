@@ -152,6 +152,10 @@ app.use((error: Error, _req, res, _next) => {
 });
 ```
 
+Mount paths are literal prefixes beginning with `/`; route parameters and wildcards are not
+supported. For example, `app.use("/users/:id", middleware)` and
+`app.use("/files/*", middleware)` throw during registration.
+
 Error middleware has four parameters and should be registered after regular middleware. A Nova application can also be mounted as a sub-application:
 
 ```typescript

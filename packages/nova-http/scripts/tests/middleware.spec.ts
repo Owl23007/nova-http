@@ -83,6 +83,38 @@ describe("Middleware", () => {
     expect(calls).toEqual(["api-middleware"]);
   });
 
+  it("rejects route patterns and malformed middleware mount prefixes", () => {
+    app = createApp();
+    const middleware = () => undefined;
+
+    expect(() => app?.use("/users/:id", middleware)).toThrow(
+      "Mount prefix does not support route parameters",
+    );
+    expect(() => app?.use("/files/*", middleware)).toThrow(
+      "Mount prefix does not support wildcards",
+    );
+    expect(() => app?.use("users", middleware)).toThrow("Invalid mount prefix");
+    expect(() => app?.use("/users?active=true", middleware)).toThrow(
+      "Mount prefix must not contain a query string or fragment",
+    );
+  });
+
+  it("normalizes trailing slashes in middleware mount prefixes", async () => {
+    app = createApp();
+    let called = false;
+
+    app.use("/api///", (_req: NovaRequest, _res: NovaResponse, next: NextFunction) => {
+      called = true;
+      next();
+    });
+    app.get("/api/users", (_req: NovaRequest, res: NovaResponse) => res.send("ok"));
+
+    const port = await listen(app);
+    await request(port, "/api/users");
+
+    expect(called).toBe(true);
+  });
+
   it("UT-MW-03 中间件提前发送响应时不再执行后续路由", async () => {
     app = createApp();
     let routeCalled = false;
