@@ -79,6 +79,7 @@ export class Http1ConnectionCoordinator {
   private _waitingKeepAlive = false;
   private _inputTimer: ReturnType<typeof setTimeout> | null = null;
   private _applicationTimer: ReturnType<typeof setTimeout> | null = null;
+  private _exchangeController: AbortController | null = null;
   private _currentRequest: NovaRequest | null = null;
   private _currentResponse: NovaResponse | null = null;
   private _parsedRequest: IncomingRequestMeta | null = null;
@@ -255,7 +256,9 @@ export class Http1ConnectionCoordinator {
       this._armInputDeadline("body", this._context.config.bodyIdleTimeout);
     }
 
-    const request = new NovaRequest(parsed);
+    const controller = new AbortController();
+    this._exchangeController = controller;
+    const request = new NovaRequest(parsed, controller.signal);
     const sink = new Http1ResponseSink(
       this._socket,
       head.method,
@@ -263,7 +266,13 @@ export class Http1ConnectionCoordinator {
       head.connection.close,
       request.signal,
     );
-    const response = new NovaResponse(request, sink);
+    const response = new NovaResponse(sink, {
+      signal: controller.signal,
+      onFailure: (error) => {
+        // 旧交互的迟到通知不能终止复用连接上的新请求
+        if (this._exchangeController === controller) this._terminateExchange(error);
+      },
+    });
     response._setStreamStartHandler(() => this._clearApplicationDeadline());
     request._startAt = process.hrtime.bigint();
     this._handling = true;
@@ -497,6 +506,7 @@ export class Http1ConnectionCoordinator {
       !this._closing &&
       !this._draining;
 
+    this._exchangeController = null;
     this._currentRequest = null;
     this._currentResponse = null;
     this._parsedRequest = null;
@@ -521,13 +531,14 @@ export class Http1ConnectionCoordinator {
     request: NovaRequest,
     response: NovaResponse,
   ): Promise<void> {
+    if (request !== this._currentRequest) return;
     const actual = toError(error);
     this._context.onError(actual, this._peer);
-    if (!response.headersSent) {
+    if (!request.signal.aborted && !response.headersSent) {
       response.status(500).send("Internal Server Error");
       await response._waitForFinish().catch(() => undefined);
     } else {
-      response._abort(actual, true);
+      this._terminateExchange(actual);
     }
     this._onApplicationDone(request, response);
   }
@@ -603,9 +614,8 @@ export class Http1ConnectionCoordinator {
     if (timeout <= 0) return;
     this._applicationTimer = setTimeout(() => {
       const error = connectionError("ERR_REQUEST_TIMEOUT", "Request Timeout");
-      this._currentRequest?._abort(error);
-      if (this._currentResponse?.headersSent) this._currentResponse._abort(error, true);
-      else this._sendErrorAndClose(408, "Request Timeout");
+      if (this._currentResponse?.headersSent) this._terminateExchange(error);
+      else this._sendErrorAndClose(408, "Request Timeout", error);
     }, timeout);
   }
 
@@ -621,8 +631,11 @@ export class Http1ConnectionCoordinator {
 
   private _fatal(error: Http1Error): void {
     if (this._closing) return;
-    this._parsedRequest?.body._fail(connectionError(error.code, error.message));
-    this._sendErrorAndClose(error.status, error.message);
+    this._sendErrorAndClose(
+      error.status,
+      error.message,
+      connectionError(error.code, error.message),
+    );
   }
 
   /** RFC 9112 建议接收方至少忽略请求行前的一个空行 */
@@ -642,17 +655,32 @@ export class Http1ConnectionCoordinator {
     return true;
   }
 
-  private _sendErrorAndClose(status: number, message: string): void {
+  /** 取消当前交互并终止未完成的输入，传输动作由调用方决定 */
+  private _cancelExchange(error: Error): void {
     this._closing = true;
     this._clearInputDeadline();
     this._clearApplicationDeadline();
-    const error = connectionError(`ERR_HTTP_${status}`, message);
-    this._currentRequest?._abort(error);
+    this._exchangeController?.abort(error);
+    const reason = this._exchangeController?.signal.reason;
+    this._parsedRequest?.body._fail(reason instanceof Error ? reason : error);
+  }
+
+  /** 关闭传输独立于响应终态，重复取消也不能跳过关闭 */
+  private _terminateExchange(error: Error): void {
+    this._cancelExchange(error);
+    if (!this._socket.destroyed) this._socket.destroy();
+  }
+
+  private _sendErrorAndClose(
+    status: number,
+    message: string,
+    error = connectionError(`ERR_HTTP_${status}`, message),
+  ): void {
     if (this._currentResponse?.headersSent) {
-      this._currentResponse._abort(error, true);
+      this._terminateExchange(error);
       return;
     }
-    this._currentResponse?._abort(error, false);
+    this._cancelExchange(error);
     if (this._socket.destroyed) return;
     const body = Buffer.from(message, "utf8");
     const head = serializeResponseHead(
@@ -672,23 +700,15 @@ export class Http1ConnectionCoordinator {
   }
 
   private _onSocketError(error: Error): void {
-    this._clearInputDeadline();
-    this._clearApplicationDeadline();
-    this._currentRequest?._abort(error);
-    this._parsedRequest?.body._fail(error);
-    this._currentResponse?._abort(error, false);
+    this._terminateExchange(error);
     const code = (error as NodeJS.ErrnoException).code;
     if (code !== "ECONNRESET" && code !== "EPIPE") this._context.onError(error, this._peer);
-    if (!this._socket.destroyed) this._socket.destroy();
   }
 
   private _onClose(): void {
-    this._clearInputDeadline();
-    this._clearApplicationDeadline();
     const error = connectionError("ERR_STREAM_PREMATURE_CLOSE", "Socket closed");
-    this._currentRequest?._abort(error);
-    this._parsedRequest?.body._fail(error);
-    this._currentResponse?._abort(error, false);
+    this._cancelExchange(error);
+    this._exchangeController = null;
     this._currentRequest = null;
     this._currentResponse = null;
     this._parsedRequest = null;
@@ -701,9 +721,7 @@ export class Http1ConnectionCoordinator {
       this._closing = true;
       this._clearInputDeadline();
       const error = connectionError("ERR_SERVER_SHUTDOWN", "Server is shutting down");
-      this._currentRequest?._abort(error);
-      this._parsedRequest?.body._fail(error);
-      this._currentResponse._abort(error, true);
+      this._terminateExchange(error);
       return;
     }
     if (!this._handling && !this._socket.destroyed) {
@@ -722,10 +740,7 @@ export class Http1ConnectionCoordinator {
 
   shutdown(): void {
     const error = connectionError("ERR_SERVER_SHUTDOWN", "Server is shutting down");
-    this._currentRequest?._abort(error);
-    this._parsedRequest?.body._fail(error);
-    this._currentResponse?._abort(error, false);
-    this._socket.destroy();
+    this._terminateExchange(error);
   }
 }
 

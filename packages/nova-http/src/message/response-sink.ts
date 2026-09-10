@@ -1,7 +1,7 @@
 export type ResponseHeaderValue = string | readonly string[];
 export type ResponseHeaders = ReadonlyMap<string, ResponseHeaderValue>;
 
-/** Output port used by the application response without knowing wire or transport details. */
+/** 应用响应的输出端口，不暴露编码细节或传输关闭权限 */
 export interface ResponseSink {
   readonly reusable: boolean;
   readonly bodyBytesWritten: number;
@@ -9,5 +9,4 @@ export interface ResponseSink {
   commit(status: number, headers: ResponseHeaders): Promise<void>;
   write(chunk: Buffer): Promise<void>;
   end(): Promise<void>;
-  abort(error: Error, closeTransport: boolean): void;
 }

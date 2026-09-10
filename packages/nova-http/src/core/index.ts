@@ -16,7 +16,7 @@ export type {
   ResponseHookContext,
   RouteHookContext,
 } from "./hooks";
-export type { StreamChunk, StreamSource } from "./response";
+export type { ResponseOptions, StreamChunk, StreamSource } from "./response";
 export type { RequestContext } from "./request";
 export type {
   ErrorMiddleware,

@@ -53,22 +53,31 @@ function createResponse(
     httpVersion?: "1.0" | "1.1";
     keepAlive?: boolean;
   } = {},
-): { response: NovaResponse; request: NovaRequest; socket: FakeSocket } {
+): {
+  response: NovaResponse;
+  request: NovaRequest;
+  socket: FakeSocket;
+  controller: AbortController;
+} {
   const socket = new FakeSocket();
+  const controller = new AbortController();
   const body = new IncomingBody(false, 64 * 1024, () => undefined);
   body._complete();
-  const request = new NovaRequest({
-    method: options.method ?? "GET",
-    clientIp: "127.0.0.1",
-    rawTarget: "/",
-    path: "/",
-    version: options.httpVersion ?? "1.1",
-    headers: new HeaderBlock(),
-    body,
-    trailers: new HeaderBlock(),
-    connection: { close: !(options.keepAlive ?? true), connect: false },
-    peer: {},
-  });
+  const request = new NovaRequest(
+    {
+      method: options.method ?? "GET",
+      clientIp: "127.0.0.1",
+      rawTarget: "/",
+      path: "/",
+      version: options.httpVersion ?? "1.1",
+      headers: new HeaderBlock(),
+      body,
+      trailers: new HeaderBlock(),
+      connection: { close: !(options.keepAlive ?? true), connect: false },
+      peer: {},
+    },
+    controller.signal,
+  );
   const sink = new Http1ResponseSink(
     socket as unknown as Socket,
     request.method,
@@ -77,7 +86,14 @@ function createResponse(
     request.signal,
   );
   return {
-    response: new NovaResponse(request, sink),
+    response: new NovaResponse(sink, {
+      signal: controller.signal,
+      onFailure: (error) => {
+        controller.abort(error);
+        socket.destroy();
+      },
+    }),
+    controller,
     request,
     socket,
   };
@@ -302,7 +318,7 @@ describe("响应边界", () => {
 
   it.each(["end", "send"])("%s 在输出阶段取消后不得恢复成功或继续写入", async (mode) => {
     for (const stage of ["commit", "write", "end"] as const) {
-      const { request } = createResponse();
+      const { request, controller } = createResponse();
       let release!: () => void;
       let entered!: () => void;
       const gate = new Promise<void>((resolve) => {
@@ -318,19 +334,21 @@ describe("响应边界", () => {
         commit: vi.fn(async () => {}),
         write: vi.fn(async () => {}),
         end: vi.fn(async () => {}),
-        abort: vi.fn(),
       };
       sink[stage] = vi.fn(async () => {
         entered();
         await gate;
       });
-      const response = new NovaResponse(request, sink);
+      const response = new NovaResponse(sink, {
+        signal: controller.signal,
+        onFailure: (error) => controller.abort(error),
+      });
       if (mode === "send") response.send("body");
       const finished = mode === "end" ? response.end("body") : response._waitForFinish();
       const reason = new Error("取消输出");
       const rejection = expect(finished).rejects.toBe(reason);
       await started;
-      request._abort(reason);
+      controller.abort(reason);
       release();
       await rejection;
       await new Promise<void>((resolve) => setImmediate(resolve));
@@ -343,18 +361,18 @@ describe("响应边界", () => {
   });
 
   it("取消后不执行排队中的输出", async () => {
-    const { response, request, socket } = createResponse();
+    const { response, request, socket, controller } = createResponse();
     const pending = response.write("queued");
     const reason = new Error("取消排队写入");
-    request._abort(reason);
+    controller.abort(reason);
     await expect(pending).rejects.toBe(reason);
     expect(socket.output()).toBe("");
   });
 
   it.each(["end", "write", "send"])("已取消请求的 %s 不再输出", async (mode) => {
-    const { response, request } = createResponse();
+    const { response, request, controller } = createResponse();
     const reason = new Error("提前取消");
-    request._abort(reason);
+    controller.abort(reason);
     if (mode === "send") response.send("body");
     const pending =
       mode === "end"
@@ -423,7 +441,7 @@ describe("应用完成通知", () => {
 
 describe("响应成功终态", () => {
   it.each(["end", "send"])("%s 完成后的取消不改变写队列结果", async (mode) => {
-    const { response, request, socket } = createResponse();
+    const { response, request, socket, controller } = createResponse();
     if (mode === "send") {
       response.send("done");
       await response._waitForFinish();
@@ -431,7 +449,7 @@ describe("响应成功终态", () => {
       await response.end("done");
     }
     const output = socket.output();
-    request._abort(new Error("完成后断开"));
+    controller.abort(new Error("完成后断开"));
     expect(request.signal.aborted).toBe(true);
     expect(response.writableEnded).toBe(true);
     await expect(response.flushHeaders()).resolves.toBeUndefined();
@@ -441,5 +459,119 @@ describe("响应成功终态", () => {
       code: "ERR_STREAM_WRITE_AFTER_END",
     });
     expect(socket.output()).toBe(output);
+  });
+});
+
+describe("取消权限与失败通知", () => {
+  function setup() {
+    const controller = new AbortController();
+    const onFailure = vi.fn();
+    const sink: ResponseSink = {
+      reusable: true,
+      bodyBytesWritten: 0,
+      assertHeaderAllowed() {},
+      commit: vi.fn(async () => {}),
+      write: vi.fn(async () => {}),
+      end: vi.fn(async () => {}),
+    };
+    const response = new NovaResponse(sink, { signal: controller.signal, onFailure });
+    return { response, controller, onFailure, sink };
+  }
+
+  it.each(["commit", "write", "end"] as const)(
+    "%s 失败只上报一次且响应不能自行取消交互",
+    async (stage) => {
+      const { response, controller, onFailure, sink } = setup();
+      const error = new Error("输出失败");
+      sink[stage] = vi.fn(async () => {
+        throw error;
+      });
+      await expect(response.end("body")).rejects.toBe(error);
+      await expect(response._waitForFinish()).rejects.toBe(error);
+      response._fail(new Error("重复失败"));
+      expect(onFailure).toHaveBeenCalledExactlyOnceWith(error);
+      expect(controller.signal.aborted).toBe(false);
+      controller.abort(new Error("后续取消"));
+      await expect(response._waitForFinish()).rejects.toBe(error);
+    },
+  );
+
+  it.each([false, true])("协调层取消只清理响应，不反向上报失败，已提交=%s", async (committed) => {
+    const { response, controller, onFailure, sink } = setup();
+    if (committed) await response.write("partial");
+    const error = new Error("外部取消");
+    const completion = response._waitForFinish();
+    controller.abort(error);
+    await expect(completion).rejects.toBe(error);
+    await expect(response.end()).rejects.toBe(error);
+    expect(response.headersSent).toBe(committed);
+    expect(response.writableEnded).toBe(false);
+    expect(onFailure).not.toHaveBeenCalled();
+    expect(sink.end).not.toHaveBeenCalled();
+  });
+
+  it("预先取消的信号不会上报输出失败", async () => {
+    const { sink, onFailure, controller } = setup();
+    const error = new Error("预先取消");
+    controller.abort(error);
+    const response = new NovaResponse(sink, { signal: controller.signal, onFailure });
+    await expect(response._waitForFinish()).rejects.toBe(error);
+    await expect(response.write("body")).rejects.toBe(error);
+    expect(response.headersSent).toBe(false);
+    expect(onFailure).not.toHaveBeenCalled();
+    expect(sink.commit).not.toHaveBeenCalled();
+  });
+
+  it("流源在提交前失败可以恢复，提交后失败必须通知协调层", async () => {
+    for (const committed of [false, true]) {
+      const { response, controller, onFailure } = setup();
+      const error = new Error("流源失败");
+      async function* source() {
+        if (committed) yield "partial";
+        throw error;
+      }
+      await expect(response.stream(source())).rejects.toBe(error);
+      if (committed) {
+        expect(onFailure).toHaveBeenCalledExactlyOnceWith(error);
+        await expect(response._waitForFinish()).rejects.toBe(error);
+      } else {
+        expect(onFailure).not.toHaveBeenCalled();
+        await response.status(500).end("recovered");
+        expect(response.writableEnded).toBe(true);
+      }
+      expect(controller.signal.aborted).toBe(false);
+    }
+  });
+
+  it("处理器异常在提交前由错误中间件恢复", async () => {
+    const { response, controller, onFailure } = setup();
+    const app = new Application();
+    const original = createResponse();
+    const request = new NovaRequest(
+      {
+        method: "GET",
+        clientIp: "",
+        rawTarget: "/",
+        path: "/",
+        version: "1.1",
+        headers: new HeaderBlock(),
+        trailers: new HeaderBlock(),
+        body: original.request.body,
+        connection: { close: false, connect: false },
+        peer: {},
+      },
+      controller.signal,
+    );
+    app.get("/", (_req: NovaRequest, _res: NovaResponse) => {
+      throw new Error("可恢复错误");
+    });
+    app.use((_error: unknown, _req: NovaRequest, res: NovaResponse, _next: () => void) => {
+      res.status(422).send("recovered");
+    });
+    await app.dispatch(request, response);
+    expect(response.statusCode).toBe(422);
+    expect(response.writableEnded).toBe(true);
+    expect(controller.signal.aborted).toBe(false);
+    expect(onFailure).not.toHaveBeenCalled();
   });
 });

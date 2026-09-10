@@ -35,6 +35,7 @@ export type {
   RouteBuilder,
   RouteHookContext,
   RouteMatch,
+  ResponseOptions,
   StreamChunk,
   StreamSource,
 } from "./core";
