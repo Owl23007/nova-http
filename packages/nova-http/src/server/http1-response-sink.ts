@@ -78,10 +78,6 @@ export class Http1ResponseSink implements ResponseSink {
     if (plan.mode === "chunked") await this._writeBuffers([encodeFinalChunk()]);
   }
 
-  abort(error: Error, closeTransport: boolean): void {
-    if (closeTransport && !this._socket.destroyed) this._socket.destroy(error);
-  }
-
   private _requirePlan(): Http1ResponsePlan {
     if (this._plan === null) throw new Error("Response sink was not committed");
     return this._plan;

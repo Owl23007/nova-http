@@ -10,6 +10,7 @@ function request(
   headers: Record<string, string> = {},
   trustProxy: TrustProxy = false,
   method = "GET",
+  signal: AbortSignal = new AbortController().signal,
 ) {
   const head = parseHead(
     Buffer.from(`${method} ${rawTarget} HTTP/1.1\r\nHost: example.com\r\n\r\n`),
@@ -17,18 +18,21 @@ function request(
   );
   if ("fatal" in head) throw new Error(head.message);
   const fields = new HeaderBlock(Object.entries(headers).map(([name, value]) => ({ name, value })));
-  return new NovaRequest({
-    clientIp: resolveClientIp({ remoteAddress: "127.0.0.1" }, fields, trustProxy),
-    rawTarget: head.rawTarget,
-    path: head.path,
-    method: head.method,
-    version: head.version,
-    headers: fields,
-    body: new IncomingBody(true, 16384, () => {}),
-    trailers: new HeaderBlock(),
-    connection: { close: false, connect: method === "CONNECT" },
-    peer: { remoteAddress: "127.0.0.1" },
-  });
+  return new NovaRequest(
+    {
+      clientIp: resolveClientIp({ remoteAddress: "127.0.0.1" }, fields, trustProxy),
+      rawTarget: head.rawTarget,
+      path: head.path,
+      method: head.method,
+      version: head.version,
+      headers: fields,
+      body: new IncomingBody(true, 16384, () => {}),
+      trailers: new HeaderBlock(),
+      connection: { close: false, connect: method === "CONNECT" },
+      peer: { remoteAddress: "127.0.0.1" },
+    },
+    signal,
+  );
 }
 
 describe("request semantics", () => {
@@ -87,11 +91,12 @@ describe("request semantics", () => {
     expect(req.bodyBytesReceived).toBe(6);
   });
   it.each([false, true])("retains the first abort reason with eager signal=%s", (eager) => {
-    const req = request();
+    const controller = new AbortController();
+    const req = request("/", {}, false, "GET", controller.signal);
     const signal = eager ? req.signal : undefined;
     const reason = new Error("cancelled");
-    req._abort(reason);
-    req._abort(new Error("later"));
+    controller.abort(reason);
+    controller.abort(new Error("later"));
     expect(req.signal.aborted).toBe(true);
     expect(req.signal.reason).toBe(reason);
     if (signal) expect(req.signal).toBe(signal);
@@ -126,13 +131,14 @@ describe("request semantics", () => {
 
 describe("请求边界", () => {
   it.each(["parent", "child", "late"])("挂载视图共享取消状态，首次访问信号为 %s", (first) => {
-    const parent = request("/api/nested/item?q=1");
+    const controller = new AbortController();
+    const parent = request("/api/nested/item?q=1", {}, false, "GET", controller.signal);
     const child = createMountedRequest(parent, "/api");
     const nested = createMountedRequest(child, "/nested");
     if (first === "parent") void parent.signal;
     if (first === "child") void nested.signal;
     const reason = new Error("取消请求");
-    parent._abort(reason);
+    controller.abort(reason);
     expect(nested.signal).toBe(parent.signal);
     expect(child.signal.reason).toBe(reason);
     expect(nested.signal.aborted).toBe(true);
@@ -140,12 +146,13 @@ describe("请求边界", () => {
     expect(parent.pathname).toBe("/api/nested/item");
   });
 
-  it("从挂载视图取消时保留共享的首次取消原因", () => {
-    const parent = request("/api/item");
+  it("协调层取消后所有挂载视图保留首次取消原因", () => {
+    const controller = new AbortController();
+    const parent = request("/api/item", {}, false, "GET", controller.signal);
     const child = createMountedRequest(parent, "/api");
     const reason = new Error("取消子请求");
-    child._abort(reason);
-    parent._abort(new Error("再次取消"));
+    controller.abort(reason);
+    controller.abort(new Error("再次取消"));
     expect(parent.signal.reason).toBe(reason);
     expect(child.signal).toBe(parent.signal);
   });

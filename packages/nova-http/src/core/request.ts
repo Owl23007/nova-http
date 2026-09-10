@@ -10,7 +10,6 @@
  * 允许开发者将自定义属性挂载到 `req.context`，保持类型安全
  */
 
-import { RequestCancellation } from "./request-cancellation";
 import { isJsonMediaType, mediaType } from "../message/media-type";
 import type { BodyReadOptions, IncomingBody } from "../message/body";
 import type { ConnectionInfo, ConnectionIntent } from "../message/connection";
@@ -58,16 +57,11 @@ export class NovaRequest {
 
   private _query: URLSearchParams | undefined;
   private _cookies: Record<string, string> | undefined;
-  /** @internal 原请求和挂载视图共享的取消状态 */
-  private _cancellationState = new RequestCancellation();
-
-  /** @internal 供响应共享取消状态 */
-  get _cancellation(): RequestCancellation {
-    return this._cancellationState;
-  }
-
-  /** 创建请求对象 */
-  constructor(parsed: IncomingRequestMeta) {
+  /** 创建请求对象，取消信号由协调层提供 */
+  constructor(
+    parsed: IncomingRequestMeta,
+    readonly signal: AbortSignal,
+  ) {
     this.method = parsed.method;
     this.ip = parsed.clientIp;
     this.rawTarget = parsed.rawTarget;
@@ -86,19 +80,21 @@ export class NovaRequest {
 
   /** @internal 创建独立路径视图，共享请求数据、上下文和取消状态 */
   _createView(path: string): NovaRequest {
-    const view = new NovaRequest({
-      method: this.method,
-      clientIp: this.ip,
-      rawTarget: this.rawTarget,
-      path,
-      version: this.httpVersion,
-      headers: this.headers,
-      body: this.body,
-      trailers: this.trailers,
-      connection: this.connection,
-      peer: this.peer,
-    });
-    view._cancellationState = this._cancellationState;
+    const view = new NovaRequest(
+      {
+        method: this.method,
+        clientIp: this.ip,
+        rawTarget: this.rawTarget,
+        path,
+        version: this.httpVersion,
+        headers: this.headers,
+        body: this.body,
+        trailers: this.trailers,
+        connection: this.connection,
+        peer: this.peer,
+      },
+      this.signal,
+    );
     view.context = this.context;
     view._startAt = this._startAt;
     return view;
@@ -183,15 +179,5 @@ export class NovaRequest {
   /** 将流式请求体显式物化并解析为 JSON */
   json<T = unknown>(options: BodyReadOptions = {}): Promise<T> {
     return this.body.json<T>(options);
-  }
-
-  /** 请求取消信号，客户端断开、超时或服务关闭时触发 */
-  get signal(): AbortSignal {
-    return this._cancellation.signal;
-  }
-
-  /** @internal 取消当前请求及其响应中的异步工作 */
-  _abort(reason: unknown): void {
-    this._cancellation.abort(reason);
   }
 }

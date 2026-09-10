@@ -1,10 +1,15 @@
 import type { Readable } from "stream";
 import type { ResponseSink } from "../message/response-sink";
-import type { RequestCancellation } from "./request-cancellation";
-import type { NovaRequest } from "./request";
 
 export type StreamChunk = string | Buffer | Uint8Array;
 export type StreamSource = Readable | AsyncIterable<StreamChunk>;
+
+/** 协调层提供的响应取消信号与不可恢复失败通知 */
+export interface ResponseOptions {
+  readonly signal: AbortSignal;
+  /** 通知协调层终止当前交互，不用于普通处理器的可恢复错误 */
+  readonly onFailure: (error: Error) => void;
+}
 
 type ResponseState = "idle" | "streaming" | "ended" | "aborted";
 const HEADER_SENT = "ERR_HTTP_HEADERS_SENT";
@@ -27,18 +32,20 @@ export class NovaResponse {
   private _finishedReject: ((error: Error) => void) | null = null;
   private _finished: Promise<void> | null = null;
 
-  private readonly _cancellation: RequestCancellation;
+  private _failure: Error | null = null;
+  private _headersCommitted = false;
 
   constructor(
-    req: NovaRequest,
     private readonly _sink: ResponseSink,
+    private readonly _options: ResponseOptions,
   ) {
-    this._cancellation = req._cancellation;
     this._headers.set("server", "Nova");
+    if (this._options.signal.aborted) this._handleRequestAbort();
+    else this._options.signal.addEventListener("abort", this._handleRequestAbort, { once: true });
   }
 
   get headersSent(): boolean {
-    return this._state !== "idle";
+    return this._headersCommitted;
   }
 
   get writableEnded(): boolean {
@@ -112,7 +119,7 @@ export class NovaResponse {
     }
     if (this._state === "aborted") return Promise.reject(this._abortReason());
     this._markStreamingResponse();
-    if (this._cancellation.signal.aborted) return Promise.reject(this._abortReason());
+    if (this._options.signal.aborted) return Promise.reject(this._abortReason());
     const committed = this._flushHeaders();
     return this._enqueueWrite(async () => {
       await committed;
@@ -137,7 +144,7 @@ export class NovaResponse {
       this._headers.set("content-length", "0");
     }
     this._markStreamingResponse();
-    if (this._cancellation.signal.aborted) return this._waitForFinish();
+    if (this._options.signal.aborted) return this._waitForFinish();
     const finished = this._ensureFinished();
     const committed = this._flushHeaders();
     this._enqueueWrite(async () => {
@@ -160,6 +167,7 @@ export class NovaResponse {
     }
     if (this._state === "aborted") throw this._abortReason();
     this._markStreamingResponse();
+    if (this._options.signal.aborted) throw this._abortReason();
     const iterator = source[Symbol.asyncIterator]() as AsyncIterator<StreamChunk>;
     this._activeIterator = iterator;
     this._activeSource = isDestroyableReadable(source) ? source : null;
@@ -172,7 +180,7 @@ export class NovaResponse {
       await this.end();
     } catch (error) {
       const streamError = toError(error);
-      if (this.headersSent) this._abort(streamError, true);
+      if (this.headersSent) this._fail(streamError);
       throw streamError;
     } finally {
       this._activeIterator = null;
@@ -228,14 +236,25 @@ export class NovaResponse {
     this._streamStartHandler = handler;
   }
 
-  _abort(error: Error, closeTransport: boolean): void {
+  /** @internal 上报已无法恢复的响应失败，由协调层决定如何终止交互 */
+  _fail(error: Error): void {
+    if (this._state === "ended" || this._state === "aborted") return;
+    if (this._options.signal.aborted) {
+      this._abortLocal(this._abortReason());
+      return;
+    }
+    this._abortLocal(error);
+    this._options.onFailure(error);
+  }
+
+  /** 只终止本地输出，不取消交互或控制传输 */
+  private _abortLocal(error: Error): void {
     if (this._state === "ended" || this._state === "aborted") return;
     this._state = "aborted";
-    this._cancellation.abort(error);
-    this._cancelActiveSource(error);
+    this._failure = error;
     this._cleanup();
     this._finishedReject?.(error);
-    this._sink.abort(error, closeTransport);
+    this._cancelActiveSource(error);
   }
 
   static _createNotEndedError(): Error {
@@ -245,6 +264,7 @@ export class NovaResponse {
   private _flushHeaders(): Promise<void> {
     if (this._state === "aborted") return Promise.reject(this._abortReason());
     if (this._state !== "idle") return this._writeTail;
+    this._headersCommitted = true;
     this._state = "streaming";
     return this._enqueueWrite(() => this._sink.commit(this._statusCode, this._headers));
   }
@@ -252,7 +272,7 @@ export class NovaResponse {
   private _sendImmediate(body: Buffer): void {
     this._endRequested = true;
     this._markStreamingResponse();
-    if (this._cancellation.signal.aborted) return;
+    if (this._options.signal.aborted) return;
     this._ensureFinished();
     const committed = this._flushHeaders();
     this._enqueueWrite(async () => {
@@ -274,7 +294,7 @@ export class NovaResponse {
     });
     const guarded = next.catch((error: unknown) => {
       const writeError = toError(error);
-      this._abort(writeError, this.headersSent);
+      this._fail(writeError);
       throw writeError;
     });
     void guarded.catch(() => undefined);
@@ -284,7 +304,7 @@ export class NovaResponse {
 
   /** 异步边界后重新检查取消状态，禁止终态回退和后续写入 */
   private _assertActive(): void {
-    if (this._state === "aborted" || this._cancellation.signal.aborted) throw this._abortReason();
+    if (this._state === "aborted" || this._options.signal.aborted) throw this._abortReason();
   }
 
   /** 只有未取消的响应才能进入成功终态 */
@@ -308,14 +328,14 @@ export class NovaResponse {
   private _nextWithAbort(
     iterator: AsyncIterator<StreamChunk>,
   ): Promise<IteratorResult<StreamChunk>> {
-    if (this._cancellation.signal.aborted) return Promise.reject(this._abortReason());
+    if (this._options.signal.aborted) return Promise.reject(this._abortReason());
     return new Promise((resolve, reject) => {
-      const cleanup = (): void => this._cancellation.signal.removeEventListener("abort", onAbort);
+      const cleanup = (): void => this._options.signal.removeEventListener("abort", onAbort);
       const onAbort = (): void => {
         cleanup();
         reject(this._abortReason());
       };
-      this._cancellation.signal.addEventListener("abort", onAbort, { once: true });
+      this._options.signal.addEventListener("abort", onAbort, { once: true });
       void iterator.next().then(
         (result) => {
           cleanup();
@@ -330,37 +350,42 @@ export class NovaResponse {
   }
 
   private _cancelActiveSource(error: Error): void {
-    if (this._activeSource && !this._activeSource.destroyed) this._activeSource.destroy(error);
-    else if (this._activeIterator?.return)
-      void this._activeIterator.return().catch(() => undefined);
+    try {
+      if (this._activeSource && !this._activeSource.destroyed) this._activeSource.destroy(error);
+      else if (this._activeIterator?.return)
+        void Promise.resolve(this._activeIterator.return()).catch(() => undefined);
+    } catch {
+      // 数据源清理失败不能覆盖首次错误或阻止通知协调层
+    }
   }
 
-  private readonly _handleRequestAbort = (): void => this._abort(this._abortReason(), false);
+  private readonly _handleRequestAbort = (): void => this._abortLocal(this._abortReason());
 
   private _markStreamingResponse(): void {
     if (this._streamingResponse) return;
     this._streamingResponse = true;
-    if (this._cancellation.signal.aborted) {
-      this._abort(this._abortReason(), false);
+    if (this._options.signal.aborted) {
+      this._abortLocal(this._abortReason());
       return;
     }
-    this._cancellation.signal.addEventListener("abort", this._handleRequestAbort, { once: true });
     this._streamStartHandler?.();
   }
 
   private _cleanup(): void {
-    if (this._streamingResponse)
-      this._cancellation.signal.removeEventListener("abort", this._handleRequestAbort);
+    this._options.signal.removeEventListener("abort", this._handleRequestAbort);
     this._streamStartHandler = null;
   }
 
   private _assertHeadersMutable(): void {
+    if (this._state === "aborted") throw this._abortReason();
     if (this.headersSent) throw codedError(HEADER_SENT, "Response headers have already been sent");
   }
 
   private _abortReason(): Error {
     return toError(
-      this._cancellation.signal.reason ?? codedError(PREMATURE_CLOSE, "Response was aborted"),
+      this._failure ??
+        this._options.signal.reason ??
+        codedError(PREMATURE_CLOSE, "Response was aborted"),
     );
   }
 }

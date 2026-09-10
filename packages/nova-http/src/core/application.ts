@@ -145,6 +145,7 @@ export class Application {
     } catch (error: unknown) {
       // 1. 处理分发过程中发生的错误，调用 onError 钩子
       this.hooks.emitHook("onError", { error, req, res });
+      if (req.signal.aborted) return;
       // 2. 如果响应未发送，发送 500 错误响应
       if (!res.headersSent) {
         res.status(500).send("Internal Server Error");
@@ -153,8 +154,8 @@ export class Application {
         this._emitResponse(req, res);
         return;
       }
-      // 3. 如果响应已发送但未结束，终止响应并关闭连接
-      res._abort(toError(error), true);
+      // 3. 已提交的响应无法恢复，通知协调层终止交互
+      res._fail(toError(error));
       await res._waitForFinish().catch(() => undefined); // 忽略等待过程中可能发生的错误
     } finally {
       responseObservers.delete(res);
