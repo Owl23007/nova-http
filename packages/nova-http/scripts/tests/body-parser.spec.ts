@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Hooks, type RequestLocals } from "../../src/core";
+import { Hooks, type RequestContext } from "../../src/core";
 import { bodyParser } from "../../src/middlewares";
 
 function makeReq(body: string, contentType: string) {
@@ -11,7 +11,7 @@ function makeReq(body: string, contentType: string) {
       }
       return value;
     },
-    context: {} as RequestLocals,
+    context: {} as RequestContext,
     headers: new Map([["content-type", contentType]]),
   };
 }

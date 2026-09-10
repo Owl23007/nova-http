@@ -19,7 +19,7 @@ export type {
   RouteHookContext,
 } from "./hooks";
 export type { StreamChunk, StreamSource } from "./response";
-export type { RequestLocals } from "./request";
+export type { RequestContext } from "./request";
 export type {
   ErrorMiddleware,
   Middleware,

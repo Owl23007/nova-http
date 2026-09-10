@@ -39,7 +39,7 @@ declare module "../core/hooks" {
 }
 
 declare module "../core/request" {
-  interface RequestLocals {
+  interface RequestContext {
     bodyParserData?: BodyParserData;
   }
 }

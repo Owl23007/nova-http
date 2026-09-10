@@ -17,7 +17,7 @@ import type { HeaderBlock } from "../message/headers";
 import type { IncomingRequestMeta } from "../message/request";
 
 /** 可由 middleware/plugin 通过 declaration merging 扩展的请求级共享状态 */
-export interface RequestLocals {}
+export interface RequestContext {}
 
 /** Nova HTTP 请求对象 */
 export class NovaRequest {
@@ -48,7 +48,7 @@ export class NovaRequest {
   params: Record<string, string> = {};
 
   /** 开发者自定义上下文（中间件间共享状态）*/
-  context: RequestLocals = {};
+  context: RequestContext = {};
 
   /** 内部：请求开始时间戳（ns），供钩子系统使用 */
   _startAt: bigint = 0n;
