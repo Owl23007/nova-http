@@ -188,23 +188,6 @@ export class MiddlewareChain {
   }
 }
 
-/** 将中间件数组组合成一个统一的处理函数，便于路由注册和请求分发 */
-export function compose(
-  middlewares: (Middleware | ErrorMiddleware)[],
-): (req: NovaRequest, res: NovaResponse) => Promise<void> {
-  const chain = new MiddlewareChain();
-  for (const middleware of middlewares) {
-    chain.use(middleware);
-  }
-  return async (req, res) => {
-    try {
-      await chain.dispatch(req, res);
-    } catch (error: unknown) {
-      await chain.dispatchError(error, req, res);
-    }
-  };
-}
-
 /**
  * 在路由注册阶段一次性编译处理器
  *

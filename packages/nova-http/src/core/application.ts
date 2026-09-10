@@ -3,7 +3,7 @@ import { Hooks } from "./hooks";
 import type { HookHandler, HookName } from "./hooks";
 import { composeRoute, MiddlewareChain } from "./middleware-chain";
 import type { ErrorMiddleware, Middleware, MiddlewareContext } from "./middleware-chain";
-import { createMountedMiddleware, createPrefixedMiddleware } from "./mount";
+import { createMountedMiddleware, createPrefixedMiddleware, normalizeMountPrefix } from "./mount";
 import type { NovaRequest } from "./request";
 import { NovaResponse } from "./response";
 import { BUILTIN_HTTP_METHODS, createRouteBuilder } from "./route-builder";
@@ -24,7 +24,8 @@ export class Application {
     ...middlewares: (Middleware | ErrorMiddleware | Application)[]
   ): this {
     if (typeof pathOrMiddleware === "string") {
-      for (const middleware of middlewares) this._mount(pathOrMiddleware, middleware);
+      const prefix = normalizeMountPrefix(pathOrMiddleware);
+      for (const middleware of middlewares) this._mount(prefix, middleware);
     } else {
       this._mount("/", pathOrMiddleware);
       for (const middleware of middlewares) this._mount("/", middleware);
