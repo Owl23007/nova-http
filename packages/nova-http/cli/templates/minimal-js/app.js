@@ -2,8 +2,10 @@ const { bodyParser, createApp } = require("nova-http");
 
 const app = createApp();
 
+// 内置中间件
 app.use(bodyParser());
 
+// 路由
 app.get("/", (_req, res) => {
   res.json({ message: "Hello from {{name}}!", timestamp: Date.now() });
 });
@@ -17,12 +19,16 @@ app.post("/echo", (req, res) => {
   res.json({ received: req.context.bodyParserData?.body });
 });
 
-app.use((err, _req, res, _next) => {
+// 全局错误处理
+const errorHandler = (err, _req, res, _next) => {
   const error = err instanceof Error ? err : new Error(String(err));
   console.error(error.stack);
   res.status(500).json({ error: error.message });
-});
+};
 
+app.use(errorHandler);
+
+// 启动服务
 const PORT = Number(process.env.PORT ?? 3000);
 
 app.listen(PORT, "0.0.0.0", () => {

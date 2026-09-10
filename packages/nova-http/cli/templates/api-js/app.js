@@ -7,7 +7,7 @@ const { authMiddleware } = require("./middlewares/auth");
 const { registerRequestLogger } = require("./middlewares/logger");
 
 const app = createApp({
-  maxBodySize: 1 * 1024 * 1024,
+  maxBodySize: 1 * 1024 * 1024, // 1 MB
   keepAliveTimeout: 65_000,
 });
 
@@ -37,6 +37,7 @@ function readAppVersion() {
 
 const APP_VERSION = readAppVersion();
 
+// 全链路观测
 registerRequestLogger(app);
 
 app.addHook("onListen", ({ host, port }) => {
@@ -52,8 +53,10 @@ app.addHook("onError", ({ error, req }) => {
   console.error(`[错误] ${routePath}:`, e.message);
 });
 
+// 全局中间件
 app.use(bodyParser());
 
+// 路由挂载
 app.use("/health", healthRouter);
 
 app.get("/", (_req, res) => {
@@ -67,15 +70,19 @@ app.get("/", (_req, res) => {
 
 app.use("/api", authMiddleware(), usersRouter);
 
+// 自定义 404 响应行为
 app.all("/*", (_req, res) => {
   res.status(404).json({ error: "接口不存在" });
 });
 
-app.use((err, _req, res, _next) => {
+// 全局错误处理
+const errorHandler = (err, _req, res, _next) => {
   const error = err instanceof Error ? err : new Error(String(err));
   console.error(error.stack);
   res.status(500).json({ error: "服务器内部错误", message: error.message });
-});
+};
+
+app.use(errorHandler);
 
 const PORT = Number(process.env.PORT ?? 3000);
 app.listen(PORT, "0.0.0.0");
