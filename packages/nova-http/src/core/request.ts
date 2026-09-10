@@ -10,6 +10,7 @@
  * 允许开发者将自定义属性挂载到 `req.context`，保持类型安全
  */
 
+import { RequestCancellation } from "./request-cancellation";
 import { isJsonMediaType, mediaType } from "../message/media-type";
 import type { BodyReadOptions, IncomingBody } from "../message/body";
 import type { ConnectionInfo, ConnectionIntent } from "../message/connection";
@@ -57,9 +58,13 @@ export class NovaRequest {
 
   private _query: URLSearchParams | undefined;
   private _cookies: Record<string, string> | undefined;
-  private _abortController: AbortController | undefined;
-  private _aborted: boolean = false;
-  private _abortReason: unknown;
+  /** @internal 原请求和挂载视图共享的取消状态 */
+  private _cancellationState = new RequestCancellation();
+
+  /** @internal 供响应共享取消状态 */
+  get _cancellation(): RequestCancellation {
+    return this._cancellationState;
+  }
 
   /** 创建请求对象 */
   constructor(parsed: IncomingRequestMeta) {
@@ -77,6 +82,26 @@ export class NovaRequest {
     // 解析 pathname
     const qIdx = this.path.indexOf("?");
     this.pathname = qIdx === -1 ? this.path : this.path.substring(0, qIdx);
+  }
+
+  /** @internal 创建独立路径视图，共享请求数据、上下文和取消状态 */
+  _createView(path: string): NovaRequest {
+    const view = new NovaRequest({
+      method: this.method,
+      clientIp: this.ip,
+      rawTarget: this.rawTarget,
+      path,
+      version: this.httpVersion,
+      headers: this.headers,
+      body: this.body,
+      trailers: this.trailers,
+      connection: this.connection,
+      peer: this.peer,
+    });
+    view._cancellationState = this._cancellationState;
+    view.context = this.context;
+    view._startAt = this._startAt;
+    return view;
   }
 
   /**
@@ -162,22 +187,11 @@ export class NovaRequest {
 
   /** 请求取消信号，客户端断开、超时或服务关闭时触发 */
   get signal(): AbortSignal {
-    if (this._abortController === undefined) {
-      this._abortController = new AbortController();
-      if (this._aborted) {
-        this._abortController.abort(this._abortReason);
-      }
-    }
-    return this._abortController.signal;
+    return this._cancellation.signal;
   }
 
   /** @internal 取消当前请求及其响应中的异步工作 */
   _abort(reason: unknown): void {
-    if (this._aborted) return;
-    this._aborted = true;
-    this._abortReason = reason;
-    if (this._abortController !== undefined) {
-      this._abortController.abort(reason);
-    }
+    this._cancellation.abort(reason);
   }
 }

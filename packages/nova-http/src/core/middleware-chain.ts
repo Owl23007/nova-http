@@ -1,29 +1,12 @@
 import type { NovaRequest } from "./request";
 import type { NovaResponse } from "./response";
-import type { Handler } from "./router";
-import type { Hooks } from "./hooks";
-
-/** 当前 middleware 所属应用提供的通用运行上下文 */
-export interface MiddlewareContext {
-  hooks: Hooks;
-}
-
-export type Middleware = (
-  this: MiddlewareContext | void,
-  req: NovaRequest,
-  res: NovaResponse,
-  next: NextFunction,
-) => void | Promise<void>;
-
-export type ErrorMiddleware = (
-  this: MiddlewareContext | void,
-  err: unknown,
-  req: NovaRequest,
-  res: NovaResponse,
-  next: NextFunction,
-) => void | Promise<void>;
-
-export type NextFunction = (err?: unknown) => void;
+import type {
+  Handler,
+  Middleware,
+  ErrorMiddleware,
+  MiddlewareContext,
+  NextFunction,
+} from "./handler";
 
 /** 中间件链，负责按顺序执行中间件和错误处理器 */
 export class MiddlewareChain {

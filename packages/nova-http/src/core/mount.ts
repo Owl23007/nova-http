@@ -1,9 +1,4 @@
-import type {
-  ErrorMiddleware,
-  Middleware,
-  MiddlewareContext,
-  NextFunction,
-} from "./middleware-chain";
+import type { ErrorMiddleware, Middleware, MiddlewareContext, NextFunction } from "./handler";
 import type { NovaRequest } from "./request";
 import type { NovaResponse } from "./response";
 
@@ -124,8 +119,7 @@ export function matchesMountPrefix(pathname: string, prefix: string): boolean {
 /**
  * 为子应用创建带重写路径的请求对象
  *
- * 该函数复用原请求原型，仅覆盖 `path`、`pathname` 和 `params`
- * 避免复制连接信息、headers、body 等请求上下文
+ * 挂载层只计算路径，由请求对象定义视图的状态共享规则
  */
 export function createMountedRequest(req: NovaRequest, prefix: string): NovaRequest {
   if (prefix === "/") {
@@ -135,26 +129,5 @@ export function createMountedRequest(req: NovaRequest, prefix: string): NovaRequ
   const mountedPathname = req.pathname === prefix ? "/" : req.pathname.slice(prefix.length);
   const querySuffix = req.path.slice(req.pathname.length);
   const mountedPath = `${mountedPathname}${querySuffix}`;
-  const mountedReq = Object.create(req) as NovaRequest;
-
-  Object.defineProperties(mountedReq, {
-    path: {
-      value: mountedPath,
-      enumerable: true,
-      configurable: true,
-    },
-    pathname: {
-      value: mountedPathname,
-      enumerable: true,
-      configurable: true,
-    },
-    params: {
-      value: {},
-      writable: true,
-      enumerable: true,
-      configurable: true,
-    },
-  });
-
-  return mountedReq;
+  return req._createView(mountedPath);
 }

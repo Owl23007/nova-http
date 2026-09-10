@@ -9,7 +9,7 @@ export class HeaderBlock implements Iterable<HeaderField> {
   private _index: Map<string, number[]> | undefined;
 
   constructor(fields: readonly HeaderField[] = []) {
-    this._fields = fields;
+    this._fields = snapshotFields(fields);
   }
 
   get fields(): readonly HeaderField[] {
@@ -40,7 +40,7 @@ export class HeaderBlock implements Iterable<HeaderField> {
 
   /** 仅供 HTTP 内核写入延迟到达的 Trailer */
   _replace(fields: readonly HeaderField[]): void {
-    this._fields = fields;
+    this._fields = snapshotFields(fields);
     this._index = undefined;
   }
 
@@ -56,4 +56,11 @@ export class HeaderBlock implements Iterable<HeaderField> {
     this._index = index;
     return index;
   }
+}
+
+/** 复制并冻结字段，避免外部修改导致字段集合与索引不一致 */
+function snapshotFields(fields: readonly HeaderField[]): readonly HeaderField[] {
+  return Object.freeze(
+    fields.map(({ name, value }) => Object.freeze({ name: name.toLowerCase(), value })),
+  );
 }

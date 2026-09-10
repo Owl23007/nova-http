@@ -8,7 +8,7 @@ import {
   type NovaResponse,
   type NextFunction,
 } from "../../src";
-import { MiddlewareChain } from "../../src/core";
+import { MiddlewareChain } from "../../src/core/middleware-chain";
 
 let app: Nova | undefined;
 
