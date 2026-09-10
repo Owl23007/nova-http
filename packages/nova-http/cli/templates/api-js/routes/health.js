@@ -2,6 +2,10 @@ const { createApp } = require("nova-http");
 
 const router = createApp();
 
+/**
+ * GET /health
+ * 健康检查端点，用于负载均衡器 / k8s liveness probe
+ */
 router.get("/", (_req, res) => {
   res.json({
     status: "ok",
