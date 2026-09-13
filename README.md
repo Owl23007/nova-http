@@ -680,12 +680,6 @@ usersApp.get("/:id", getUser);
 app.use("/api/users", usersApp);
 ```
 
----
-
-## 许可证
-
-MIT © Owl23007
-
 ### 请求语义
 
 - `rawTarget` 保留原始 request-target；`path` 是协议层提取的路径及 query，`pathname` 不含 query。它们不解码、不消除点路径段；不再提供重复的 `target`。
@@ -693,3 +687,10 @@ MIT © Owl23007
 - `bodyBytesReceived` 表示当前已接收字节数，不代表完整 body 大小；原 `bodySize` 已移除。
 - `isJson` 和 `bodyParser` 支持 `application/json` 及 `application/*+json`；媒体类型匹配忽略大小写和参数。
 - `trustProxy` 默认为 `false`；`true` 信任全部代理；非负整数表示从 socket 对端开始信任的跳数；`(address, hop) => boolean` 判断每一跳，socket 对端的 hop 为 0。沿 X-Forwarded-For 从右向左取第一个不受信任的地址，遇到无效 IP 停止，不使用 X-Real-IP 回退。使用跳数时须确保所有入口的代理链长度符合配置；`true` 要求入口代理清理客户端提供的转发头。
+  
+---
+
+## 许可证
+
+MIT © Owl23007
+
