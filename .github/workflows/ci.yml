@@ -52,6 +52,9 @@ jobs:
       - name: Build
         run: pnpm run build
 
+      - name: Verify documentation examples
+        run: pnpm run docs:check
+
       - name: Verify release package synchronization
         run: pnpm run check:release
 
