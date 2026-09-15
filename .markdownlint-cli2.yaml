@@ -1,0 +1,43 @@
+$schema: https://raw.githubusercontent.com/DavidAnson/markdownlint-cli2/main/schema/markdownlint-cli2-config-schema.json
+gitignore: true
+
+config:
+  # 关闭行长度限制，允许在文档中使用长行
+  MD013: false
+  # 注册的 VitePress 组件
+  MD033:
+    allowed_elements:
+      - DocLinks
+      - HomeCommand
+      - LayerDiagram
+
+overrides:
+  - filter:
+      - docs/index.md
+    config:
+      # 首页文档中允许使用自定义组件
+      MD033:
+        allowed_elements:
+          - DocLinks
+          - HomeCommand
+          - a
+          - br
+          - code
+          - div
+          - figcaption
+          - figure
+          - h1
+          - i
+          - li
+          - p
+          - pre
+          - span
+          - ul
+    combine: merge
+
+  - filter:
+      - .changeset/*.md
+    config:
+      # Changeset 文档中关闭标题级别检查，允许使用任意级别的标题
+      MD041: false
+    combine: merge

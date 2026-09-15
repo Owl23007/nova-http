@@ -4,10 +4,13 @@
   "private": true,
   "scripts": {
     "dev": "vitepress dev .",
-    "build": "vitepress build .",
+    "build": "vitepress build . && node scripts/check-links.mjs",
+    "check": "node scripts/check-examples.mjs",
     "preview": "vitepress preview ."
   },
   "devDependencies": {
-    "vitepress": "^1.6.4"
+    "nova-http": "workspace:*",
+    "vitepress": "^1.6.4",
+    "vue": "3.5.34"
   }
 }
