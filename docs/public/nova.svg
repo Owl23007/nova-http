@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+  width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="56" y1="36" x2="456" y2="480"
+      gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1976FA"/>
+      <stop offset="1" stop-color="#136FFA"/>
+    </linearGradient>
+
+    <linearGradient id="whiteMain" x1="150" y1="120" x2="370" y2="410"
+      gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="0.72" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#F6F8FC"/>
+    </linearGradient>
+
+    <linearGradient id="whiteStem" x1="0" y1="103" x2="0" y2="409"
+      gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#FAFBFD"/>
+    </linearGradient>
+
+    <!-- 中间主斜带：保持上一版完全不变 -->
+    <path id="mainRibbonShape"
+      d="
+        M 97.5 167.1
+
+        L 97.5 119
+        C 97.5 109.4, 103.9 103, 113.5 103
+
+        L 163.5 103
+        C 175.2 103, 183.6 107.3, 191.2 116.5
+
+        L 354.8 321.8
+
+        C 366.2 336.0, 379.0 343.3, 394.5 344.5
+        C 400.7 345.0, 406.6 344.9, 414.5 344.9
+
+        L 414.5 393.0
+        C 414.5 402.6, 408.1 409.0, 398.5 409.0
+
+        L 348.5 409.0
+        C 336.8 409.0, 328.4 404.7, 320.8 395.5
+
+        L 157.2 190.2
+
+        C 145.8 176.0, 133.0 168.7, 117.5 167.5
+        C 111.3 167.0, 105.4 167.1, 97.5 167.1
+
+        Z
+      "/>
+
+    <!--
+      统一间隙 mask：
+      黑色 = 从竖带中扣除。
+      主斜带本身 + 9.0px 外扩区全部扣除，
+      所以斜带不动，两侧空隙自动保持同一宽度。
+    -->
+    <mask id="stemGapMask" maskUnits="userSpaceOnUse" x="0" y="0" width="512" height="512">
+      <rect width="512" height="512" fill="white"/>
+      <use href="#mainRibbonShape"
+        fill="black"
+        stroke="black"
+        stroke-width="36.0"
+        stroke-linejoin="round"/>
+    </mask>
+  </defs>
+
+  <!-- 背景保持不变 -->
+  <path d="
+    M 102 8
+    H 410
+    C 461.915 8, 504 50.085, 504 102
+    V 410
+    C 504 461.915, 461.915 504, 410 504
+    H 102
+    C 50.085 504, 8 461.915, 8 410
+    V 102
+    C 8 50.085, 50.085 8, 102 8
+    Z
+  " fill="url(#bg)"/>
+
+  <!--
+    两侧竖带先保持完整、完全一致。
+    gap 不是靠手调两条曲线，而是由同一个 mask 参数统一扣出来。
+  -->
+  <g mask="url(#stemGapMask)">
+    <rect x="96" y="103" width="82" height="306" rx="18"
+      fill="url(#whiteStem)"/>
+    <rect x="334" y="103" width="82" height="306" rx="18"
+      fill="url(#whiteStem)"/>
+  </g>
+
+  <!-- 主斜带最后绘制，几何完全没有修改 -->
+  <use href="#mainRibbonShape" fill="url(#whiteMain)"/>
+</svg>
