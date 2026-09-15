@@ -1,15 +1,31 @@
+---
+description: Nova 的适用场景、接口边界与应用开发阅读路线。
+---
+
 # 简介
 
-欢迎使用 Nova 框架。
+Nova 是用 TypeScript 编写、直接运行在 Node.js TCP 之上的 HTTP 框架。它提供方法路由、中间件、子应用、请求上下文、生命周期钩子，以及支持背压的请求体和响应流。
 
-**Nova** 是一个采用现代 TypeScript 编写的轻量级 Node.js HTTP 框架，致力于以极小的开销和优秀的类型提示提升开发体验。
+## 适用场景
 
-项目核心功能（如 `HttpParser`、`Router` 以及强大的中间件引擎）都在 `src/core` 下经过精心编排。
+可以用 Nova 构建 JSON API、文件服务和 SSE 接口，也可以通过公开内核入口研究或扩展请求分发。数据库、身份认证、业务校验和部署编排由应用选择与组织。
 
-## 为什么选择 Nova？
+生产包没有第三方运行依赖；HTTP/1 解析、消息定界和连接协调由项目自身实现。需要了解实现时，从[架构与边界](../framework/architecture)进入。
 
-- **现代化中间件系统**：全面支持 `async/await`。
-- **无黑盒**：精简的代码库和原生的接口透出。
-- **高性能**：内部优化了 Buffer 的读取和路由的解析树。
+## 使用边界
 
-> 本文档基于 [VitePress](https://vitepress.dev/) 构建，拥有极速的热更新体验以及漂亮的 Markdown 渲染能力。
+Nova 的 `get()`、`use()` 和中间件签名采用常见的 Express 风格，但请求和响应是 Nova 自身的类型。依赖 Express 或 Node `IncomingMessage`、`ServerResponse` 实现细节的中间件不能直接视为兼容。
+
+当前服务器适配器处理 HTTP/1.0 和 HTTP/1.1。TLS 可在入口代理终止；项目未提供 HTTP/2、WebSocket、multipart 解析或通用插件注册系统。扩展通过函数、中间件、Hooks 与子应用组合。
+
+::: info 文档版本
+本站描述当前工作区。包声明的运行要求为 Node.js ≥ 18；仓库 CI 测试 Node.js 20、22、24。已记录的版本变更与尚未归入发行版的接口见[版本说明](../releases/)。
+:::
+
+## 从这里开始
+
+<DocLinks :items="[
+  { title: '快速开始', description: '安装、启动并通过 HTTP 请求验证第一个接口。', href: '/guide/getting-started' },
+  { title: 'JSON API 示例', description: '阅读包含请求体校验和状态码的完整应用。', href: '/guide/recipes/rest-api' },
+  { title: 'API 参考', description: '已有使用经验时，直接查找签名、配置与返回值。', href: '/api/' },
+]" />

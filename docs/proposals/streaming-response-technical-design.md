@@ -1,6 +1,17 @@
-# Nova 通用流式响应技术方案
+---
+description: 流式响应的原始实现方案及其与当前分层架构的差异。
+status: 历史设计
+---
 
-本文是《[Nova 通用流式响应 PRD](./streaming-response-prd.md)》的实现方案。方案基于当前
+# 流式响应原始设计
+
+::: warning 已演进的设计
+本文保留原方案，用于追溯写队列、背压与完成语义的动机。当前实现已拆分 NovaResponse → ResponseSink → TCP；文件发送属于 static，取消由连接协调器持有。旧文件路径、socket 属性、abort 构造和 headersSent 的状态推导不再作为实现依据。
+
+当前结构见[架构与边界](../framework/architecture)，接口见 [NovaResponse](../api/response)，状态与取消见[响应与取消](../framework/internals/response-lifecycle)。
+:::
+
+本文是《[Nova 通用流式响应 PRD](./streaming-response-prd.md)》的原始实现方案。方案基于当时的
 `NovaResponse -> net.Socket` 架构，不引入 `http.ServerResponse` 或第三方依赖。
 
 ## 1. 现状与问题
