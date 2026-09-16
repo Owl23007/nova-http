@@ -5,6 +5,7 @@ import { navigation, sidebar } from "../.vitepress/navigation.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../.vitepress/dist");
 const origin = "https://nova-docs.invalid";
+const base = `/${(process.env.DOCS_BASE ?? "/").replace(/^\/+|\/+$/g, "")}`.replace(/^\/$/, "");
 const errors = [];
 const pages = new Map();
 async function walk(directory) {
@@ -33,10 +34,12 @@ async function check(href, source) {
   if (!href || /^(?:https?:|mailto:|tel:|data:|javascript:)/i.test(href)) return;
   const url = new URL(
     decode(href),
-    origin + source.replace(/index\.html$/, "").replace(/\.html$/, ""),
+    origin + base + source.replace(/index\.html$/, "").replace(/\.html$/, ""),
   );
   if (url.origin !== origin) return;
-  const path = decodeURIComponent(url.pathname);
+  const deployedPath = decodeURIComponent(url.pathname);
+  const path =
+    base && deployedPath.startsWith(`${base}/`) ? deployedPath.slice(base.length) : deployedPath;
   const candidates = path.endsWith("/")
     ? [path + "index.html"]
     : [path, path + ".html", path + "/index.html"];

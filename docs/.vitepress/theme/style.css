@@ -217,7 +217,7 @@
   display: grid;
   grid-template-columns: 0.9fr 1.1fr;
   gap: 48px;
-  align-items: center;
+  align-items: end;
   padding: 16px 0 40px;
 }
 .home-intro::before {
@@ -462,7 +462,7 @@
 .home-code-stage {
   position: relative;
   min-width: 0;
-  transform: rotate(-0.35deg);
+  transform: translateY(-16px) rotate(-0.35deg);
   transform-origin: center;
 }
 .home-code-stage::after {
