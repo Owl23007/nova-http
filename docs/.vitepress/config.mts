@@ -1,13 +1,16 @@
 import { defineConfig } from "vitepress";
 import { navigation, sidebar } from "./navigation.mjs";
 
+const base = process.env.DOCS_BASE ?? "/";
+
 export default defineConfig({
+  base,
   lang: "zh-CN",
   title: "Nova",
   description: "基于 Node.js TCP 的 HTTP 框架：应用开发、API 参考与内核实现。",
   lastUpdated: true,
   cleanUrls: true,
-  head: [["link", { rel: "icon", type: "image/svg+xml", href: "/nova.svg" }]],
+  head: [["link", { rel: "icon", type: "image/svg+xml", href: `${base}nova.svg` }]],
   markdown: { theme: { light: "github-light", dark: "github-dark" } },
   themeConfig: {
     logo: "/nova.svg",
