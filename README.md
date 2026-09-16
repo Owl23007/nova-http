@@ -42,7 +42,7 @@ await app.listen(3000, "127.0.0.1");
 
 ## 运行范围
 
-包声明 Node.js ≥ 18，仓库 CI 测试 Node.js 20、22、24；贡献工具链使用 Node.js 24。Nova 的接口采用 Express 风格，但不承诺兼容依赖 Express 或 Node HTTP 对象内部实现的中间件。
+发布包要求 Node.js ≥ 20，并在 Node.js 20、22、24 上验证安装与运行。仓库开发最低要求为 Node.js 22.22.1，支持 22/24，构建与发布推荐使用 Node.js 24。Nova 的接口采用 Express 风格，但不承诺兼容依赖 Express 或 Node HTTP 对象内部实现的中间件。
 
 服务器提供 HTTP/1.0 与 HTTP/1.1，TLS 可由入口代理处理。数据库、认证和业务校验由应用组织。性能测量见[方法与历史报告](./docs/framework/performance/index.md)。
 

@@ -10,7 +10,8 @@ A zero-dependency HTTP framework built directly on Node.js `net`. Nova provides 
 npm install nova-http
 ```
 
-Requires Node.js 18 or later.
+Requires Node.js 20 or later. Release artifacts are tested on Node.js 20,
+22 and 24.
 
 ## Quick start
 

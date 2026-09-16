@@ -17,7 +17,7 @@ description: 仓库已记录版本与尚未发布变更，升级时应核对的�
 
 ## 待发布变更
 
-当前 Changesets 包括模块分层与子路径导出、流式请求体、严格请求语义、分布式 HookEvents、观测与控制流边界、中间件错误传播。它们尚未合并为具体发行版号。
+当前 Changesets 包括模块分层与子路径导出、流式请求体、严格请求语义、分布式 HookEvents、观测与控制流边界、中间件错误传播，以及 Node.js 运行基线调整。它们尚未合并为具体发行版号。
 
 | 影响范围 | 升级关注点                                             |
 | -------- | ------------------------------------------------------ |
@@ -26,5 +26,6 @@ description: 仓库已记录版本与尚未发布变更，升级时应核对的�
 | Hooks    | 使用 addHook/removeHook/emitHook，观测不参与请求控制流 |
 | 请求语义 | rawTarget、path、bodyBytesReceived 与 RequestContext   |
 | 配置     | trustProxy 扩展、parserLimits、checkContinue           |
+| 运行环境 | 最低 Node.js 版本由 18 提升至 20                       |
 
 完整步骤见 [Core API 迁移](./migrations/core-api)。当前变更清单来自仓库 [.changeset](https://github.com/Owl23007/nova-http/tree/master/.changeset)，发布后应将迁移页关联最终版本。
