@@ -12,6 +12,9 @@ function readJson(relativePath) {
 const frameworkPackage = readJson("packages/nova-http/package.json");
 const initializerPackage = readJson("packages/create-nova-http/package.json");
 const changesetsConfig = readJson(".changeset/config.json");
+const runtimeNodeRange = ">=20.0.0";
+
+assert.equal(readJson("package.json").engines.node, "^22.22.1 || ^24.0.0");
 
 assert.equal(
   initializerPackage.version,
@@ -26,6 +29,25 @@ assert.ok(
   fixedTogether,
   "nova-http and create-nova-http must belong to one fixed Changesets group",
 );
+
+assert.equal(frameworkPackage.engines.node, runtimeNodeRange);
+assert.equal(initializerPackage.engines.node, runtimeNodeRange);
+
+for (const template of ["minimal", "minimal-js", "api", "api-js"]) {
+  const templatePackage = readJson(`packages/nova-http/cli/templates/${template}/package.json`);
+  assert.equal(
+    templatePackage.engines.node,
+    runtimeNodeRange,
+    `${template} template must use the published runtime Node.js range`,
+  );
+  if (templatePackage.devDependencies?.["@types/node"]) {
+    assert.equal(
+      templatePackage.devDependencies["@types/node"],
+      "^20.0.0",
+      `${template} template must use the runtime baseline Node.js types`,
+    );
+  }
+}
 
 for (const fileName of ["README.md", "LICENSE", "CHANGELOG.md"]) {
   assert.ok(

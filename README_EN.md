@@ -43,7 +43,7 @@ Documentation describes the current checkout. Pending Changesets include API cha
 
 ## Scope
 
-The package declares Node.js 18 or later. Repository CI tests Node.js 20, 22 and 24; contributor tooling uses Node.js 24. Nova provides HTTP/1.0 and HTTP/1.1. TLS termination, persistence, authentication and business validation are application or deployment concerns.
+Published packages require Node.js 20 or later and are installation-smoke-tested on Node.js 20, 22 and 24. Repository development requires Node.js 22.22.1 or later within the 22/24 release lines; Node.js 24 is recommended for builds and releases. Nova provides HTTP/1.0 and HTTP/1.1. TLS termination, persistence, authentication and business validation are application or deployment concerns.
 
 The middleware signature is Express-style, but Nova request and response objects do not guarantee compatibility with middleware that depends on Express or Node HTTP internals. `next()` returns void; use `onResponse` for completion observation. Request bodies are single-consumer streams, and manual response writes should be awaited and ended before the handler returns.
 
