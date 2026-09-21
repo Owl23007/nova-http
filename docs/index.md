@@ -1,5 +1,6 @@
 ---
 layout: home
+footer: false
 title: Nova 文档
 description: 构建 Node.js HTTP 应用，理解从 TCP 到响应的完整链路。
 ---
@@ -92,33 +93,33 @@ await app.listen(3000);
 </div>
 </div>
 
-<div class="home-paths">
-<div>
+<div class="home-paths" aria-label="探索 Nova 文档">
+<section aria-labelledby="build-with-nova">
 
 <span class="home-eyebrow">BUILD WITH NOVA</span>
 
-## 构建应用
+<h2 id="build-with-nova">构建应用</h2>
 
 <DocLinks :items="[
-  { title: '安装与第一个接口', description: '选择 JavaScript 或 TypeScript，启动并验证服务。', href: '/guide/getting-started' },
-  { title: '指南与实践', description: '组织路由、读取请求体、处理错误和部署服务。', href: '/guide/introduction' },
-  { title: 'API 与配置', description: '查找签名、默认值、返回值和行为边界。', href: '/api/' },
+  { title: '快速开始', description: '使用脚手架创建项目，启动并运行你的第一个 Nova 应用。', href: '/guide/getting-started' },
+  { title: '进阶开发', description: '编写中间件、使用钩子，为应用添加可复用的扩展。', href: '/framework/extensions' },
+  { title: 'API 参考', description: '查阅请求、响应和路由接口，以及配置参数与默认值。', href: '/api/' },
 ]" />
 
-</div>
-<div>
+</section>
+<section aria-labelledby="inside-nova">
 
 <span class="home-eyebrow">INSIDE NOVA</span>
 
-## 理解框架
+<h2 id="inside-nova">理解框架</h2>
 
 <DocLinks :items="[
-  { title: '架构与请求生命周期', description: '从消息契约到连接复用，追踪一次请求。', href: '/framework/architecture' },
-  { title: '开发与贡献', description: '配置工作区，运行测试，验证和发布变更。', href: '/framework/contributing/setup' },
-  { title: '版本与迁移', description: '区分已记录版本与工作区变更，查阅升级步骤。', href: '/releases/' },
+  { title: '架构设计', description: '了解请求分发、HTTP 解析与 TCP 连接管理如何分工。', href: '/framework/architecture' },
+  { title: '参与贡献', description: '搭建开发环境，了解源码结构并参与贡献。', href: '/framework/contributing/setup' },
+  { title: '版本与迁移', description: '查看版本变更、待发布功能，以及后续的前进路线。', href: '/releases/' },
 ]" />
 
-</div>
+</section>
 </div>
 
 </div>
