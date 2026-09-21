@@ -674,20 +674,39 @@ body::-webkit-scrollbar-thumb:active {
 .home-paths {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 64px;
-  padding: 48px 0;
+  gap: 0;
+  padding: 56px 0 16px;
+}
+.home-paths > section {
+  min-width: 0;
+  padding-right: 40px;
+}
+.home-paths > section + section {
+  padding-right: 0;
+  padding-left: 40px;
+  border-left: 1px solid var(--vp-c-divider);
 }
 .home-paths h2 {
   border: 0;
   padding: 0;
-  margin: 12px 0 24px;
+  margin: 10px 0 24px;
   font-size: 1.625rem;
 }
 .home-paths .doc-links {
   margin: 0;
 }
 .home-paths .doc-links a {
-  padding: 22px 0;
+  padding: 18px 12px;
+  border-radius: 4px;
+  transition: background-color 180ms ease;
+}
+.home-paths .doc-links a:hover,
+.home-paths .doc-links a:focus-visible {
+  background: var(--vp-c-brand-soft);
+}
+.home-paths .doc-link-description {
+  font-size: 0.8125rem;
+  line-height: 1.7;
 }
 .home-paths .doc-link-title {
   color: var(--vp-c-text-1);
@@ -698,6 +717,71 @@ body::-webkit-scrollbar-thumb:active {
 }
 .home-paths a:hover .doc-link-title > span {
   transform: translateX(3px);
+}
+.home-paths a:focus-visible .doc-link-title > span {
+  transform: translateX(3px);
+}
+.nova-footer {
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 96px;
+  background: var(--vp-c-bg);
+}
+.nova-footer-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px 24px;
+  border-top: 1px solid var(--vp-c-divider);
+  padding: 24px 0;
+  margin: 0 auto;
+}
+.nova-footer-brand {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+}
+.nova-footer-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--vp-c-text-1);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  flex-shrink: 0;
+}
+.nova-footer-logo img {
+  width: 22px;
+  height: 22px;
+}
+.nova-footer-brand p {
+  margin: 0;
+  color: var(--vp-c-text-3);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.nova-footer a {
+  text-decoration: none;
+  transition: color 150ms ease;
+}
+.nova-footer a:hover {
+  color: var(--vp-c-brand-1);
+}
+.nova-footer-bottom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 24px;
+  color: var(--vp-c-text-3);
+  font-size: 12px;
+}
+.nova-footer-bottom a {
+  border-left: 1px solid var(--vp-c-divider);
+  padding-left: 16px;
 }
 .home-architecture {
   border: 1px solid var(--vp-c-divider);
@@ -801,7 +885,18 @@ body::-webkit-scrollbar-thumb:active {
     font-size: 2rem;
   }
   .home-paths {
-    gap: 32px;
+    gap: 0;
+  }
+  .home-paths > section {
+    padding-right: 24px;
+  }
+  .home-paths > section + section {
+    padding-left: 24px;
+  }
+}
+@media (min-width: 768px) and (max-width: 959px) {
+  .nova-footer {
+    padding-inline: 80px;
   }
 }
 :focus-visible {
@@ -837,8 +932,20 @@ body::-webkit-scrollbar-thumb:active {
     inset-inline: -16px;
   }
   .home-paths {
-    padding: 48px 0;
-    gap: 48px;
+    padding: 36px 0 8px;
+    gap: 36px;
+  }
+  .home-paths > section,
+  .home-paths > section + section {
+    padding: 0;
+    border-left: 0;
+  }
+  .nova-footer {
+    padding: 0 16px;
+  }
+  .nova-footer-inner {
+    flex-direction: column;
+    align-items: flex-start;
   }
   .home-capabilities {
     padding: 16px 0 24px;

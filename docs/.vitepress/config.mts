@@ -1,18 +1,32 @@
-import { defineConfig } from "vitepress";
+import { defineConfigWithTheme } from "vitepress";
+import type { NovaThemeConfig } from "./theme/types";
 import { navigation, sidebar } from "./navigation.mjs";
 
 const base = process.env.DOCS_BASE ?? "/";
 
-export default defineConfig({
+export default defineConfigWithTheme<NovaThemeConfig>({
   base,
   lang: "zh-CN",
   title: "Nova",
-  description: "基于 Node.js TCP 的 HTTP 框架：应用开发、API 参考与内核实现。",
+  description: "基于 Node.js TCP 的 HTTP 框架，面向流的设计，显式控制，轻量高性能",
   lastUpdated: true,
   cleanUrls: true,
   head: [["link", { rel: "icon", type: "image/svg+xml", href: `${base}nova.svg` }]],
   markdown: { theme: { light: "github-light", dark: "github-dark" } },
   themeConfig: {
+    homeFooter: {
+      label: "网站页脚",
+      homeLabel: "Nova 首页",
+      homeHref: "/",
+      logoSrc: "/nova.svg",
+      brand: "Nova",
+      description: "基于 Node.js TCP 的 HTTP 框架，面向流的设计，显式控制，轻量高性能",
+      copyright: "© Owl23007 · Nova contributors",
+      license: {
+        text: "MIT License",
+        href: "https://github.com/Owl23007/nova-http/blob/master/LICENSE",
+      },
+    },
     logo: "/nova.svg",
     siteTitle: "Nova",
     nav: navigation,
