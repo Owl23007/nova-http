@@ -1,6 +1,6 @@
 # Nova
 
-[English](./README_EN.md) · [应用开发](./docs/guide/introduction.md) · [API 参考](./docs/api/index.md) · [框架开发](./docs/framework/index.md)
+[English](./README_EN.md) · [应用开发](./docs/guide/introduction.md) · [API 参考](./docs/api/index.md) · [框架设计](./docs/framework/index.md)
 
 Nova 是基于 Node.js TCP 的轻量 HTTP 框架，使用 TypeScript 编写，生产运行不依赖第三方包。提供方法路由、中间件、子应用、类型化生命周期钩子，以及支持背压的请求体和响应流。
 
