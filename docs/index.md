@@ -11,7 +11,7 @@ description: 构建 Node.js HTTP 应用，理解从 TCP 到响应的完整链路
 
 <h1 class="home-title">从<a class="home-title-link" href="/guide/request"> 请求 </a>到<a class="home-title-link" href="/guide/response"> 响应 </a><br>保持清晰与可控</h1>
 
-<p class="home-summary"><span class="home-brand-line">Built for the flow of HTTP on Node.js.</span><span class="home-brand-subtitle">面向流设计的轻量级 Node.js HTTP 框架</span></p>
+<p class="home-summary"><span class="home-brand-line">Built for the flow of HTTP on Node.js.</span><span class="home-brand-subtitle">从 Socket 读写开始，让流模型贯穿 HTTP 全生命周期</span></p>
 
 <ul class="home-tags" aria-label="框架特点">
 <li>Zero Runtime Dependencies</li>
@@ -21,7 +21,7 @@ description: 构建 Node.js HTTP 应用，理解从 TCP 到响应的完整链路
 
 <div class="home-actions">
 <a class="primary" href="./guide/getting-started">快速开始 →</a>
-<a href="./framework/">框架开发</a>
+<a href="./framework/">了解设计</a>
 </div>
 
 <HomeCommand
@@ -42,18 +42,16 @@ import { createApp } from "nova-http";
 
 const app = createApp();
 
-app.get("/hello/:name", (req, res) => {
-  res.json({ hello: req.params.name });
+app.post("/echo", async (req, res) => {
+  for await (const chunk of req.body) {
+    await res.write(chunk);
+  }
+
+  await res.end();
 });
 
-await app.listen(3000, "127.0.0.1");
+await app.listen(3000);
 ```
-
-<div class="home-terminal" aria-label="启动命令与服务地址">
-<pre><code><span class="terminal-prompt">$</span> npm install nova-http
-<span class="terminal-prompt">$</span> node app.mjs</code></pre>
-<div class="home-server-address"><span aria-hidden="true">→</span> http://127.0.0.1:3000</div>
-</div>
 
 </div>
 </div>
@@ -61,46 +59,38 @@ await app.listen(3000, "127.0.0.1");
 <div class="home-capabilities">
 <div>
 
-<span class="home-capability-number" aria-hidden="true">01</span>
+<div class="home-capability-number" aria-hidden="true">01</div>
 
-## 清晰的应用 API
+## 流式优先
 
-方法路由、子应用、请求上下文。
+请求与响应以流处理，背压、取消与持续输出贯穿整个生命周期。
 
-</div>
-<div>
-
-<span class="home-capability-number" aria-hidden="true">02</span>
-
-## 原生流控制
-
-Readable、Async Iterable、背压控制。
+<p class="home-capability-tech"><code>Readable</code> · <code>AsyncIterable</code> · <code>Backpressure</code></p>
 
 </div>
 <div>
 
-<span class="home-capability-number" aria-hidden="true">03</span>
+<div class="home-capability-number" aria-hidden="true">02</div>
 
-## 明确的协议边界
+## 显式控制
 
-Application / Protocol / Transport 分层。
+控制流由代码明确表达。继续、响应、结束或失败，都不依赖框架猜测。
+
+<p class="home-capability-tech"><code>next()</code> · <code>write()</code> · <code>Hooks</code></p>
+
+</div>
+<div>
+
+<div class="home-capability-number" aria-hidden="true">03</div>
+
+## 链路连续
+
+应用、协议与传输各司其职，通过统一契约衔接完整的 HTTP 链路。
+
+<p class="home-capability-tech"><code>Application</code> · <code>Protocol</code> · <code>Transport</code></p>
 
 </div>
 </div>
-<figure class="home-architecture" aria-label="请求处理路径：Application、Router 与 Middleware、Request / Response、HTTP/1.1 Protocol、TCP">
-<figcaption><span>NOVA / REQUEST PATH</span><span>请求处理路径</span></figcaption>
-<div class="architecture-flow">
-<div class="architecture-node architecture-app">Application</div>
-<span class="architecture-arrow" aria-hidden="true">↓</span>
-<div class="architecture-routing"><span>Router</span><span aria-hidden="true">→</span><span>Middleware</span></div>
-<span class="architecture-arrow" aria-hidden="true">↓</span>
-<div class="architecture-node architecture-exchange"><span>Request</span><span aria-hidden="true">→</span><span>Response</span></div>
-<span class="architecture-arrow" aria-hidden="true">↓</span>
-<div class="architecture-node">HTTP/1.1 Protocol</div>
-<span class="architecture-arrow" aria-hidden="true">↓</span>
-<div class="architecture-node architecture-tcp">TCP</div>
-</div>
-</figure>
 
 <div class="home-paths">
 <div>
