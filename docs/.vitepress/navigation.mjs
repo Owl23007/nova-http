@@ -2,7 +2,7 @@ const page = (text, link) => ({ text, link });
 export const navigation = [
   { text: "应用开发", link: "/guide/introduction", activeMatch: "/guide/" },
   { text: "API 参考", link: "/api/", activeMatch: "/api/" },
-  { text: "框架开发", link: "/framework/", activeMatch: "/(framework|proposals|testing)/" },
+  { text: "框架设计", link: "/framework/", activeMatch: "/(framework|proposals|testing)/" },
   { text: "版本与迁移", link: "/releases/", activeMatch: "/releases/" },
 ];
 const guide = [

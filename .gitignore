@@ -6,3 +6,4 @@ examples/*
 .tmp/*
 *.tgz
 .vscode
+.pnpm-store
