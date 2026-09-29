@@ -28,4 +28,4 @@ description: 仓库已记录版本与尚未发布变更，升级时应核对的�
 | 配置     | trustProxy 扩展、parserLimits、checkContinue           |
 | 运行环境 | 最低 Node.js 版本由 18 提升至 20                       |
 
-完整步骤见 [Core API 迁移](./migrations/core-api)。当前变更清单来自仓库 [.changeset](https://github.com/Owl23007/nova-http/tree/master/.changeset)，发布后应将迁移页关联最终版本。
+完整步骤见 [Core API 迁移](./migrations/01-core-api)。当前变更清单来自仓库 [.changeset](https://github.com/Owl23007/nova-http/tree/master/.changeset)，发布后应将迁移页关联最终版本。

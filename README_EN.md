@@ -31,13 +31,13 @@ Run `node app.mjs`, then request `http://127.0.0.1:3000/hello/Nova`.
 
 The full documentation is currently maintained in Simplified Chinese:
 
-| Task                 | Reference                                                                                                                                   |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| Build an application | [Guide](./docs/guide/introduction.md), [quick start](./docs/guide/getting-started.md)                                                       |
-| Look up behavior     | [API](./docs/api/index.md), [configuration](./docs/api/configuration.md), [CLI](./docs/api/cli.md)                                          |
-| Stream data          | [Request bodies](./docs/guide/request-body.md), [responses](./docs/guide/streaming-response.md), [SSE example](./docs/guide/recipes/sse.md) |
-| Extend the framework | [Architecture](./docs/framework/architecture.md), [extensions](./docs/framework/extensions.md)                                              |
-| Upgrade              | [Version notes](./docs/releases/index.md), [core migration](./docs/releases/migrations/core-api.md)                                         |
+| Task                 | Reference                                                                                                                                            |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Build an application | [Guide](./docs/guide/01-introduction.md), [quick start](./docs/guide/02-getting-started.md)                                                          |
+| Look up behavior     | [API](./docs/api/index.md), [configuration](./docs/api/02-configuration.md), [CLI](./docs/api/09-cli.md)                                             |
+| Stream data          | [Request bodies](./docs/guide/07-request-body.md), [responses](./docs/guide/11-streaming-response.md), [SSE example](./docs/guide/recipes/02-sse.md) |
+| Extend the framework | [Architecture](./docs/framework/02-architecture.md), [extensions](./docs/framework/01-extensions.md)                                                 |
+| Upgrade              | [Version notes](./docs/releases/index.md), [core migration](./docs/releases/migrations/01-core-api.md)                                               |
 
 Documentation describes the current checkout. Pending Changesets include API changes that may not be available in the published npm version.
 
@@ -57,7 +57,7 @@ pnpm test
 pnpm docs:dev
 ```
 
-Full tests require Redis and a Node version with node:sqlite. See [test guidance](./docs/framework/contributing/testing.md). Check documentation examples with `pnpm docs:check` and build with `pnpm docs:build`.
+Full tests require Redis and a Node version with node:sqlite. See [test guidance](./docs/framework/contributing/02-testing.md). Check documentation examples with `pnpm docs:check` and build with `pnpm docs:build`.
 
 ## License
 

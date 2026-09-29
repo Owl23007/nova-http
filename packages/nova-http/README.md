@@ -1,6 +1,6 @@
 # nova-http
 
-[English overview](https://github.com/Owl23007/nova-http/blob/master/README_EN.md) · [中文指南](https://github.com/Owl23007/nova-http/blob/master/docs/guide/introduction.md) · [API 参考](https://github.com/Owl23007/nova-http/blob/master/docs/api/index.md)
+[English overview](https://github.com/Owl23007/nova-http/blob/master/README_EN.md) · [中文指南](https://github.com/Owl23007/nova-http/blob/master/docs/guide/01-introduction.md) · [API 参考](https://github.com/Owl23007/nova-http/blob/master/docs/api/index.md)
 
 A zero-dependency HTTP framework built directly on Node.js `net`. Nova provides a TypeScript-first API, radix-tree routing, middleware, lifecycle hooks, Keep-Alive connections, and backpressure-aware streaming.
 

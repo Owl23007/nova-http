@@ -10,7 +10,7 @@ description: 构建 Node.js HTTP 应用，理解从 TCP 到响应的完整链路
 <div>
 <span class="home-eyebrow">NOVA / HTTP FRAMEWORK</span>
 
-<h1 class="home-title">从<a class="home-title-link" href="/guide/request"> 请求 </a>到<a class="home-title-link" href="/guide/response"> 响应 </a><br>保持清晰与可控</h1>
+<h1 class="home-title">从<a class="home-title-link" href="/guide/06-request"> 请求 </a>到<a class="home-title-link" href="/guide/08-response"> 响应 </a><br>保持清晰与可控</h1>
 
 <p class="home-summary"><span class="home-brand-line">Built for the flow of HTTP on Node.js.</span><span class="home-brand-subtitle">从 Socket 读写开始，让流模型贯穿 HTTP 全生命周期</span></p>
 
@@ -21,7 +21,7 @@ description: 构建 Node.js HTTP 应用，理解从 TCP 到响应的完整链路
 </ul>
 
 <div class="home-actions">
-<a class="primary" href="./guide/getting-started">快速开始 →</a>
+<a class="primary" href="./guide/02-getting-started">快速开始 →</a>
 <a href="./framework/">了解设计</a>
 </div>
 
@@ -101,8 +101,8 @@ await app.listen(3000);
 <h2 id="build-with-nova">构建应用</h2>
 
 <DocLinks :items="[
-  { title: '快速开始', description: '使用脚手架创建项目，启动并运行你的第一个 Nova 应用。', href: '/guide/getting-started' },
-  { title: '进阶开发', description: '编写中间件、使用钩子，为应用添加可复用的扩展。', href: '/framework/extensions' },
+  { title: '快速开始', description: '使用脚手架创建项目，启动并运行你的第一个 Nova 应用。', href: '/guide/02-getting-started' },
+  { title: '进阶开发', description: '编写中间件、使用钩子，为应用添加可复用的扩展。', href: '/framework/01-extensions' },
   { title: 'API 参考', description: '查阅请求、响应和路由接口，以及配置参数与默认值。', href: '/api/' },
 ]" />
 
@@ -114,8 +114,8 @@ await app.listen(3000);
 <h2 id="inside-nova">理解框架</h2>
 
 <DocLinks :items="[
-  { title: '架构设计', description: '了解请求分发、HTTP 解析与 TCP 连接管理如何分工。', href: '/framework/architecture' },
-  { title: '参与贡献', description: '搭建开发环境，了解源码结构并参与贡献。', href: '/framework/contributing/setup' },
+  { title: '架构设计', description: '了解请求分发、HTTP 解析与 TCP 连接管理如何分工。', href: '/framework/02-architecture' },
+  { title: '参与贡献', description: '搭建开发环境，了解源码结构并参与贡献。', href: '/framework/contributing/01-setup' },
   { title: '版本与迁移', description: '查看版本变更、待发布功能，以及后续的前进路线。', href: '/releases/' },
 ]" />
 
