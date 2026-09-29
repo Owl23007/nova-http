@@ -174,9 +174,9 @@ jobs:
 
       - name: Pack release packages
         run: |
-          mkdir .artifacts
-          npm pack ./packages/nova-http --pack-destination .artifacts
-          npm pack ./packages/create-nova-http --pack-destination .artifacts
+          mkdir -p "$GITHUB_WORKSPACE/.artifacts"
+          npm pack ./packages/nova-http --pack-destination "$GITHUB_WORKSPACE/.artifacts"
+          npm pack ./packages/create-nova-http --pack-destination "$GITHUB_WORKSPACE/.artifacts"
 
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4
