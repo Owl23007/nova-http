@@ -13,15 +13,6 @@ const { image, open, close } = provideImagePreview();
 const route = useRoute();
 watch(() => route.path, close);
 onBeforeUnmount(close);
-const previewLabels = {
-  title: "图片预览",
-  close: "关闭预览",
-  zoomIn: "放大",
-  zoomOut: "缩小",
-  reset: "适应窗口",
-  hint: "拖动平移 · 滚轮缩放 · Esc 关闭",
-  error: "图片加载失败，请关闭后重试。",
-};
 </script>
 
 <template>
@@ -30,5 +21,5 @@ const previewLabels = {
       <HomeFooter v-if="frontmatter.layout === 'home'" :content="theme.homeFooter" />
     </template>
   </DefaultTheme.Layout>
-  <ImagePreview :image="image" :labels="previewLabels" @open="open" @close="close" />
+  <ImagePreview :image="image" :labels="theme.imagePreview" @open="open" @close="close" />
 </template>
