@@ -11,6 +11,16 @@ export interface HomeFooterContent {
   license: { text: string; href: string };
 }
 
+export interface ImagePreviewLabels {
+  title: string;
+  close: string;
+  zoomIn: string;
+  zoomOut: string;
+  reset: string;
+  error: string;
+}
+
 export interface NovaThemeConfig extends DefaultTheme.Config {
   homeFooter: HomeFooterContent;
+  imagePreview: ImagePreviewLabels;
 }

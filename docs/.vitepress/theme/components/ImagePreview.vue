@@ -9,7 +9,6 @@ const props = defineProps<{
     zoomIn: string;
     zoomOut: string;
     reset: string;
-    hint: string;
     error: string;
   };
 }>();
@@ -180,21 +179,33 @@ onBeforeUnmount(() => {
   >
     <div class="image-preview-toolbar">
       <span class="image-preview-title">{{ image?.alt || labels.title }}</span>
+      <div class="image-preview-controls">
+        <button
+          type="button"
+          :aria-label="labels.zoomOut"
+          :title="labels.zoomOut"
+          @click="zoom(1 / 1.25)"
+        >
+          −
+        </button>
+        <span class="image-preview-scale">{{ Math.round(scale * 100) }}%</span>
+        <button
+          type="button"
+          :aria-label="labels.zoomIn"
+          :title="labels.zoomIn"
+          @click="zoom(1.25)"
+        >
+          +
+        </button>
+        <button type="button" :aria-label="labels.reset" :title="labels.reset" @click="reset">
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M8 3H3v5M16 3h5v5M21 16v5h-5M8 21H3v-5" />
+          </svg>
+        </button>
+      </div>
       <button
         type="button"
-        :aria-label="labels.zoomOut"
-        :title="labels.zoomOut"
-        @click="zoom(1 / 1.25)"
-      >
-        −
-      </button>
-      <span class="image-preview-scale">{{ Math.round(scale * 100) }}%</span>
-      <button type="button" :aria-label="labels.zoomIn" :title="labels.zoomIn" @click="zoom(1.25)">
-        +
-      </button>
-      <button type="button" @click="reset">{{ labels.reset }}</button>
-      <button
-        type="button"
+        class="image-preview-close"
         autofocus
         :aria-label="labels.close"
         :title="labels.close"
@@ -226,7 +237,6 @@ onBeforeUnmount(() => {
       />
       <p v-if="failed" role="status">{{ labels.error }}</p>
     </div>
-    <p class="image-preview-hint">{{ labels.hint }}</p>
   </dialog>
 </template>
 
@@ -278,6 +288,35 @@ onBeforeUnmount(() => {
   font-size: 14px;
   cursor: pointer;
 }
+.image-preview-controls {
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 7px;
+}
+.image-preview-controls button {
+  min-width: 34px;
+  height: 34px;
+  padding: 0 8px;
+  border-radius: 0;
+}
+.image-preview-controls button + button,
+.image-preview-controls .image-preview-scale + button {
+  border-left: 1px solid var(--vp-c-divider);
+}
+.image-preview-controls svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.image-preview-close {
+  margin-left: 4px;
+}
 .image-preview-toolbar button:hover {
   background: var(--vp-c-bg-soft);
   color: var(--vp-c-brand-1);
@@ -287,7 +326,7 @@ onBeforeUnmount(() => {
   outline-offset: 2px;
 }
 .image-preview-scale {
-  width: 48px;
+  width: 50px;
   text-align: center;
   font-size: 12px;
   color: var(--vp-c-text-2);
@@ -315,13 +354,6 @@ onBeforeUnmount(() => {
 }
 .image-preview-stage p {
   padding: 24px;
-  text-align: center;
-}
-.image-preview-hint {
-  margin: 0;
-  padding: 10px 16px;
-  color: var(--vp-c-text-3);
-  font-size: 12px;
   text-align: center;
 }
 @media (max-width: 640px) {

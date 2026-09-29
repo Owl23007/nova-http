@@ -27,6 +27,14 @@ export default defineConfigWithTheme<NovaThemeConfig>({
     },
   },
   themeConfig: {
+    imagePreview: {
+      title: "图片预览",
+      close: "关闭预览",
+      zoomIn: "放大",
+      zoomOut: "缩小",
+      reset: "适应窗口",
+      error: "图片加载失败，请关闭后重试。",
+    },
     homeFooter: {
       label: "网站页脚",
       homeLabel: "Nova 首页",
