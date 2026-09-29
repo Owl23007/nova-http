@@ -12,7 +12,20 @@ export default defineConfigWithTheme<NovaThemeConfig>({
   lastUpdated: true,
   cleanUrls: true,
   head: [["link", { rel: "icon", type: "image/svg+xml", href: `${base}nova.svg` }]],
-  markdown: { theme: { light: "github-light", dark: "github-dark" } },
+  markdown: {
+    theme: { light: "github-light", dark: "github-dark" },
+    config(md) {
+      const fence = md.renderer.rules.fence!;
+      md.renderer.rules.fence = (tokens, index, options, env, self) => {
+        const token = tokens[index];
+        if (token.info.trim().split(/\s+/)[0] === "mermaid") {
+          const source = md.utils.escapeHtml(JSON.stringify(token.content));
+          return `<MermaidDiagram :source="${source}" error-label="图表渲染失败，请检查 Mermaid 语法" preview-label="预览图表" />\n`;
+        }
+        return fence(tokens, index, options, env, self);
+      };
+    },
+  },
   themeConfig: {
     homeFooter: {
       label: "网站页脚",
