@@ -174,15 +174,15 @@ jobs:
 
       - name: Pack release packages
         run: |
-          mkdir -p "$GITHUB_WORKSPACE/.artifacts"
-          npm pack ./packages/nova-http --pack-destination "$GITHUB_WORKSPACE/.artifacts"
-          npm pack ./packages/create-nova-http --pack-destination "$GITHUB_WORKSPACE/.artifacts"
+          mkdir -p "$GITHUB_WORKSPACE/artifacts"
+          npm pack ./packages/nova-http --pack-destination "$GITHUB_WORKSPACE/artifacts"
+          npm pack ./packages/create-nova-http --pack-destination "$GITHUB_WORKSPACE/artifacts"
 
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4
         with:
           name: release-packages
-          path: .artifacts/*.tgz
+          path: artifacts/*.tgz
           if-no-files-found: error
 
   test-release-artifacts:
@@ -210,7 +210,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: release-packages
-          path: .artifacts
+          path: artifacts
 
       - name: Test installed release artifacts
-        run: node scripts/check-packed-artifacts.mjs .artifacts
+        run: node scripts/check-packed-artifacts.mjs artifacts
