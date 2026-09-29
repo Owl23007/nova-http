@@ -8,7 +8,7 @@ export function buildApp() {
   return app;
 }
 
-// 供文档检查导入；直接运行文件时启动服务。
+// Run the app if not running in docs check mode
 if (!process.env.NOVA_DOCS_CHECK) {
   await buildApp().listen(3000, "127.0.0.1");
   console.log("http://127.0.0.1:3000/hello/Nova");
