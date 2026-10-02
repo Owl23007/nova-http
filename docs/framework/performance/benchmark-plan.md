@@ -4,7 +4,7 @@
 
 当前包名为 `@nova-http/benchmarks`。本地验证覆盖 HTTP 当前目标、真实 npm 历史三版的语义与流水线 smoke、归档来源和恶意 Artifact 拒绝、进程生命周期、parser 与流式入口。Redis 生产联调、master 分支保护、正式 Action 试跑和历史正式初始化仍待完成。
 
-实现差异：历史 fastify 与 no-pipeline 分为两个独立测量批次及归档 PR，每批在同一 job 重测全部历史目标与对照，第二批以新增 manifest 标记初始化完成，不覆盖首批数据。其余使用说明见 `packages/benchmarks/README.md`。
+历史初始化按原规划只创建一个归档 PR：fastify 与 no-pipeline 保持两个独立测量批次，每批在同一 job 测全部历史目标与对照。首批成功仅保留 Artifact，第二批通过 run ID 和确切 attempt 引用首批，两个批次来源与内容均验证通过后，在同一个 PR 追加两个批次目录，以第二批新增 manifest 标记 complete，不覆盖首批数据。第二批失败可复用有效首批 Artifact 恢复。使用说明见 `packages/benchmarks/README.md`。
 
 ## 目标与范围
 

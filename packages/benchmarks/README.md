@@ -77,8 +77,8 @@ pnpm --filter @nova-http/benchmarks bench --historical --profile smoke
 
 历史入口再次核对 registry，先验证 tarball，再禁用安装脚本且不生成第二份锁文件进行隔离安装，用实际发布包执行全部五个场景的响应与流水线预检
 
-正式链路稳定后，在 master 手动运行 Benchmark 的 historical 选项，先选 fastify，归档后再选 no-pipeline，每次同 job 测三个发布包和三个对照，不拼接跨 job 的绝对 QPS
+正式链路稳定后，在 master 手动运行 Benchmark 的 historical 选项，先选 fastify；首批成功后只保存 Artifact，不创建 PR。再选 no-pipeline，并将首批的 run ID 与确切 attempt 填入 historical_base_run、historical_base_attempt。第二批开始测量前先核实首批成功来源及 Artifact，不能只凭输入自述恢复
 
-为保持每个 job 在 45 分钟预算内，两个 profile 分成独立批次和归档 PR；后一个 manifest 以新增数据记录 complete，之前批次保持不变，已归档组合拒绝重测，失败仅保留临时结果并保持 incomplete
+两个 profile 保持独立批次，各自在 45 分钟预算内以同一个 job 测三个发布包和三个对照，不拼接跨 job 的绝对 QPS。第二批成功后，归档器重新验证两个 run、attempt、SHA 和各自 Artifact，向首批身份对应的固定临时分支一次性追加两个批次目录，只创建一个初始化归档 PR。第二批重试仍使用相同分支，不因新的第二批 run ID 另建初始化分支
 
-此处与规划中的“一个初始化归档 PR”有差异：当前每个成功测量 run 对应一个临时归档 PR，避免聚合多个 run 的来源与失败状态
+首批 manifest 保持 incomplete 原文不变，第二批 manifest 引用首批身份并记录 complete，PR 校验器必须同时验证两批数据才允许合并。任一批失败、Artifact 过期或证据不全都不创建或放行归档 PR。第二批失败可重新运行 no-pipeline 并继续引用仍有效的首批 Artifact，不重测已成功的 fastify。初始化合并后拒绝重复运行，两次测量和 PR 核验都必须在首批 Artifact 的 30 天有效期内完成
