@@ -1,6 +1,6 @@
 # Nova
 
-English · [简体中文](./README.md)
+[简体中文](./README.md) | English
 
 Nova is a lightweight HTTP framework built directly on Node.js TCP. It provides method routing, middleware, sub-applications, typed lifecycle hooks, and backpressure-aware request and response streams. The production package uses no third-party runtime dependencies.
 
