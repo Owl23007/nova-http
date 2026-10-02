@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "bench": "node runner/cli.js",
-    "test": "vitest run",
+    "test": "pnpm --filter nova-http build && vitest run",
     "typecheck": "tsc --noEmit",
     "archive:check": "node report/archive-cli.js",
     "bench:parser": "node suites/parser/llhttp.cjs",
