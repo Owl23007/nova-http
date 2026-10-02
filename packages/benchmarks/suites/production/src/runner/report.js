@@ -3,6 +3,20 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 export function normalizeResult(scenario, result, samples, summarizeSamples) {
+  for (const value of [
+    result.requests?.total,
+    result.requests?.average,
+    result.latency?.average,
+    result.latency?.p97_5,
+    result.latency?.p99,
+    result.latency?.max,
+    result.throughput?.average,
+    result.errors,
+    result.timeouts,
+    result.non2xx,
+  ]) {
+    if (!Number.isFinite(value) || value < 0) throw new Error("生产场景缺少有效测量指标");
+  }
   // 将 autocannon 原始结果和资源采样统一成稳定 JSON schema，便于 CI 或历史对比消费
   const requests = result.requests?.total || 0;
   const failures = (result.errors || 0) + (result.timeouts || 0) + (result.non2xx || 0);

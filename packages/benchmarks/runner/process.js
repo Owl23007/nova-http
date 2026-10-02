@@ -1,6 +1,12 @@
 import { fork } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
+/**
+ * 启动独立目标并限定就绪等待时间
+ * @param {object} target 目标配置
+ * @param {string} scenario 场景名称
+ * @param {{timeout?: number, signal?: AbortSignal, server?: URL}} options 生命周期配置
+ */
 export async function startTarget(
   target,
   scenario,
@@ -21,7 +27,7 @@ export async function startTarget(
       const timer = setTimeout(() => child.kill("SIGKILL"), 1500);
       child.once("exit", () => {
         clearTimeout(timer);
-        resolve();
+        resolve(undefined);
       });
       child.kill();
     });
@@ -45,7 +51,15 @@ export async function startTarget(
       child.once("exit", exited);
       signal?.addEventListener("abort", aborted, { once: true });
       child.once("message", (message) => {
-        if (!Number.isInteger(message.port) || message.port < 1 || message.port > 65535)
+        if (
+          !message ||
+          typeof message !== "object" ||
+          !("port" in message) ||
+          typeof message.port !== "number" ||
+          !Number.isInteger(message.port) ||
+          message.port < 1 ||
+          message.port > 65535
+        )
           return fail(new Error("服务端口无效"));
         cleanup();
         resolve(message.port);

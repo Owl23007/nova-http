@@ -4,8 +4,8 @@
   "description": "nova-http 的生产风格 API 与压力测试套件。",
   "type": "module",
   "scripts": {
-    "start": "pnpm --filter @nova/benchmarks bench:production",
-    "stress": "pnpm --filter @nova/benchmarks bench:production:stress"
+    "start": "pnpm --filter @nova-http/benchmarks bench:production",
+    "stress": "pnpm --filter @nova-http/benchmarks bench:production:stress"
   },
   "engines": {
     "node": ">=22.5.0"

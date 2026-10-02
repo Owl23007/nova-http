@@ -41,13 +41,13 @@ export function startServerProcess(config) {
 }
 
 export async function stopServerProcess(server) {
-  if (!server || server.killed) return;
+  if (!server) return;
   if (server.exitCode !== null || server.signalCode !== null) return;
 
   // 先发 SIGTERM 走优雅关闭，超时后再兜底 SIGKILL
   await new Promise((resolve) => {
     const timeout = setTimeout(() => {
-      if (!server.killed) {
+      if (server.exitCode === null && server.signalCode === null) {
         server.kill("SIGKILL");
       }
     }, 3_000);

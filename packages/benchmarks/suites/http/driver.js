@@ -1,6 +1,14 @@
 import autocannon from "autocannon";
 import { validBody } from "./scenarios.js";
 
+/**
+ * 执行有限时长压测并跟踪目标生命周期
+ * @param {number} port 监听端口
+ * @param {{path: string, method: string, body?: string, expected: unknown}} scenario 场景配置
+ * @param {{connections: number, pipelining: number}} profile 负载配置
+ * @param {number} duration 测量秒数
+ * @param {{signal?: AbortSignal, child?: import('node:child_process').ChildProcess}} options 生命周期配置
+ */
 export function measure(port, scenario, profile, duration, { signal, child } = {}) {
   return new Promise((resolve, reject) => {
     let checked = 0;

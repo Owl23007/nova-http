@@ -3,7 +3,30 @@
 const fs = require("fs");
 const path = require("path");
 const { AsyncResource } = require("async_hooks");
-const { HTTPParser, ConnectionsList } = process.binding("http_parser");
+let nativeBinding;
+try {
+  nativeBinding = process.binding("http_parser");
+} catch (error) {
+  const outputDir = path.resolve(__dirname, "../../../../.tmp/benchmark/results/parser-v1");
+  fs.mkdirSync(outputDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(outputDir, `node-native-unsupported-${Date.now()}.json`),
+    JSON.stringify(
+      {
+        suite: "parser-v1",
+        status: "unsupported",
+        node: process.version,
+        reason: error.message,
+        legacySource: "packages/nova-http/scripts/benchmark/benchmark-parser-vs-node-native.js",
+      },
+      null,
+      2,
+    ),
+  );
+  console.error("当前 Node 未公开原生解析器绑定，该对照标记为 unsupported");
+  process.exit(1);
+}
+const { HTTPParser, ConnectionsList } = nativeBinding;
 
 const {
   SegmentedInput,
@@ -156,7 +179,7 @@ function createNodeNativeParser() {
   parser[HTTPParser.kOnHeadersComplete] = () => 0;
   parser[HTTPParser.kOnBody] = () => {};
   parser[HTTPParser.kOnMessageComplete] = () => {};
-  // Keep references alive; initialize() does not strongly retain them
+  // 保持引用存活，初始化方法不会强引用这些对象
   parser._benchResource = resource;
   parser._benchConnectionsList = connectionsList;
 
@@ -196,12 +219,18 @@ function runNodeNative(chunks, iterations) {
   };
 }
 
-function benchOne(input, iterations) {
-  const nova = runNova(input.chunks, iterations);
-  const nodeNative = runNodeNative(input.chunks, iterations);
+function benchOne(input, iterations, round = 0) {
+  let nova;
+  let nodeNative;
+  const order = round % 2 ? ["nodeNative", "nova"] : ["nova", "nodeNative"];
+  for (const target of order) {
+    if (target === "nova") nova = runNova(input.chunks, iterations);
+    else nodeNative = runNodeNative(input.chunks, iterations);
+  }
   return {
     ...input,
     iterations,
+    order,
     nova,
     nodeNative,
     nodeNativeVsNova: nodeNative.reqPerSec / nova.reqPerSec,
@@ -299,7 +328,7 @@ function main() {
   for (let r = 0; r < rounds; r += 1) {
     process.stdout.write(`[benchmark] round ${r + 1}/${rounds}\n`);
     for (const input of inputs) {
-      const result = benchOne(input, measureIterations);
+      const result = benchOne(input, measureIterations, r);
       rawRounds.push(result);
       const key = `${input.scenario}__${input.mode}`;
       if (!grouped.has(key)) grouped.set(key, []);
@@ -321,6 +350,7 @@ function main() {
     },
     summary,
     rounds: rawRounds.map((r) => ({
+      order: r.order,
       scenario: r.scenario,
       mode: r.mode,
       fullLength: r.fullLength,

@@ -1,0 +1,122 @@
+name: Benchmark
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+    paths:
+      [
+        "packages/nova-http/**",
+        "packages/benchmarks/**",
+        "pnpm-lock.yaml",
+        ".github/workflows/benchmark*.yml",
+      ]
+  schedule:
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+    inputs:
+      historical:
+        description: 正式归档链路验证后才启用历史初始化
+        type: boolean
+        default: false
+      profile:
+        type: choice
+        options: [fastify, no-pipeline]
+        default: fastify
+      scenario:
+        type: choice
+        options: [json-small, text, params-query, json-echo, middleware-5]
+        default: json-small
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: benchmark-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    runs-on: ubuntu-24.04
+    outputs:
+      measure: ${{ steps.paths.outputs.measure }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: paths
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        shell: bash
+        run: |
+          if [ "$EVENT" != pull_request ]; then
+            echo 'measure=true' >> "$GITHUB_OUTPUT"
+          elif git diff --name-only "$BASE" HEAD | grep -Eq '^(packages/(nova-http|benchmarks)/|pnpm-lock.yaml$|.github/workflows/benchmark)'; then
+            echo 'measure=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'measure=false' >> "$GITHUB_OUTPUT"
+          fi
+  measure:
+    needs: changes
+    if: needs.changes.outputs.measure == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.21.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Checkout PR baseline
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: .tmp/benchmark/work/baseline
+          persist-credentials: false
+      - name: Install baseline
+        if: github.event_name == 'pull_request'
+        working-directory: .tmp/benchmark/work/baseline
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Measure paired targets
+        id: bench
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROFILE: ${{ inputs.profile || 'fastify' }}
+          SCENARIO: ${{ inputs.scenario || 'json-small' }}
+          BENCH_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BENCH_PR_NUMBER: ${{ github.event.pull_request.number }}
+          EVENT: ${{ github.event_name }}
+          HISTORICAL: ${{ inputs.historical || false }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        shell: bash
+        run: |
+          export BENCH_WORKFLOW_ID=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/benchmark.yml" --jq .id)
+          if [ "$EVENT" = pull_request ]; then
+            if git diff --name-only "$BASE" HEAD -- packages/benchmarks .github/workflows/benchmark.yml | grep -q .; then
+              export BENCH_METHODOLOGY_CHANGED=true
+            fi
+            pnpm --filter @nova-http/benchmarks bench --profile pr --scenario "$SCENARIO" --baseline-root "$GITHUB_WORKSPACE/.tmp/benchmark/work/baseline"
+          elif [ "$HISTORICAL" = true ]; then
+            pnpm --filter @nova-http/benchmarks bench --profile "$PROFILE" --scenario "$SCENARIO" --historical
+          else
+            pnpm --filter @nova-http/benchmarks bench --profile "$PROFILE" --scenario "$SCENARIO"
+          fi
+      - name: Upload measurement JSON
+        if: always() && steps.bench.outputs.results != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: benchmark-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.bench.outputs.results }}/*.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 30

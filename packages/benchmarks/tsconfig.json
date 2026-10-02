@@ -1,7 +1,8 @@
 {
   "compilerOptions": {
     "allowJs": true,
-    "checkJs": false,
+    "checkJs": true,
+    "strict": false,
     "noEmit": true,
     "module": "NodeNext",
     "target": "ES2023",

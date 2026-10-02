@@ -177,12 +177,18 @@ function runLlhttp(chunks, iterations) {
   };
 }
 
-function benchOne(input, iterations) {
-  const nova = runNova(input.chunks, iterations);
-  const llhttp = runLlhttp(input.chunks, iterations);
+function benchOne(input, iterations, round = 0) {
+  let nova;
+  let llhttp;
+  const order = round % 2 ? ["llhttp", "nova"] : ["nova", "llhttp"];
+  for (const target of order) {
+    if (target === "nova") nova = runNova(input.chunks, iterations);
+    else llhttp = runLlhttp(input.chunks, iterations);
+  }
   return {
     ...input,
     iterations,
+    order,
     nova,
     llhttp,
     llhttpVsNova: llhttp.reqPerSec / nova.reqPerSec,
@@ -280,7 +286,7 @@ function main() {
   for (let r = 0; r < rounds; r += 1) {
     process.stdout.write(`[benchmark] round ${r + 1}/${rounds}\n`);
     for (const input of inputs) {
-      const result = benchOne(input, measureIterations);
+      const result = benchOne(input, measureIterations, r);
       rawRounds.push(result);
       const key = `${input.scenario}__${input.mode}`;
       if (!grouped.has(key)) grouped.set(key, []);
@@ -302,6 +308,7 @@ function main() {
     },
     summary,
     rounds: rawRounds.map((r) => ({
+      order: r.order,
       scenario: r.scenario,
       mode: r.mode,
       fullLength: r.fullLength,

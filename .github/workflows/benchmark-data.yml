@@ -1,0 +1,29 @@
+name: Benchmark data
+
+on:
+  pull_request_target:
+    branches: [master]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+
+jobs:
+  data:
+    name: Benchmark data validation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      # 只执行受保护分支的校验器，PR 文件仅通过 API 当作数据读取
+      - uses: actions/checkout@v7
+        with:
+          ref: master
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.21.0
+      - run: node packages/benchmarks/report/archive-cli.js check
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

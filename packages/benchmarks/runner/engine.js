@@ -12,7 +12,7 @@ export async function run({
   profileName,
   metadata,
   signal,
-  onRecord = async () => {},
+  onRecord = async (_record) => {},
   start = startTarget,
   check = validate,
   pipeline = validatePipeline,
@@ -52,11 +52,18 @@ export async function run({
         server = await start(target, scenarioName, { signal });
         result.responseHeaders = await check(server.port, scenario);
         await pipeline(server.port, scenario);
+        result.validation = {
+          before: true,
+          pipelineBefore: true,
+          after: false,
+          pipelineAfter: false,
+        };
         const warmup = await load(server.port, scenario, profile, profile.warmup, {
           signal,
           child: server.child,
         });
         const warmMetrics = metrics(warmup.raw);
+        result.warmup = warmup;
         if (
           warmup.invalid ||
           !warmup.checked ||
@@ -73,7 +80,9 @@ export async function run({
         result.rawDigest = digest(result.raw);
         result.metrics = metrics(result.raw);
         await check(server.port, scenario);
+        result.validation.after = true;
         await pipeline(server.port, scenario);
+        result.validation.pipelineAfter = true;
         if (
           result.invalid ||
           !result.checked ||
