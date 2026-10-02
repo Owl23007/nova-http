@@ -66,13 +66,8 @@ jobs:
       - name: Type check generated templates
         run: pnpm run check:templates
 
-      - name: Verify nova-http npm package
-        working-directory: packages/nova-http
-        run: npm pack --dry-run
-
-      - name: Verify create-nova-http npm package
-        working-directory: packages/create-nova-http
-        run: npm pack --dry-run
+      - name: Verify installed release artifacts
+        run: pnpm run check:artifacts
 
       - name: Smoke test CLI project generation
         run: pnpm run check:cli
@@ -81,7 +76,6 @@ jobs:
         id: changesets
         uses: changesets/action@v2
         with:
-          # This expects you to have a script called release which runs `changeset publish`
           publish-script: pnpm run release
           commit-message: "chore(release): version packages"
           pr-title: "chore(release): version packages"
