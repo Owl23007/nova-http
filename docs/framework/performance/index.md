@@ -8,15 +8,27 @@ description: 区分微基准与生产场景，复现现有性能套件并阅读�
 
 ## 运行套件
 
-先构建框架。生产套件需要支持 node:sqlite 的 Node.js 和本地 Redis，独立依赖位于 `packages/nova-http/scripts/performance`。
+基准工具统一由私有包 `@nova-http/benchmarks` 管理，依赖使用根锁文件。HTTP 不需要外部服务，生产套件需要支持 node:sqlite 的 Node.js 和本地 Redis。
 
 ```sh
 pnpm -F nova-http build
-pnpm --dir packages/nova-http/scripts/performance install
-pnpm -F nova-http bench:production:stress
+pnpm --filter @nova-http/benchmarks test
+pnpm --filter @nova-http/benchmarks bench
+pnpm --filter @nova-http/benchmarks bench --profile pr --scenario params-query
+pnpm --filter @nova-http/benchmarks bench:production:stress
 ```
 
 `bench:production` 仅启动场景服务；`bench:production:stress` 才编排服务与压测。解析器与响应微基准可使用包 scripts 中的 bench:parser、bench:stream 等命令。
+
+HTTP、parser、production 使用独立 suite，不合并排行榜。所有本地新结果写入被 Git 忽略的 `.tmp/benchmark/results/`，历史包写入 `.tmp/benchmark/work/`。默认 smoke 只验证功能，不作为性能成绩。
+
+HTTP 包含 Nova 当前构建、Fastify schema、Fastify 无 schema、node:http，逐轮重启、轮换执行顺序、统一预热与负载，校验状态码、类型、正文及流水线完整性，保存原始轮次、失败原因、来源与环境元数据。失败轮次不计分，缺失指标不填零。
+
+PR baseline 与实际构建版本在同一 job 使用同一驱动测量，只生成 Summary 和 Artifact。正式 `.benchmark/http-v1/` 仅接受成功 Action 的归档 PR，通过来源、Artifact 一致性及只追加校验后进入 master。使用 `node packages/benchmarks/report/render.js` 从 JSON 重建展示文件，未有归档时明确显示无正式数据。
+
+归档工作流需先合并到 master，再配置必需数据检查、CODEOWNERS 审核和允许 Actions 创建 PR，完成一次正式试跑后才进行历史初始化。仓库本地测试不代表这些远端设置已经生效。
+
+完整命令、负载参数和历史初始化边界见 [benchmarks 使用说明](https://github.com/Owl23007/nova-http/blob/master/packages/benchmarks/README.md)，设计背景见[实施规划](./benchmark-plan.md)。
 
 ## 默认配置
 
