@@ -1,6 +1,6 @@
 # Nova 性能测试套件
 
-独立的 ESM 场景服务与压测执行器，测量路由、中间件、JSON、Redis 和 SQLite 共同参与时的请求处理表现。基准方法与历史报告入口见[性能验证](../../../../docs/framework/performance/index.md)。
+独立的 ESM 场景服务与压测执行器，测量路由、中间件、JSON、Redis 和 SQLite 共同参与时的请求处理表现。
 
 ## 环境
 
