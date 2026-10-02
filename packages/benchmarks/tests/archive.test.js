@@ -135,7 +135,7 @@ function fixture() {
   const pr = {
     user: { login: "github-actions[bot]", id: 41898282, type: "Bot" },
     base: { ref: "master", repo: { full_name: repository } },
-    head: { ref: "codex/benchmark-123-2", repo: { full_name: repository } },
+    head: { ref: "benchmark/123-2", repo: { full_name: repository } },
   };
   const changes = Object.keys(files).map((name) => ({
     status: "added",
@@ -178,7 +178,7 @@ describe("归档拒绝不完整来源", () => {
     const { first, second } = historyPair();
     expect(validateArchiveSet([second, first], [])).toBe(first);
     const f = fixture();
-    f.pr.head.ref = "codex/benchmark-123-2";
+    f.pr.head.ref = "benchmark/123-2";
     expect(() =>
       validatePullRequest(f.pr, f.changes, [], f.files, f.files, first, first),
     ).not.toThrow();
