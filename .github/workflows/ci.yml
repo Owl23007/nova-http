@@ -214,3 +214,19 @@ jobs:
 
       - name: Test installed release artifacts
         run: node scripts/check-packed-artifacts.mjs artifacts
+
+  required:
+    name: CI Required
+    if: ${{ always() }}
+    needs:
+      - quality
+      - verify
+      - test
+      - test-release-artifacts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check required job results
+        env:
+          ALL_SUCCESS: ${{ needs.quality.result == 'success' && needs.verify.result == 'success' && needs.test.result == 'success' && needs.test-release-artifacts.result == 'success' }}
+        run: test "$ALL_SUCCESS" = "true"
