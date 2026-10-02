@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "module": "NodeNext",
+    "target": "ES2023",
+    "skipLibCheck": true
+  },
+  "include": [
+    "runner/**/*.js",
+    "adapters/**/*.js",
+    "config/**/*.js",
+    "report/**/*.js",
+    "suites/http/**/*.js",
+    "vitest.config.ts"
+  ]
+}

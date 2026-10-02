@@ -1,0 +1,26 @@
+{
+  "name": "@nova/benchmarks",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "bench": "node runner/cli.js",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "archive:check": "node report/archive-cli.js",
+    "bench:parser": "node suites/parser/llhttp.cjs",
+    "bench:parser:native": "node suites/parser/node-native.cjs",
+    "bench:production": "node suites/production/src/app/server.js",
+    "bench:production:stress": "node suites/production/src/runner/stress-test.js"
+  },
+  "dependencies": {
+    "autocannon": "8.0.0",
+    "fastify": "5.6.1",
+    "llhttp-wasm": "1.0.3",
+    "nova-http": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.2",
+    "typescript": "7.0.2",
+    "vitest": "5.0.1"
+  }
+}
