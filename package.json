@@ -8,6 +8,8 @@
     "check:release": "node scripts/check-release-sync.mjs",
     "check:templates": "pnpm -F nova-http exec tsc -p cli/templates/minimal/tsconfig.json --noEmit && pnpm -F nova-http exec tsc -p cli/templates/api/tsconfig.json --noEmit",
     "check:cli": "node scripts/check-cli.mjs",
+    "pack:release": "pnpm -F nova-http run build && node scripts/pack-release.mjs",
+    "check:artifacts": "pnpm run pack:release && node scripts/check-packed-artifacts.mjs",
     "format": "oxfmt",
     "format:check": "oxfmt --check .",
     "lint": "oxlint -c oxlint.json",
