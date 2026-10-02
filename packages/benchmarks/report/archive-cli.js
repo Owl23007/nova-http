@@ -107,13 +107,19 @@ if (process.argv[2] === "check") {
     console.log("归档校验通过: " + batches.length + " 个批次");
   }
 } else if (process.argv[2] === "promote") {
-  const trigger = event.workflow_run;
-  if (!trigger || (trigger.repository?.full_name && trigger.repository.full_name !== repository))
+  const source = event.client_payload;
+  if (
+    event.action !== "benchmark-archive" ||
+    event.repository?.full_name !== repository ||
+    !source ||
+    !/^[1-9]\d*$/.test(String(source.runId)) ||
+    !/^[1-9]\d*$/.test(String(source.runAttempt))
+  )
     throw new Error("缺少正式测量事件");
   const current = await loadVerifiedBatch(
     repository,
-    String(trigger.id),
-    String(trigger.run_attempt),
+    String(source.runId),
+    String(source.runAttempt),
     api,
   );
   const master = await api("/git/trees/master?recursive=1");
@@ -149,7 +155,7 @@ if (process.argv[2] === "check") {
     if (process.env.GITHUB_OUTPUT)
       await fs.appendFile(
         process.env.GITHUB_OUTPUT,
-        "ready=true\nbranch=codex/benchmark-" +
+        "ready=true\nbranch=benchmark/" +
           anchor.runId +
           "-" +
           anchor.runAttempt +

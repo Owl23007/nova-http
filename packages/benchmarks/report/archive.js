@@ -282,7 +282,7 @@ export function validatePullRequest(
     pr.base.ref === "master" &&
       pr.base.repo.full_name === manifest.repository &&
       pr.head.repo?.full_name === manifest.repository &&
-      pr.head.ref === `codex/benchmark-${anchor.runId}-${anchor.runAttempt}`,
+      pr.head.ref === `benchmark/${anchor.runId}-${anchor.runAttempt}`,
     "归档 PR 来源无效",
   );
   const prefix = `.benchmark/${manifest.suite}/${manifest.runId}-${manifest.runAttempt}/`;

@@ -3,6 +3,9 @@ name: Benchmark
 on:
   pull_request:
     branches: [master]
+  pull_request_target:
+    branches: [master]
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [master]
     paths:
@@ -10,7 +13,7 @@ on:
         "packages/nova-http/**",
         "packages/benchmarks/**",
         "pnpm-lock.yaml",
-        ".github/workflows/benchmark*.yml",
+        ".github/workflows/benchmark.yml",
       ]
   schedule:
     - cron: "0 3 * * 1"
@@ -37,17 +40,16 @@ on:
         description: 历史 no-pipeline 必填，首批确切 run attempt
         type: string
         default: ""
+  repository_dispatch:
+    types: [benchmark-archive]
 
 permissions:
   contents: read
   actions: read
 
-concurrency:
-  group: benchmark-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
-
 jobs:
   changes:
+    if: github.event_name == 'pull_request' || github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     outputs:
       measure: ${{ steps.paths.outputs.measure }}
@@ -64,16 +66,45 @@ jobs:
         run: |
           if [ "$EVENT" != pull_request ]; then
             echo 'measure=true' >> "$GITHUB_OUTPUT"
-          elif git diff --name-only "$BASE" HEAD | grep -Eq '^(packages/(nova-http|benchmarks)/|pnpm-lock.yaml$|.github/workflows/benchmark)'; then
+          elif git diff --name-only "$BASE" HEAD | grep -Eq '^(packages/(nova-http|benchmarks)/|pnpm-lock.yaml$|.github/workflows/benchmark.yml$)'; then
             echo 'measure=true' >> "$GITHUB_OUTPUT"
           else
             echo 'measure=false' >> "$GITHUB_OUTPUT"
           fi
+
+  data:
+    name: Benchmark data validation
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    concurrency:
+      group: benchmark-data-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    steps:
+      # 只执行受保护分支的校验器，PR 文件仅通过 API 当作数据读取
+      - uses: actions/checkout@v7
+        with:
+          ref: master
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.21.0
+      - run: node packages/benchmarks/report/archive-cli.js check
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
   measure:
     needs: changes
     if: needs.changes.outputs.measure == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    concurrency:
+      group: benchmark-measure-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v7
         with:
@@ -131,3 +162,87 @@ jobs:
           include-hidden-files: true
           if-no-files-found: error
           retention-days: 30
+
+  queue-archive:
+    name: Queue benchmark archive
+    needs: measure
+    if: needs.measure.result == 'success' && (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Dispatch archive verification
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          jq -n \
+            --arg runId "$GITHUB_RUN_ID" \
+            --arg runAttempt "$GITHUB_RUN_ATTEMPT" \
+            '{event_type:"benchmark-archive",client_payload:{runId:$runId,runAttempt:$runAttempt}}' \
+            | gh api --method POST "repos/$GITHUB_REPOSITORY/dispatches" --input -
+
+  archive:
+    name: Benchmark archive
+    if: github.event_name == 'repository_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: write
+      pull-requests: write
+    concurrency:
+      group: benchmark-archive-${{ github.event.client_payload.runId }}-${{ github.event.client_payload.runAttempt }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: master
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.21.0
+      - name: Wait for source run completion
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ github.event.client_payload.runId }}
+          SOURCE_RUN_ATTEMPT: ${{ github.event.client_payload.runAttempt }}
+        shell: bash
+        run: |
+          [[ "$SOURCE_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$SOURCE_RUN_ATTEMPT" =~ ^[1-9][0-9]*$ ]]
+          for _ in $(seq 1 30); do
+            state=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID/attempts/$SOURCE_RUN_ATTEMPT" --jq '[.status, (.conclusion // "")] | @tsv')
+            IFS=$'\t' read -r status conclusion <<< "$state"
+            if [ "$status" = completed ]; then
+              test "$conclusion" = success
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "source benchmark run did not complete in time" >&2
+          exit 1
+      - name: Verify and promote JSON
+        id: promote
+        run: node packages/benchmarks/report/archive-cli.js promote
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: Create archive pull request
+        if: steps.promote.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ steps.promote.outputs.branch }}
+          ARCHIVE_PATH: ${{ steps.promote.outputs.archive-path }}
+          ARTIFACT_ID: ${{ steps.promote.outputs.artifact-id }}
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git checkout -b "$BRANCH"
+          git add -- "$ARCHIVE_PATH"
+          git commit -m 'chore(benchmark): 归档经来源验证的基准数据'
+          gh auth setup-git
+          git push origin "$BRANCH"
+          printf '追加正式基准 JSON\n\nArtifact ID: %s\n\n需通过来源、内容一致性和只追加校验后合并\n' "$ARTIFACT_ID" > "$RUNNER_TEMP/benchmark-pr.md"
+          gh pr create --base master --head "$BRANCH" --title 'chore(benchmark): 归档正式基准数据' --body-file "$RUNNER_TEMP/benchmark-pr.md"
