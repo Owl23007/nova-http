@@ -265,7 +265,15 @@ export async function verifyProvenance(manifest, api) {
   return artifact;
 }
 
-export function validatePullRequest(pr, changes, masterPaths, files, artifactFiles, manifest) {
+export function validatePullRequest(
+  pr,
+  changes,
+  masterPaths,
+  files,
+  artifactFiles,
+  manifest,
+  anchor = manifest,
+) {
   assert(
     pr.user?.login === "github-actions[bot]" && pr.user?.id === 41898282 && pr.user?.type === "Bot",
     "仅允许 Action 机器人归档",
@@ -274,7 +282,7 @@ export function validatePullRequest(pr, changes, masterPaths, files, artifactFil
     pr.base.ref === "master" &&
       pr.base.repo.full_name === manifest.repository &&
       pr.head.repo?.full_name === manifest.repository &&
-      pr.head.ref === `codex/benchmark-${manifest.runId}-${manifest.runAttempt}`,
+      pr.head.ref === `codex/benchmark-${anchor.runId}-${anchor.runAttempt}`,
     "归档 PR 来源无效",
   );
   const prefix = `.benchmark/${manifest.suite}/${manifest.runId}-${manifest.runAttempt}/`;
@@ -296,4 +304,47 @@ export function validatePullRequest(pr, changes, masterPaths, files, artifactFil
   );
   for (const [name, content] of Object.entries(files))
     assert(content === artifactFiles[name], "Artifact 内容不一致");
+}
+
+export function validateHistoricalBase(manifest) {
+  assert(
+    manifest.kind === "historical-initialization" &&
+      manifest.profile === "fastify" &&
+      manifest.initialization?.status === "incomplete" &&
+      !manifest.initialization?.previousBatch,
+    "历史首批引用无效",
+  );
+  validateInitialization(manifest, []);
+}
+
+export function validateArchiveSet(manifests, archived) {
+  assert(manifests.length > 0, "缺少归档批次");
+  if (manifests[0].kind !== "historical-initialization") {
+    assert(manifests.length === 1, "普通归档只能包含一个批次");
+    return manifests[0];
+  }
+  assert(
+    manifests.length === 2 && manifests.every((item) => item.kind === "historical-initialization"),
+    "历史初始化必须同时归档两个批次",
+  );
+  const first = manifests.find((item) => item.profile === "fastify");
+  const second = manifests.find((item) => item.profile === "no-pipeline");
+  assert(
+    first &&
+      second &&
+      first.runId !== second.runId &&
+      first.repository === second.repository &&
+      first.suite === second.suite &&
+      first.scenario === second.scenario,
+    "历史批次组合无效",
+  );
+  validateHistoricalBase(first);
+  assert(
+    second.initialization?.previousBatch?.runId === first.runId &&
+      second.initialization.previousBatch.runAttempt === first.runAttempt,
+    "历史批次引用不匹配",
+  );
+  validateInitialization(first, archived);
+  validateInitialization(second, [...archived, first]);
+  return first;
 }

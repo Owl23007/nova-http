@@ -21,6 +21,7 @@ on:
         type: boolean
         default: false
       profile:
+        description: 历史初始化先运行 fastify，再引用首批运行 no-pipeline
         type: choice
         options: [fastify, no-pipeline]
         default: fastify
@@ -28,6 +29,14 @@ on:
         type: choice
         options: [json-small, text, params-query, json-echo, middleware-5]
         default: json-small
+      historical_base_run:
+        description: 历史 no-pipeline 必填，成功 fastify 首批的 run ID
+        type: string
+        default: ""
+      historical_base_attempt:
+        description: 历史 no-pipeline 必填，首批确切 run attempt
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -97,6 +106,8 @@ jobs:
           BENCH_PR_NUMBER: ${{ github.event.pull_request.number }}
           EVENT: ${{ github.event_name }}
           HISTORICAL: ${{ inputs.historical || false }}
+          BENCH_HISTORY_BASE_RUN: ${{ inputs.historical_base_run }}
+          BENCH_HISTORY_BASE_ATTEMPT: ${{ inputs.historical_base_attempt }}
           BASE: ${{ github.event.pull_request.base.sha }}
         shell: bash
         run: |

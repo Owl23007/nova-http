@@ -12,6 +12,8 @@ import { run } from "./engine.js";
 import { prepareHistorical, historicalState } from "./historical.js";
 import { startTarget } from "./process.js";
 import { validate, validatePipeline } from "../suites/http/validate.js";
+import { createGitHubAPI, loadVerifiedBatch } from "../report/remote.js";
+import { validateHistoricalBase } from "../report/archive.js";
 
 const require = createRequire(import.meta.url);
 const root = fileURLToPath(new URL("../../../", import.meta.url));
@@ -63,6 +65,28 @@ if (
 const completed = values.historical ? await historicalState(root) : [];
 if (values.historical && completed.includes(`http-v1/json-small/${values.profile}`))
   throw new Error("该历史组合已归档，拒绝重复初始化");
+let previousBatch = null;
+const baseRun = process.env.BENCH_HISTORY_BASE_RUN || "";
+const baseAttempt = process.env.BENCH_HISTORY_BASE_ATTEMPT || "";
+if (baseRun || baseAttempt) {
+  if (!values.historical || values.profile !== "no-pipeline")
+    throw new Error("仅历史 no-pipeline 接受首批引用");
+  const api = createGitHubAPI(
+    process.env.GITHUB_REPOSITORY,
+    process.env.GH_TOKEN || process.env.GITHUB_TOKEN,
+  );
+  const verified = await loadVerifiedBatch(
+    process.env.GITHUB_REPOSITORY,
+    baseRun,
+    baseAttempt,
+    api,
+  );
+  validateHistoricalBase(verified.manifest);
+  if (completed.length) throw new Error("历史初始化已归档");
+  completed.push("http-v1/json-small/fastify");
+  previousBatch = { runId: baseRun, runAttempt: baseAttempt };
+} else if (values.historical && values.profile === "no-pipeline")
+  throw new Error("历史 no-pipeline 必须引用成功的 fastify run 与 attempt");
 let targets = values.historical
   ? (await prepareHistorical(root)).targets
   : [
@@ -197,6 +221,7 @@ if (values.historical) {
       ? [...completed, `http-v1/json-small/${values.profile}`]
       : completed;
   manifest.initialization = {
+    previousBatch,
     completed: combos,
     status: ["fastify", "no-pipeline"].every((profile) =>
       combos.includes(`http-v1/json-small/${profile}`),
