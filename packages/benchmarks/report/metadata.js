@@ -19,6 +19,7 @@ export function metadata(root) {
   const actions = env.GITHUB_ACTIONS === "true";
   return {
     driverSha: git(root, "rev-parse", "HEAD"),
+    methodologyChanged: process.env.BENCH_METHODOLOGY_CHANGED === "true",
     dirty: git(root, "status", "--porcelain") !== "",
     source: {
       kind: actions ? "github-actions" : "local",

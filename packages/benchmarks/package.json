@@ -1,5 +1,5 @@
 {
-  "name": "@nova/benchmarks",
+  "name": "@nova-http/benchmarks",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,7 +10,8 @@
     "bench:parser": "node suites/parser/llhttp.cjs",
     "bench:parser:native": "node suites/parser/node-native.cjs",
     "bench:production": "node suites/production/src/app/server.js",
-    "bench:production:stress": "node suites/production/src/runner/stress-test.js"
+    "bench:production:stress": "node suites/production/src/runner/stress-test.js",
+    "bench:stream": "node suites/production/streaming.cjs"
   },
   "dependencies": {
     "autocannon": "8.0.0",
@@ -20,7 +21,7 @@
   },
   "devDependencies": {
     "@types/node": "26.6.2",
-    "typescript": "7.0.2",
+    "typescript": "5.9.3",
     "vitest": "5.0.1"
   }
 }

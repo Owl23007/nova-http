@@ -1,0 +1,4 @@
+/.benchmark/ @Owl23007
+/packages/benchmarks/ @Owl23007
+/.github/workflows/benchmark*.yml @Owl23007
+/.github/CODEOWNERS @Owl23007

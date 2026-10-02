@@ -1,4 +1,5 @@
 import http from "node:http";
+import net from "node:net";
 import { createRequire } from "node:module";
 import { scenarios } from "../suites/http/scenarios.js";
 
@@ -34,14 +35,28 @@ if (target.adapter === "nova") {
     let value = scenario.expected;
     if (name === "params-query") value = { id: req.params.id, q: req.query.get("q") };
     if (name === "json-echo")
-      value = target.bodyAPI === "legacy" ? req.bodyParsed : req.context.bodyParserData?.body;
+      value =
+        target.bodyAPI === "legacy"
+          ? req.bodyParsed
+          : (req.context.bodyParserData?.body ?? req.bodyParsed);
     if (name === "middleware-5") value = req.context.benchmark;
     res.setHeader("content-type", scenario.type);
     if (typeof value === "string") res.send(value);
     else res.json(value);
   });
-  await app.listen(0, "127.0.0.1");
-  port = app.address().port;
+  if (typeof app.address !== "function") {
+    // 旧版没有公开 address 方法，先申请空闲端口再通过公开 listen 启动
+    const probe = net.createServer();
+    await new Promise((resolve) => probe.listen(0, "127.0.0.1", () => resolve(undefined)));
+    const address = probe.address();
+    if (!address || typeof address === "string") throw new Error("空闲端口分配失败");
+    port = address.port;
+    await new Promise((resolve) => probe.close(resolve));
+    await app.listen(port, "127.0.0.1");
+  } else {
+    await app.listen(0, "127.0.0.1");
+    port = app.address().port;
+  }
 } else if (target.adapter === "fastify") {
   app = require("fastify")({ logger: false, keepAliveTimeout: 65000 });
   if (name === "middleware-5") {
@@ -100,7 +115,9 @@ if (target.adapter === "nova") {
   });
   app.keepAliveTimeout = 65000;
   await new Promise((resolve) => app.listen(0, "127.0.0.1", resolve));
-  port = app.address().port;
+  const address = app.address();
+  if (!address || typeof address === "string") throw new Error("服务端口无效");
+  port = address.port;
 } else throw new Error("未知适配器");
 
 process.send({ port });

@@ -8,7 +8,7 @@ export async function runAutocannon(config, scenario, runDuration) {
   const { stdout } = await runCommand(
     process.execPath,
     buildAutocannonArgs(config, scenario, runDuration),
-    { env: process.env },
+    { env: process.env, timeout: (runDuration + 15) * 1000, killSignal: "SIGKILL" },
   );
   const trimmed = stdout.trim();
 

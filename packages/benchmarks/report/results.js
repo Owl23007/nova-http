@@ -5,7 +5,7 @@ export function stats(values) {
   if (!values.length)
     return { count: 0, median: null, mean: null, standardDeviation: null, cv: null };
   if (values.some((v) => !Number.isFinite(v) || v < 0)) throw new Error("统计数据无效");
-  const sorted = [...values].sort((a, b) => a - b);
+  const sorted = [...values].toSorted((a, b) => a - b);
   const mean = values.reduce((a, b) => a + b, 0) / values.length;
   const standardDeviation = Math.sqrt(
     values.reduce((sum, v) => sum + (v - mean) ** 2, 0) / values.length,
@@ -53,6 +53,7 @@ export function validateRecord(record) {
   if (
     record.schemaVersion !== 1 ||
     record.suite !== "http-v1" ||
+    !Number.isFinite(Date.parse(record.measuredAt)) ||
     !record.target?.id ||
     !record.target?.version ||
     !record.metadata?.environment?.node ||
@@ -66,7 +67,8 @@ export function validateRecord(record) {
     if (
       !["success", "failed"].includes(round.status) ||
       !Number.isInteger(round.round) ||
-      round.round < 0
+      round.round < 0 ||
+      !Number.isFinite(Date.parse(round.measuredAt))
     )
       fail();
     if (round.status === "failed") {
@@ -78,6 +80,9 @@ export function validateRecord(record) {
       digest(round.raw) !== round.rawDigest ||
       digest(metrics(round.raw)) !== digest(round.metrics) ||
       round.invalid !== 0 ||
+      !["before", "after", "pipelineBefore", "pipelineAfter"].every(
+        (key) => round.validation?.[key] === true,
+      ) ||
       !(round.checked > 0) ||
       round.sampling !== "all-responses"
     )
@@ -90,10 +95,26 @@ export function validateRecord(record) {
 }
 
 export function summary(records) {
+  const baseline = records.find((record) => record.target.baseline);
+  const target = records.find((record) => record.target.id === "nova-current");
+  const paired =
+    baseline &&
+    target &&
+    digest(baseline.load) === digest(target.load) &&
+    digest(baseline.metadata.environment) === digest(target.metadata.environment) &&
+    baseline.statistics.qps.count === baseline.load.rounds &&
+    target.statistics.qps.count === target.load.rounds &&
+    baseline.statistics.qps.median > 0;
   return [
     "# HTTP benchmark",
     "",
     "同批次顺序测量；smoke 仅验证功能；三轮统计不用于宣称显著改善；轮次 p99 不是合并请求 p99",
+    records.some((record) => record.metadata.methodologyChanged)
+      ? "本次 PR 修改了方法学，配对结果仅表示新驱动下的表现，不与旧套件归档直接比较"
+      : "",
+    paired
+      ? `同批次 target/baseline QPS 中位数比值：${(target.statistics.qps.median / baseline.statistics.qps.median).toFixed(3)}，仅作描述比较`
+      : "",
     "",
     "| 目标 | 场景 | Profile | 有效轮数 | QPS 中位数 | QPS CV | 轮次 p99 中位数 |",
     "| --- | --- | --- | ---: | ---: | ---: | ---: |",

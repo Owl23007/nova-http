@@ -90,6 +90,8 @@ describe("独立测量和统计", () => {
     const round = {
       status: "success",
       round: 0,
+      measuredAt: "2026-10-02T00:00:00.000Z",
+      validation: { before: true, after: true, pipelineBefore: true, pipelineAfter: true },
       raw,
       rawDigest: digest(raw),
       metrics: metrics(raw),
@@ -100,6 +102,7 @@ describe("独立测量和统计", () => {
     const record = {
       schemaVersion: 1,
       suite: "http-v1",
+      measuredAt: "2026-10-02T00:00:00.000Z",
       target: { id: "node", version: "24" },
       metadata: { environment: { node: "24" }, source: {} },
       load: { profile: "smoke", rounds: 1 },
