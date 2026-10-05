@@ -49,7 +49,7 @@ importers:
         version: 5.12.5
       llhttp-wasm:
         specifier: 1.0.3
-        version: 1.0.3(typescript@5.9.3)
+        version: 1.0.3(typescript@7.0.2)
       nova-http:
         specifier: workspace:*
         version: link:../nova-http
@@ -58,8 +58,8 @@ importers:
         specifier: 26.6.4
         version: 26.6.4
       typescript:
-        specifier: 5.9.3
-        version: 5.9.3
+        specifier: 7.0.2
+        version: 7.0.2
       vitest:
         specifier: 5.0.3
         version: 5.0.3(@types/node@26.6.4)(@vitest/coverage-v8@5.0.3)(vite@8.3.2(@types/node@26.6.4)(esbuild@0.27.7)(yaml@2.9.1))
@@ -2734,11 +2734,6 @@ packages:
       '@swc/wasm':
         optional: true
 
-  typescript@5.9.3:
-    resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
-    engines: {node: '>=14.17'}
-    hasBin: true
-
   typescript@7.0.2:
     resolution: {integrity: sha512-8FYau96o3NKOhbjKi/qNvG/W5jhzxkbdm5sj9AbZ/5T5sWqn3hJgLfGx27sRKZWTvyzCP8dLRBTf5tBTSRVUNA==}
     engines: {node: '>=16.20.0'}
@@ -4889,9 +4884,9 @@ snapshots:
     optionalDependencies:
       yaml: 2.9.1
 
-  llhttp-wasm@1.0.3(typescript@5.9.3):
+  llhttp-wasm@1.0.3(typescript@7.0.2):
     dependencies:
-      typescript: 5.9.3
+      typescript: 7.0.2
 
   lodash-es@4.17.23: {}
 
@@ -5387,8 +5382,6 @@ snapshots:
       typescript: 7.0.2
       v8-compile-cache-lib: 3.0.1
       yn: 3.1.1
-
-  typescript@5.9.3: {}
 
   typescript@7.0.2:
     optionalDependencies:
