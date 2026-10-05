@@ -86,13 +86,13 @@
     "cli:init": "ts-node cli/create-nova.ts"
   },
   "devDependencies": {
-    "@types/node": "^26.6.2",
-    "@vitest/coverage-v8": "^5.0.1",
+    "@types/node": "^26.6.4",
+    "@vitest/coverage-v8": "^5.0.3",
     "supertest": "^7.3.0",
     "ts-node": "^10.9.2",
     "typescript": "^7.0.2",
-    "vite": "^8.3.1",
-    "vitest": "^5.0.1"
+    "vite": "^8.3.2",
+    "vitest": "^5.0.3"
   },
   "engines": {
     "node": ">=20.0.0"
