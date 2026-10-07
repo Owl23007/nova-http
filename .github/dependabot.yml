@@ -9,6 +9,8 @@ updates:
       time: "09:00"
       timezone: Asia/Shanghai
     open-pull-requests-limit: 5
+    exclude-paths:
+      - "packages/benchmarks/**"
     commit-message:
       prefix: "chore(deps)"
     groups:
