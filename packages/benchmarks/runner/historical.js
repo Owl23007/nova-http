@@ -49,7 +49,7 @@ export async function prepareHistorical(root) {
     const tar = path.join(work, "package.tgz");
     await fs.writeFile(tar, data);
     await fs.writeFile(path.join(work, "package.json"), JSON.stringify({ private: true }));
-    const npmCli = path.join(path.dirname(process.execPath), "node_modules/npm/bin/npm-cli.js");
+    const npmCli = await resolveNpmCli();
     execFileSync(
       process.execPath,
       [
@@ -79,6 +79,30 @@ export async function prepareHistorical(root) {
     });
   }
   return { manifest, targets };
+}
+
+export async function resolveNpmCli(execPath = process.execPath) {
+  const bin = path.dirname(execPath);
+  const candidates = [];
+  try {
+    candidates.push(await fs.realpath(path.join(bin, "npm")));
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+  candidates.push(
+    path.join(bin, "node_modules/npm/bin/npm-cli.js"),
+    path.resolve(bin, "../lib/node_modules/npm/bin/npm-cli.js"),
+  );
+  for (const candidate of candidates) {
+    if (path.basename(candidate) !== "npm-cli.js") continue;
+    try {
+      await fs.access(candidate);
+      return candidate;
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+  }
+  throw new Error(`无法定位 npm CLI: ${execPath}`);
 }
 
 async function ensureWork(root) {
