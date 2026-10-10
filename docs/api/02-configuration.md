@@ -74,7 +74,8 @@ const app = createApp({
 ## Expect: 100-continue
 
 ```ts
-import type { ContinueDecision, RequestHead } from "nova-http";
+import type { ContinueDecision } from "nova-http";
+import type { RequestHead } from "nova-http/protocol/http1";
 
 const app = createApp({
   checkContinue(head: RequestHead): ContinueDecision {
@@ -90,4 +91,4 @@ const app = createApp({
 
 ## 参数校验
 
-容量和超时必须为非负安全整数；`bodyHighWaterMark` 及 `parserLimits` 的字段必须为正安全整数。非法数值在构造时抛出 RangeError，非法策略函数类型抛出 TypeError。`NovaConfig` 扩展 `Partial<Http1ConnectionConfig>`，再加入 port、host、maxConnections。
+容量和超时必须为非负安全整数；`bodyHighWaterMark` 及 `parserLimits` 的字段必须为正安全整数。非法数值在构造时抛出 RangeError，非法策略函数类型抛出 TypeError。`NovaConfig` 独立定义应用选项，不继承内部连接配置；已有选项、默认值和同步策略保持不变。`app.address()` 返回 `ListenAddress | string | null`，地址对象保持 address、family、port 三个字段。

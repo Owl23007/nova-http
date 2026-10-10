@@ -2,7 +2,7 @@ import type { Socket } from "net";
 import { HeaderBlock } from "../message/headers";
 import { IncomingBody } from "../message/body";
 import type { IncomingRequestMeta } from "../message/request";
-import type { ConnectionInfo } from "../message/connection";
+import type { ConnectionInfo, ContinueDecision, TrustProxy } from "../message/connection";
 import { http1Error, type Http1Error } from "../protocol/http1/errors";
 import { SegmentedInput } from "../protocol/http1/input";
 import {
@@ -20,12 +20,12 @@ import {
 } from "../protocol/http1/parser";
 import type { RequestHead } from "../protocol/http1/types";
 import { serializeResponseHead } from "../protocol/http1/response";
-import { resolveClientIp, type TrustProxy } from "./proxy";
+import { resolveClientIp } from "./proxy";
 import { NovaRequest } from "../core/request";
 import { NovaResponse } from "../core/response";
 import { Http1ResponseSink } from "./http1-response-sink";
 
-export type ContinueDecision = true | { readonly status: number; readonly message: string };
+export type { ContinueDecision } from "../message/connection";
 
 export interface Http1ConnectionContext {
   readonly config: Http1ConnectionConfig;

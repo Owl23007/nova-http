@@ -24,13 +24,13 @@ body 是单次消费流，不能在 bodyParser 后再次读取。原先假定完
 
 core 不再导出 MiddlewareChain、composeRoute、createRouteBuilder 和 BUILTIN_HTTP_METHODS。改用 app.use、app.route、app.method 或 app.all。Handler、Middleware、ErrorMiddleware、MiddlewareContext 和 NextFunction 的公开导入路径保留。
 
-主入口只类型导出 NovaRequest/NovaResponse，运行时类从 core 导入。HttpParser、BufferReader 被分段输入和显式解析工具取代，见 [HTTP/1 参考](../../api/13-http1)。
+主入口只类型导出 NovaRequest/NovaResponse，运行时类从 core 导入。HeaderBlock、IncomingBody 和 ResponseOptions 也只从 core 导入；BodyPlan、ParsedHead、RequestHead、RequestTarget、HttpVersion 与 Http1Error 从 protocol/http1 导入。应用配置使用 NovaConfig，不再导入内部 Http1ConnectionConfig。已发布的 ParsedRequest 与 RouteMatch 主入口类型导入保留兼容，新扩展代码使用 core。HttpParser、BufferReader 被分段输入和显式解析工具取代，见 [HTTP/1 参考](../../api/13-http1)。
 
 ## Hooks
 
 Hooks 不再继承 EventEmitter。on/off/emit 改为 addHook/removeHook/emitHook；once 没有直接替代，可在监听器内移除原函数。移除 callHookAsync 和 createRequestTimer，完整耗时使用 onResponse.durationMs。
 
-HookEvents 支持声明合并，core、server 与中间件在所属模块定义事件。旧 CoreHookEvents/ServerHookEvents 汇总类型移除；上下文类型统一采用 *HookContext。需要拦截请求的逻辑移入中间件，onNotFound 在默认 404 确定后触发。
+HookEvents 支持声明合并，core、app 与中间件在所属模块定义事件；监听与连接观察的公开上下文由应用门面定义。旧 CoreHookEvents/ServerHookEvents 汇总类型移除；上下文类型统一采用 *HookContext。需要拦截请求的逻辑移入中间件，onNotFound 在默认 404 确定后触发。
 
 ## 取消所有权与构造接口
 

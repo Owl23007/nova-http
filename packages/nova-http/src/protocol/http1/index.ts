@@ -1,3 +1,4 @@
+/** 同步 HTTP/1 协议工具；不导出网络、异步请求体或应用分发实现 */
 export { SegmentedInput } from "./input";
 export { getReasonPhrase } from "./status";
 export {

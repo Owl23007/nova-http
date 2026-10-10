@@ -1,14 +1,11 @@
 import { Application } from "../core/application";
-import { NodeHttpServer, type Http1ConnectionConfig, type Http1ConnectionContext } from "../server";
+import { NodeHttpServer } from "../server/server";
+import type { Http1ConnectionContext } from "../server/http1-connection";
+import type { ListenAddress, NovaConfig } from "./config";
 
 export type { RouteBuilder } from "../core/route-builder";
 
-/** 基于 Node HTTP 服务器的 Nova 应用程序配置项 */
-export interface NovaConfig extends Partial<Http1ConnectionConfig> {
-  port?: number;
-  host?: string;
-  maxConnections?: number;
-}
+export type { NovaConfig } from "./config";
 
 /** 实现内核 Application,对外提供 Nova 应用程序 */
 export class Nova extends Application {
@@ -73,7 +70,7 @@ export class Nova extends Application {
   }
 
   /** 获取 Nova 应用程序的监听地址信息 */
-  address(): ReturnType<NodeHttpServer["address"]> {
+  address(): ListenAddress | string | null {
     return this.nodeServer.address();
   }
 

@@ -1,13 +1,12 @@
 /**
  * Nova HTTP 公共 API 主入口
  *
- * 该入口仅导出稳定的运行时 API 和类型。需要更细粒度的模块时，可使用：
- * - `nova-http/core`
- * - `nova-http/middlewares`
+ * 日常应用使用 createApp、处理器类型、内置中间件和文件方法。
+ * 框架扩展使用 `nova-http/core`，同步协议工具使用 `nova-http/protocol/http1`。
+ * server 连接协调与输出实现不属于公开 API。
  */
 
-export { createApp, Nova } from "./app/nova";
-export { HeaderBlock, IncomingBody } from "./core";
+export { createApp, Nova } from "./app";
 export { getMimeType, sendFile } from "./static";
 export { bodyParser, staticFiles } from "./middlewares";
 
@@ -28,34 +27,27 @@ export type {
   NotFoundHookContext,
   NovaRequest,
   NovaResponse,
-  ParsedRequest,
   RequestHookContext,
   RequestContext,
   ResponseHookContext,
   RouteBuilder,
   RouteHookContext,
-  RouteMatch,
-  ResponseOptions,
   StreamChunk,
   StreamSource,
 } from "./core";
-export type { NovaConfig } from "./app/nova";
 export type {
   ConnectHookContext,
   ContinueDecision,
   DisconnectHookContext,
-  Http1ConnectionConfig,
-  TrustProxy,
+  ListenAddress,
   ListenHookContext,
-} from "./server";
-export type {
-  BodyPlan,
-  Http1Error,
-  HttpVersion,
-  ParsedHead,
-  RequestHead,
-  RequestTarget,
-} from "./protocol/http1";
+  NovaConfig,
+  TrustProxy,
+} from "./app";
+
+// 保留已发布版本的类型导入；新扩展代码请从 core 导入。
+export type { ParsedRequest, RouteMatch } from "./core";
+
 export type {
   BodyParsedContext,
   BodyParserData,

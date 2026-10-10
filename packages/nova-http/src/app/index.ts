@@ -1,3 +1,4 @@
-/** 程序入口文件，统一导出 Nova 与 createApp */
+/** 应用创建、配置与生命周期契约 */
 export { createApp, Nova } from "./nova";
-export type { NovaConfig } from "./nova";
+export type { ContinueDecision, ListenAddress, NovaConfig, TrustProxy } from "./config";
+export type { ConnectHookContext, DisconnectHookContext, ListenHookContext } from "./hooks";

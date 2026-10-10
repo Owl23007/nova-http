@@ -17,7 +17,7 @@ description: Nova 的公开导入路径、运行时值、类型导出和查询�
 | `nova-http/protocol/http1` | 分段输入、解析、定界与输出编码工具                      | [HTTP/1](./13-http1)                                          |
 | `nova-http/package.json`   | 包元数据                                                | 以安装包为准                                                  |
 
-主入口的 `NovaRequest`、`NovaResponse` 是**类型导出**。需要构造实例时从 `nova-http/core` 导入。`message` 和 `server` 是源码分层，当前没有对应的公开包子路径。
+主入口的 `NovaRequest`、`NovaResponse` 是**类型导出**。HeaderBlock、IncomingBody 和 ResponseOptions 从 core 导入，协议类型从 protocol/http1 导入。需要构造实例时从 `nova-http/core` 导入。`message` 和 `server` 是源码分层，当前没有对应的公开包子路径。
 
 ## 按任务查询
 
@@ -29,8 +29,10 @@ description: Nova 的公开导入路径、运行时值、类型导出和查询�
 
 ## 类型与版本
 
-`Handler`、`Middleware`、`ErrorMiddleware`、`NextFunction` 和 `MiddlewareContext` 定义处理函数契约；`RequestContext` 与 `HookEvents` 支持声明合并。`NovaConfig`、`TrustProxy`、`Http1ConnectionConfig`、`ContinueDecision` 对应[配置](./02-configuration)。
+`Handler`、`Middleware`、`ErrorMiddleware`、`NextFunction` 和 `MiddlewareContext` 定义处理函数契约；`RequestContext` 与 `HookEvents` 支持声明合并。`NovaConfig`、`TrustProxy`、`ContinueDecision` 对应[配置](./02-configuration)。
 
 消息类型在[消息契约](./12-message)中说明，协议判别联合在 [HTTP/1](./13-http1) 中说明。带下划线的内部方法不作为应用扩展契约，即使它们因实现需要出现在类声明中。
 
 本页入口表以 `packages/nova-http/package.json` 的 exports 为依据。工作区行为不自动等同于 npm 已发布版本，迁移前核对[版本说明](../releases/)。
+
+主入口保留已发布的 `ParsedRequest` 与 `RouteMatch` 类型导入以兼容现有代码，新扩展代码从 core 导入。`Http1ConnectionConfig`、连接协调器与 HTTP/1 输出 sink 属于内部实现；应用配置使用 `NovaConfig`。

@@ -1,9 +1,8 @@
 import { isIP } from "net";
 import type { HeaderBlock } from "../message/headers";
-import type { ConnectionInfo } from "../message/connection";
+import type { ConnectionInfo, TrustProxy } from "../message/connection";
 
-/** false 不信任代理，true 信任全部代理，也可指定可信跳数或逐跳判断函数 */
-export type TrustProxy = boolean | number | ((address: string, hop: number) => boolean);
+export type { TrustProxy } from "../message/connection";
 
 /** 从直连对端向外检查代理链，返回第一个不受信任的地址 */
 export function resolveClientIp(
