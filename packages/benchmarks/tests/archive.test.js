@@ -4,14 +4,11 @@ import {
   verifyProvenance,
   validatePullRequest,
   workflowPath,
-  validateInitialization,
-  validateArchiveSet,
-  validateHistoricalBase,
 } from "../report/archive.js";
 import { digest, metrics, summarize } from "../report/results.js";
 import { profiles, orderForRound } from "../config/profiles.js";
 import { scenarios } from "../suites/http/scenarios.js";
-import { loadVerifiedBatch, selectArchiveBatches } from "../report/remote.js";
+import { loadVerifiedBatch } from "../report/remote.js";
 
 const sha = "a".repeat(40);
 const repository = "owner/repo";
@@ -19,6 +16,7 @@ function fixture() {
   const ids = ["nova-current", "fastify-schema", "fastify-no-schema", "node-http"];
   const manifest = {
     schemaVersion: 1,
+    kind: "current",
     suite: "http-v1",
     profile: "fastify",
     scenario: "json-small",
@@ -145,132 +143,6 @@ function fixture() {
 }
 
 describe("归档拒绝不完整来源", () => {
-  const historyPair = () => {
-    const first = {
-      kind: "historical-initialization",
-      suite: "http-v1",
-      scenario: "json-small",
-      repository,
-      status: "success",
-      profile: "fastify",
-      runId: "123",
-      runAttempt: "2",
-      initialization: {
-        completed: ["http-v1/json-small/fastify"],
-        status: "incomplete",
-        previousBatch: null,
-      },
-    };
-    const second = {
-      ...first,
-      profile: "no-pipeline",
-      runId: "456",
-      runAttempt: "1",
-      initialization: {
-        completed: ["http-v1/json-small/fastify", "http-v1/json-small/no-pipeline"],
-        status: "complete",
-        previousBatch: { runId: "123", runAttempt: "2" },
-      },
-    };
-    return { first, second };
-  };
-  it("历史两个批次在同一个首批分支 PR 验证", () => {
-    const { first, second } = historyPair();
-    expect(validateArchiveSet([second, first], [])).toBe(first);
-    const f = fixture();
-    f.pr.head.ref = "benchmark/123-2";
-    expect(() =>
-      validatePullRequest(f.pr, f.changes, [], f.files, f.files, first, first),
-    ).not.toThrow();
-    const secondChanges = f.changes.map((change) => ({
-      ...change,
-      filename: change.filename.replace("123-2", "456-1"),
-    }));
-    expect(() =>
-      validatePullRequest(f.pr, secondChanges, [], f.files, f.files, second, first),
-    ).not.toThrow();
-    expect(() =>
-      validatePullRequest(
-        f.pr,
-        f.changes,
-        [],
-        f.files,
-        { ...f.files, "node-http.json": "{}" },
-        first,
-        first,
-      ),
-    ).toThrow("内容不一致");
-  });
-  it("首批成功仍不放行归档 PR", async () => {
-    const { first } = historyPair();
-    const selected = await selectArchiveBatches({ manifest: first }, [], async () => {
-      throw new Error("不应加载其他批次");
-    });
-    expect(selected.ready).toBe(false);
-    expect(selected.batches).toEqual([]);
-  });
-  it("第二批只读取已成功首批并在完整验证后放行", async () => {
-    const { first, second } = historyPair();
-    const calls = [];
-    const firstBatch = { manifest: first, files: { "manifest.json": JSON.stringify(first) } };
-    const secondBatch = { manifest: second, files: { "manifest.json": JSON.stringify(second) } };
-    const selected = await selectArchiveBatches(secondBatch, [], async (id, attempt) => {
-      calls.push([id, attempt]);
-      return firstBatch;
-    });
-    expect(calls).toEqual([["123", "2"]]);
-    expect(selected.ready).toBe(true);
-    expect(selected.batches).toEqual([firstBatch, secondBatch]);
-    expect(selected.anchor).toBe(first);
-    expect(JSON.parse(firstBatch.files["manifest.json"]).initialization.status).toBe("incomplete");
-    await expect(
-      selectArchiveBatches(secondBatch, [], async () => {
-        throw new Error("Artifact 已过期");
-      }),
-    ).rejects.toThrow("已过期");
-  });
-  it("拒绝单独合并首批或第二批", () => {
-    const { first, second } = historyPair();
-    expect(() => validateHistoricalBase(first)).not.toThrow();
-    expect(() => validateArchiveSet([first], [])).toThrow();
-    expect(() => validateArchiveSet([second], [])).toThrow();
-  });
-  it("拒绝历史组合混入普通批次或第三个批次", () => {
-    const { first, second } = historyPair();
-    expect(() => validateArchiveSet([first, fixture().manifest], [])).toThrow();
-    expect(() => validateArchiveSet([fixture().manifest, first], [])).toThrow();
-    expect(() => validateArchiveSet([first, second, second], [])).toThrow();
-  });
-  it("拒绝错误 attempt、run、跨仓库与重复 profile", () => {
-    for (const mutate of [
-      (s) => {
-        s.initialization.previousBatch.runAttempt = "1";
-      },
-      (s) => {
-        s.initialization.previousBatch.runId = "999";
-      },
-      (s) => {
-        s.repository = "fork/repo";
-      },
-      (s) => {
-        s.profile = "fastify";
-      },
-      (s) => {
-        s.runId = "123";
-      },
-      (s) => {
-        s.initialization.status = "incomplete";
-      },
-    ]) {
-      const { first, second } = historyPair();
-      mutate(second);
-      expect(() => validateArchiveSet([first, second], [])).toThrow();
-    }
-  });
-  it("已经归档后拒绝重复初始化", () => {
-    const { first, second } = historyPair();
-    expect(() => validateArchiveSet([first, second], [first, second])).toThrow("已归档");
-  });
   it("按确切 run 与 attempt 获取并校验 Artifact", async () => {
     const f = fixture();
     const loaded = await loadVerifiedBatch(repository, "123", "2", f.api, async () => f.files);
@@ -282,7 +154,7 @@ describe("归档拒绝不完整来源", () => {
       loadVerifiedBatch(repository, "../123", "2", f.api, async () => f.files),
     ).rejects.toThrow();
   });
-  it("引用批次失败或 Artifact 过期不允许恢复", async () => {
+  it("测量批次失败或 Artifact 过期不允许归档", async () => {
     const f = fixture();
     f.run.conclusion = "failure";
     await expect(
@@ -294,28 +166,13 @@ describe("归档拒绝不完整来源", () => {
       loadVerifiedBatch(repository, "123", "2", f.api, async () => f.files),
     ).rejects.toThrow();
   });
-  it("历史完成状态仅根据已归档组合推导", () => {
-    const first = {
-      kind: "historical-initialization",
-      suite: "http-v1",
-      scenario: "json-small",
-      status: "success",
-      profile: "fastify",
-      initialization: { completed: ["http-v1/json-small/fastify"], status: "incomplete" },
-    };
-    expect(() => validateInitialization(first, [])).not.toThrow();
-    expect(() => validateInitialization(first, [first])).toThrow("已归档");
-    const second = {
-      ...first,
-      profile: "no-pipeline",
-      initialization: {
-        completed: ["http-v1/json-small/fastify", "http-v1/json-small/no-pipeline"],
-        status: "complete",
-      },
-    };
-    expect(() => validateInitialization(second, [first])).not.toThrow();
-    expect(() => validateInitialization(second, [])).toThrow();
-  });
+  for (const kind of ["historical-initialization", "unknown", undefined])
+    it(`拒绝已移除或未知的归档模式 ${kind}`, () => {
+      const f = fixture();
+      f.manifest.kind = kind;
+      f.files["manifest.json"] = JSON.stringify(f.manifest);
+      expect(() => validateBatch(f.files)).toThrow("仅接受当前版本测量归档");
+    });
   it("仅接受成功批次与相同 Artifact", async () => {
     const f = fixture();
     expect(validateBatch(f.files)).toEqual(f.manifest);

@@ -9,11 +9,6 @@ import { scenarios } from "../suites/http/scenarios.js";
 import { metadata, git } from "../report/metadata.js";
 import { summary } from "../report/results.js";
 import { run } from "./engine.js";
-import { prepareHistorical, historicalState } from "./historical.js";
-import { startTarget } from "./process.js";
-import { validate, validatePipeline } from "../suites/http/validate.js";
-import { createGitHubAPI, loadVerifiedBatch } from "../report/remote.js";
-import { validateHistoricalBase } from "../report/archive.js";
 
 const require = createRequire(import.meta.url);
 const root = fileURLToPath(new URL("../../../", import.meta.url));
@@ -24,7 +19,6 @@ const { values } = parseArgs({
     "baseline-root": { type: "string" },
     "target-root": { type: "string" },
     targets: { type: "string" },
-    historical: { type: "boolean", default: false },
   },
 });
 if (!profiles[values.profile] || !scenarios[values.scenario])
@@ -53,51 +47,11 @@ const checkout = async (cwd, id) => {
     baseline: id === "nova-baseline",
   };
 };
-if (
-  values.historical &&
-  (values["baseline-root"] ||
-    values["target-root"] ||
-    values.targets ||
-    values.scenario !== "json-small" ||
-    values.profile === "pr")
-)
-  throw new Error("历史初始化只接受固定目标与 json-small");
-const completed = values.historical ? await historicalState(root) : [];
-if (values.historical && completed.includes(`http-v1/json-small/${values.profile}`))
-  throw new Error("该历史组合已归档，拒绝重复初始化");
-let previousBatch = null;
-const baseRun = process.env.BENCH_HISTORY_BASE_RUN || "";
-const baseAttempt = process.env.BENCH_HISTORY_BASE_ATTEMPT || "";
-if (baseRun || baseAttempt) {
-  if (!values.historical || values.profile !== "no-pipeline")
-    throw new Error("仅历史 no-pipeline 接受首批引用");
-  const api = createGitHubAPI(
-    process.env.GITHUB_REPOSITORY,
-    process.env.GH_TOKEN || process.env.GITHUB_TOKEN,
-  );
-  const verified = await loadVerifiedBatch(
-    process.env.GITHUB_REPOSITORY,
-    baseRun,
-    baseAttempt,
-    api,
-  );
-  validateHistoricalBase(verified.manifest);
-  if (completed.length) throw new Error("历史初始化已归档");
-  completed.push("http-v1/json-small/fastify");
-  previousBatch = { runId: baseRun, runAttempt: baseAttempt };
-} else if (values.historical && values.profile === "no-pipeline")
-  throw new Error("历史 no-pipeline 必须引用成功的 fastify run 与 attempt");
-let targets = values.historical
-  ? (await prepareHistorical(root)).targets
-  : [
-      await checkout(
-        values["target-root"] ? path.resolve(values["target-root"]) : root,
-        "nova-current",
-      ),
-    ];
-if (values["baseline-root"])
-  targets.unshift(await checkout(path.resolve(values["baseline-root"]), "nova-baseline"));
-targets.push(
+let targets = [
+  await checkout(
+    values["target-root"] ? path.resolve(values["target-root"]) : root,
+    "nova-current",
+  ),
   {
     id: "fastify-schema",
     adapter: "fastify",
@@ -121,7 +75,9 @@ targets.push(
     version: process.version,
     source: "runtime",
   },
-);
+];
+if (values["baseline-root"])
+  targets.unshift(await checkout(path.resolve(values["baseline-root"]), "nova-baseline"));
 if (values.targets) {
   const selected = values.targets.split(",");
   if (
@@ -141,38 +97,6 @@ if (process.env.GITHUB_OUTPUT)
 const abort = new AbortController();
 for (const signal of ["SIGINT", "SIGTERM"]) process.once(signal, () => abort.abort());
 console.log(`结果目录: ${output}`);
-if (values.historical) {
-  meta.historicalPreflight = [];
-  try {
-    for (const target of targets.filter((target) => target.source === "npm")) {
-      for (const [name, scenario] of Object.entries(scenarios)) {
-        const server = await startTarget(target, name, { signal: abort.signal });
-        try {
-          await validate(server.port, scenario);
-          await validatePipeline(server.port, scenario);
-        } finally {
-          await server.stop();
-        }
-        meta.historicalPreflight.push({ target: target.id, scenario: name, status: "success" });
-      }
-    }
-  } catch (error) {
-    await fs.writeFile(
-      path.join(output, "preflight-failure.json"),
-      JSON.stringify(
-        {
-          kind: "historical-initialization",
-          status: "failed",
-          reason: error.message,
-          completed: meta.historicalPreflight,
-        },
-        null,
-        2,
-      ),
-    );
-    throw error;
-  }
-}
 const records = await run({
   targets,
   scenario: scenarios[values.scenario],
@@ -196,7 +120,7 @@ await fs.writeFile(path.join(output, "summary.md"), text);
 if (process.env.GITHUB_STEP_SUMMARY) await fs.appendFile(process.env.GITHUB_STEP_SUMMARY, text);
 const manifest = {
   schemaVersion: 1,
-  kind: values.historical ? "historical-initialization" : "current",
+  kind: "current",
   suite: "http-v1",
   profile: values.profile,
   scenario: values.scenario,
@@ -215,21 +139,6 @@ const manifest = {
     : "failed",
   replaces: null,
 };
-if (values.historical) {
-  const combos =
-    manifest.status === "success" && values.profile !== "smoke"
-      ? [...completed, `http-v1/json-small/${values.profile}`]
-      : completed;
-  manifest.initialization = {
-    previousBatch,
-    completed: combos,
-    status: ["fastify", "no-pipeline"].every((profile) =>
-      combos.includes(`http-v1/json-small/${profile}`),
-    )
-      ? "complete"
-      : "incomplete",
-  };
-}
 await fs.writeFile(path.join(output, "manifest.json"), JSON.stringify(manifest, null, 2));
 if (process.env.GITHUB_OUTPUT)
   await fs.appendFile(process.env.GITHUB_OUTPUT, `results=${output}\n`);

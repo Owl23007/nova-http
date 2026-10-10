@@ -13,7 +13,7 @@
 | Production | 业务路由、Redis 缓存和 SQLite 读写  | 观察完整业务链路         |
 | Streaming  | 流式响应吞吐、首字节时间和内存占用  | 检查大响应与背压行为     |
 
-HTTP 默认测试当前 Nova、Fastify schema、Fastify 无 schema 和 `node:http`。历史发布版本只在显式指定 `--historical` 时参与
+HTTP 默认测试当前 Nova、Fastify schema、Fastify 无 schema 和 `node:http`
 
 ## 环境准备
 
@@ -95,7 +95,7 @@ pnpm --filter @nova-http/benchmarks bench --profile pr --baseline-root /absolute
   results/parser-v1/     解析器结果
   results/production-v1/ 生产场景结果
   results/production-stream-v1/ 流式场景结果
-  work/                  历史包安装与临时运行目录
+  work/                  baseline 检出与临时运行目录
 ```
 
 HTTP 汇总展示有效轮数、QPS 中位数、QPS 变异系数（CV）和轮次 p99 中位数。目标 JSON 还保存均值、标准差、吞吐、延迟分位、错误计数以及 Node.js、依赖、CPU、系统和源码身份
@@ -145,25 +145,7 @@ node packages/benchmarks/report/render.js
 
 生成文件为 `.tmp/benchmark/results/archive-summary.md`，不同批次分别展示
 
-### 历史版本初始化
-
-历史初始化测量 `config/historical.json` 中固定的 0.1.1、0.2.0 和 0.2.1。安装前会核实 registry 元数据及 tarball 完整性，安装过程禁用脚本；三个发布包先通过全部 HTTP 场景的语义与流水线预检
-
-本地可先执行历史 smoke：
-
-```sh
-pnpm --filter @nova-http/benchmarks bench --historical --profile smoke
-```
-
-正式初始化通过 Actions 的 `Benchmark` 手动触发：
-
-1. 在 master 选择 `historical: true`、`profile: fastify`、`scenario: json-small`，首批成功后保留 Artifact
-2. 再选择 `profile: no-pipeline`，将首批 run ID 和确切 attempt 填入 `historical_base_run`、`historical_base_attempt`
-3. 两批来源和结果均通过校验后，在首批身份对应的固定分支创建一个归档 PR，同时追加两个批次目录
-
-每个 profile 都在自己的 job 中测量三个发布包和三个对照，预计各需 28–35 分钟。两批结果保留各自环境，不能拼接成同机数据。第二批失败时，可继续引用有效的首批 Artifact 恢复，无需重测首批；初始化合并后拒绝重复运行
-
-Artifact 保留 30 天，第二批测量与 PR 核验须在首批 Artifact 过期前完成。来源缺失、过期或不一致时，归档不会放行
+nova-http 0.1.1、0.2.0 和 0.2.1 的一次性历史初始化已完成，fastify 与 no-pipeline 两批结果保留在 `.benchmark/http-v1/`，可通过上述命令重建汇总。历史测量模式已移除，后续归档每个 PR 只追加一个当前版本测量批次。Artifact 保留 30 天，归档校验须在过期前完成
 
 ## 验证套件
 
