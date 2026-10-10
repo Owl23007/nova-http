@@ -40,3 +40,11 @@ onFailure 必须同步、无抛错，不能用于普通可恢复错误。协调�
 ## 关联验证
 
 `response.spec.ts` 验证写入与结束；`exchange-lifecycle.spec.ts` 验证所有权、迟到取消与跨请求隔离；`stream-timeout-lifecycle.spec.ts` 验证长期流的超时和关闭。迁移接口见 [Core API 迁移](../../releases/migrations/01-core-api)。
+
+## 定长响应快速路径
+
+NovaResponse 的 send、json、html 通过可选的 ResponseSink.sendFixed 一次提交定长响应。HTTP/1 适配器复用同步响应定界规则，将响应头与正文放在同一个 cork/uncork 批次中，不拼接复制正文；无背压时同步完成，背压时等待 drain。核心层不访问 Socket，仍由输出端口决定定界和记录正文长度。
+
+旧 sink 保持 commit/write/end 接口兼容。流式响应、增量 write、flushHeaders 及 end 继续使用原有异步队列，保留顺序、背压和取消边界。一次提交与异步队列共享成功终态及首次失败规则；等待 drain 期间取消或连接失败不能恢复成功。
+
+0.3 在本阶段结束后停止附带性能优化，只接受有复现、测试或测量证据的发布阻塞问题。独立的性能复测用于评价结果，不自动授权扩展优化范围。

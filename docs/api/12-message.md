@@ -54,6 +54,7 @@ interface ResponseSink {
   readonly reusable: boolean;
   readonly bodyBytesWritten: number;
   assertHeaderAllowed(name: string): void;
+  sendFixed?(status: number, headers: ResponseHeaders, body: Buffer): void | Promise<void>;
   commit(status: number, headers: ResponseHeaders): Promise<void>;
   write(chunk: Buffer): Promise<void>;
   end(): Promise<void>;
@@ -61,5 +62,7 @@ interface ResponseSink {
 ```
 
 `ResponseHeaderValue = string | readonly string[]`，`ResponseHeaders` 为只读 Map。commit 固定输出计划，write 等待背压，end 结束输出。sink 不持有取消整个交互或关闭传输的公开权限。
+
+`sendFixed` 是可选的内部定长一次提交能力，供 send、json、html 及空重定向响应使用。它提交响应头、正文并结束输出；无背压时可同步返回，有背压时 Promise 必须等到输出就绪后完成。实现必须保留协议定界、无正文响应、字节计数、取消和失败语义；失败可以同步抛出或异步拒绝。未实现该能力的适配器继续使用 commit/write/end。stream、write、flushHeaders 和 end 保留异步 pipeline，即使设置了 Content-Length 也不会切换到一次提交。
 
 `ResponseOptions` 提供共享 signal 和同步 `onFailure(error)`，从 core 导入类型。实现适配器时必须保留首次失败并验证当前交互身份，参见[响应与取消](../framework/internals/05-response-lifecycle)。

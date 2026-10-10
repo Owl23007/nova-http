@@ -11,7 +11,7 @@ import {
 const PREMATURE_CLOSE = "ERR_STREAM_PREMATURE_CLOSE";
 const CONTENT_LENGTH_MISMATCH = "ERR_HTTP_CONTENT_LENGTH_MISMATCH";
 
-/** Node transport adapter for the application response output port. */
+/** 应用响应输出端口的 HTTP/1 传输适配器 */
 export class Http1ResponseSink implements ResponseSink {
   private _plan: Http1ResponsePlan | null = null;
   private _bodyBytesWritten = 0;
@@ -40,17 +40,29 @@ export class Http1ResponseSink implements ResponseSink {
 
   async commit(status: number, headers: ResponseHeaders): Promise<void> {
     if (this._plan !== null) return;
-    if (this._method === "CONNECT" && status >= 200 && status < 300) {
-      throw codedError("ERR_HTTP_CONNECT_UNSUPPORTED", "CONNECT tunnels are not supported");
-    }
-    this._plan = resolveResponsePlan(
-      this._method,
-      this._version,
-      this._requestClose,
-      status,
-      headers,
-    );
+    this._plan = this._resolvePlan(status, headers);
     await this._writeBuffers([serializeResponseHead(this._version, status, this._plan.headers)]);
+  }
+
+  /** 共享协议定界规则，将定长响应头和正文放入同一批写入 */
+  sendFixed(status: number, headers: ResponseHeaders, body: Buffer): void | Promise<void> {
+    if (this._plan !== null) {
+      throw codedError("ERR_HTTP_HEADERS_SENT", "Response sink was already committed");
+    }
+    const plan = this._resolvePlan(status, headers);
+    if (plan.mode !== "none" && (plan.mode !== "fixed" || plan.contentLength !== body.length)) {
+      throw codedError(CONTENT_LENGTH_MISMATCH, "Fixed response body must match Content-Length");
+    }
+    this._plan = plan;
+    const head = serializeResponseHead(this._version, status, plan.headers);
+    const bodyBytes = plan.mode === "none" ? 0 : body.length;
+    const pending = this._writeBuffers(bodyBytes === 0 ? [head] : [head, body]);
+    if (pending !== undefined) {
+      return pending.then(() => {
+        this._bodyBytesWritten += bodyBytes;
+      });
+    }
+    this._bodyBytesWritten += bodyBytes;
   }
 
   async write(body: Buffer): Promise<void> {
@@ -81,25 +93,39 @@ export class Http1ResponseSink implements ResponseSink {
     if (plan.mode === "chunked") await this._writeBuffers([encodeFinalChunk()]);
   }
 
+  private _resolvePlan(status: number, headers: ResponseHeaders): Http1ResponsePlan {
+    if (this._method === "CONNECT" && status >= 200 && status < 300) {
+      throw codedError("ERR_HTTP_CONNECT_UNSUPPORTED", "CONNECT tunnels are not supported");
+    }
+    return resolveResponsePlan(this._method, this._version, this._requestClose, status, headers);
+  }
+
   private _requirePlan(): Http1ResponsePlan {
     if (this._plan === null) throw new Error("Response sink was not committed");
     return this._plan;
   }
 
-  private async _writeBuffers(buffers: readonly Buffer[]): Promise<void> {
-    if (this._socket.destroyed || !this._socket.writable) {
-      throw codedError(PREMATURE_CLOSE, "Socket is not writable");
-    }
-    if (this._signal.aborted) throw abortReason(this._signal);
+  private _writeBuffers(buffers: readonly Buffer[]): void | Promise<void> {
+    this._assertWritable();
     let needsDrain = false;
     this._socket.cork();
     try {
-      for (const buffer of buffers)
+      for (const buffer of buffers) {
+        this._assertWritable();
         if (buffer.length > 0 && !this._socket.write(buffer)) needsDrain = true;
+      }
     } finally {
       this._socket.uncork();
     }
-    if (needsDrain && this._socket.writableNeedDrain) await this._waitForDrain();
+    this._assertWritable();
+    if (needsDrain && this._socket.writableNeedDrain) return this._waitForDrain();
+  }
+
+  private _assertWritable(): void {
+    if (this._signal.aborted) throw abortReason(this._signal);
+    if (this._socket.destroyed || !this._socket.writable) {
+      throw codedError(PREMATURE_CLOSE, "Socket is not writable");
+    }
   }
 
   private _waitForDrain(): Promise<void> {
