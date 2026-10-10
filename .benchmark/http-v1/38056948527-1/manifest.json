@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "kind": "current",
+  "suite": "http-v1",
+  "profile": "fastify",
+  "scenario": "json-small",
+  "repository": "Owl23007/nova-http",
+  "runId": "38056948527",
+  "runAttempt": "1",
+  "workflowId": 373080062,
+  "workflowPath": ".github/workflows/benchmark.yml",
+  "commitSha": "56fc1b31d6fd574e642ab0dc8da98f73d72b37d9",
+  "artifactName": "benchmark-38056948527-1",
+  "files": [
+    "nova-current.json",
+    "fastify-schema.json",
+    "fastify-no-schema.json",
+    "node-http.json"
+  ],
+  "status": "success",
+  "replaces": null
+}
