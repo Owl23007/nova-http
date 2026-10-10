@@ -27,7 +27,7 @@ type HandlerFor<K extends HookName> = (context: HookEvents[K]) => void | Promise
 | `onClose`           | 服务器关闭完成                        | void                               |
 | `bodyParser:parsed` | 内置 bodyParser 解析成功              | req、res、body、contentType        |
 
-前九个为 core/server 生命周期事件，最后一个属于中间件扩展。timestamp 为毫秒时间戳；durationMs 为从进入应用到输出完成的毫秒时长。当前 `routePath` 是匹配时的 `req.pathname`，不是注册模板字符串，不宜直接作为低基数指标标签。
+前九个为 core/app 生命周期事件，最后一个属于中间件扩展。timestamp 为毫秒时间戳；durationMs 为从进入应用到输出完成的毫秒时长。当前 `routePath` 是匹配时的 `req.pathname`，不是注册模板字符串，不宜直接作为低基数指标标签。
 
 上下文类型分别为 `RequestHookContext`、`RouteHookContext`、`ResponseHookContext`、`ErrorHookContext`、`NotFoundHookContext`、`ConnectHookContext`、`DisconnectHookContext`、`ListenHookContext` 与 `BodyParsedContext`。
 

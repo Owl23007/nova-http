@@ -97,6 +97,45 @@ try {
   assert.equal(frameworkPackage.engines.node, ">=20.0.0");
   assert.equal(initializerPackage.engines.node, ">=20.0.0");
 
+  const applicationAPI = require("nova-http");
+  const coreAPI = require("nova-http/core");
+  const protocolAPI = require("nova-http/protocol/http1");
+  assert.deepEqual(Object.keys(applicationAPI).sort(), [
+    "Nova",
+    "bodyParser",
+    "createApp",
+    "getMimeType",
+    "sendFile",
+    "staticFiles",
+  ]);
+  assert.equal(typeof coreAPI.Application, "function");
+  assert.equal(typeof coreAPI.HeaderBlock, "function");
+  assert.equal(typeof coreAPI.IncomingBody, "function");
+  assert.equal(typeof protocolAPI.parseHead, "function");
+  for (const api of [applicationAPI, coreAPI, protocolAPI]) {
+    assert.equal("NodeHttpServer" in api, false);
+    assert.equal("Http1ConnectionCoordinator" in api, false);
+    assert.equal("Http1ResponseSink" in api, false);
+  }
+  for (const subpath of ["server", "message", "src/server/server"]) {
+    assert.throws(() => require(`nova-http/${subpath}`), { code: "ERR_PACKAGE_PATH_NOT_EXPORTED" });
+  }
+  for (const entry of [
+    "index",
+    "app/index",
+    "app/nova",
+    "app/config",
+    "app/hooks",
+    "core/index",
+    "protocol/http1/index",
+  ]) {
+    const declaration = fs.readFileSync(
+      path.join(tempDir, "node_modules/nova-http/dist/src", `${entry}.d.ts`),
+      "utf8",
+    );
+    assert.doesNotMatch(declaration, /from ["'][^"']*server(?:\/|["'])/);
+  }
+
   const { createApp } = require("nova-http");
 
   const app = createApp();

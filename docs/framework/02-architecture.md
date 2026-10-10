@@ -38,6 +38,6 @@ static 通过 NovaRequest/NovaResponse 读取条件字段并发送流。文件�
 
 ## 公共与内部
 
-源码目录不自动形成包入口。公开接口以 package exports 为准，`server`、`message` 没有直接导入子路径；部分消息契约从 core 重导出。运行时类、类型导出及协议工具的入口见 [API 参考](../api/)。
+源码目录不自动形成包入口。公开接口以 package exports 为准，`server`、`message` 没有直接导入子路径。主入口提供应用 API，core 提供框架扩展与消息契约，protocol/http1 提供同步协议工具。应用配置和监听地址类型不引用 server 实现；连接协调器与输出 sink 保持内部。运行时类、类型导出及协议工具的入口见 [API 参考](../api/)。
 
 继续阅读[请求生命周期](./03-request-lifecycle)。源码从 [src/app/nova.ts](https://github.com/Owl23007/nova-http/blob/master/packages/nova-http/src/app/nova.ts) 进入，验证从[架构测试](https://github.com/Owl23007/nova-http/blob/master/packages/nova-http/scripts/tests/architecture.spec.ts)进入。

@@ -1,4 +1,4 @@
-/** 应用程序核心模块，提供 Nova HTTP 框架的主要功能和类型定义 */
+/** 框架扩展入口：分发内核、路由、钩子与传输无关的消息契约 */
 export { Hooks } from "./hooks";
 export { Application } from "./application";
 export { NovaRequest } from "./request";

@@ -4,10 +4,10 @@ description: HeaderBlock、IncomingBody、请求元数据与 ResponseSink 的公
 
 # 消息契约
 
-`message` 是源码层次，包没有 `nova-http/message` 入口。HeaderBlock 与 IncomingBody 从主入口或 core 导入，适配器契约类型从 core 导入。
+`message` 是源码层次，包没有 `nova-http/message` 入口。HeaderBlock 与 IncomingBody 从 core 导入，适配器契约类型从 core 导入。
 
 ```ts
-import { HeaderBlock, IncomingBody } from "nova-http";
+import { HeaderBlock, IncomingBody } from "nova-http/core";
 import type { IncomingRequestMeta, ResponseSink, ResponseHeaders } from "nova-http/core";
 ```
 
@@ -62,4 +62,4 @@ interface ResponseSink {
 
 `ResponseHeaderValue = string | readonly string[]`，`ResponseHeaders` 为只读 Map。commit 固定输出计划，write 等待背压，end 结束输出。sink 不持有取消整个交互或关闭传输的公开权限。
 
-`ResponseOptions` 提供共享 signal 和同步 `onFailure(error)`，可从主入口或 core 导入类型。实现适配器时必须保留首次失败并验证当前交互身份，参见[响应与取消](../framework/internals/05-response-lifecycle)。
+`ResponseOptions` 提供共享 signal 和同步 `onFailure(error)`，从 core 导入类型。实现适配器时必须保留首次失败并验证当前交互身份，参见[响应与取消](../framework/internals/05-response-lifecycle)。

@@ -15,17 +15,36 @@ describe("architecture dependency rules", () => {
 
   it("keeps the application kernel independent from protocol and server adapters", () => {
     expect(
-      findForbiddenImports("core", ["protocol", "server", "net", "fs", "fs/promises"]),
+      findForbiddenImports("core", ["app", "protocol", "server", "net", "fs", "fs/promises"]),
     ).toEqual([]);
   });
 
   it("keeps HTTP/1 independent from the application kernel and Node transport", () => {
-    expect(findForbiddenImports("protocol/http1", ["core", "server", "net"])).toEqual([]);
+    expect(
+      findForbiddenImports("protocol/http1", [
+        "app",
+        "core",
+        "server",
+        "net",
+        "http",
+        "https",
+        "stream",
+        "fs",
+      ]),
+    ).toEqual([]);
   });
 
   it("keeps message contracts independent from inward and outward adapters", () => {
     expect(
-      findForbiddenImports("message", ["core", "protocol", "server", "net", "fs", "fs/promises"]),
+      findForbiddenImports("message", [
+        "app",
+        "core",
+        "protocol",
+        "server",
+        "net",
+        "fs",
+        "fs/promises",
+      ]),
     ).toEqual([]);
   });
 
@@ -39,7 +58,7 @@ function findForbiddenImports(layer: string, forbidden: readonly string[]): stri
   for (const file of sourceFiles(join(sourceRoot, layer))) {
     const source = readFileSync(file, "utf8");
     for (const match of source.matchAll(/from\s+["']([^"']+)["']/g)) {
-      const specifier = match[1].replaceAll("\\", "/");
+      const specifier = match[1].replaceAll("\\", "/").replace(/^node:/, "");
       const violates = forbidden.some(
         (name) =>
           specifier === name || specifier.startsWith(`${name}/`) || specifier.includes(`/${name}/`),
