@@ -16,6 +16,7 @@ import type { NovaRequest, RequestContext, BodyReadOptions } from "nova-http";
 | ------------- | ------------------------ | -------------------------------------- |
 | `method`      | `string`                 | HTTP 方法                              |
 | `rawTarget`   | `string`                 | 原始请求目标，挂载视图仍保留           |
+| `authority`   | `string \| undefined`    | effective authority，挂载视图仍保留    |
 | `path`        | `string`                 | 当前视图路径，包含 query               |
 | `pathname`    | `string`                 | 当前视图路径，不含 query               |
 | `httpVersion` | `string`                 | 协议版本；HTTP/1 适配器使用 1.0 或 1.1 |
@@ -29,6 +30,8 @@ import type { NovaRequest, RequestContext, BodyReadOptions } from "nova-http";
 | `signal`      | `AbortSignal`            | 由协调层持有取消权限                   |
 
 `path` 不做 URI 解码或点路径段消除。挂载子应用的路径、参数及惰性缓存独立；body、headers、trailers、context 与 signal 共享。
+
+`authority` 不做解码、大小写或默认端口规范化：origin-form 和 asterisk-form 使用 Host；absolute-form 使用请求目标中的 authority，即使 Host 不同；CONNECT 使用 authority-form 目标。HTTP/1.0 缺少 Host 时可为 undefined，HTTP/1.1 仍要求合法且唯一的 Host。
 
 ## 字段与媒体类型
 

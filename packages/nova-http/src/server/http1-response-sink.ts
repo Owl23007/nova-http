@@ -40,6 +40,9 @@ export class Http1ResponseSink implements ResponseSink {
 
   async commit(status: number, headers: ResponseHeaders): Promise<void> {
     if (this._plan !== null) return;
+    if (this._method === "CONNECT" && status >= 200 && status < 300) {
+      throw codedError("ERR_HTTP_CONNECT_UNSUPPORTED", "CONNECT tunnels are not supported");
+    }
     this._plan = resolveResponsePlan(
       this._method,
       this._version,

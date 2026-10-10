@@ -14,7 +14,7 @@ SegmentedInput 保存到达分段，扫描状态只向前移动。请求头位�
 
 parseHead 解析请求目标、版本和 HeaderBlock。resolveFraming 独立判定 Content-Length 与 Transfer-Encoding，避免业务层凭单个字段猜测消息边界。buildRequestHead 合并 body 计划与连接意图。
 
-请求目标区分 origin、absolute、authority、asterisk，原始 rawTarget 保留。CONNECT/Upgrade 意图并不意味着服务器支持对应隧道；最终接受策略由协调层决定。
+请求目标区分 origin、absolute、authority、asterisk，原始 rawTarget 保留。HTTP/1.0 忽略 Upgrade；HTTP/1.1 未接受的 Upgrade 按普通请求处理，意图本身不禁止连接复用。parser 识别 CONNECT authority-form，server 在应用分发之前返回 501 并关闭连接。
 
 ## 请求体与 EOF
 

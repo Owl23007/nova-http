@@ -43,20 +43,23 @@ const app = createApp(config);
 
 `parserLimits` 接受 `Partial<ParserLimits>`，未指定字段使用以下默认值。它约束协议输入结构，与 body 总大小限制分开。
 
-| 字段                  | 默认值  | 含义              |
-| --------------------- | ------- | ----------------- |
-| `maxRequestLineBytes` | `16384` | 请求行大小        |
-| `maxTargetBytes`      | `8192`  | 请求目标大小      |
-| `maxHeaderLineBytes`  | `8192`  | 单个字段行大小    |
-| `maxHeadBytes`        | `65536` | 完整头部区大小    |
-| `maxHeaderCount`      | `200`   | 字段数量          |
-| `maxChunkLineBytes`   | `1024`  | chunk-size 行大小 |
+| 字段                    | 默认值  | 含义                          |
+| ----------------------- | ------- | ----------------------------- |
+| `maxRequestLineBytes`   | `16384` | 请求行大小                    |
+| `maxTargetBytes`        | `8192`  | 请求目标大小                  |
+| `maxHeaderLineBytes`    | `8192`  | 单个字段行大小                |
+| `maxHeadBytes`          | `65536` | 完整头部区大小                |
+| `maxHeaderCount`        | `200`   | 字段数量                      |
+| `maxChunkLineBytes`     | `1024`  | chunk-size 行大小，不含 CRLF  |
+| `maxChunkMetadataBytes` | `65536` | 每请求 chunk 元数据累计字节数 |
 
 ```ts
 const app = createApp({
   parserLimits: { maxHeadBytes: 32 * 1024, maxHeaderCount: 100 },
 });
 ```
+
+chunk 元数据包含所有 size 行及其 CRLF、data 后的 CRLF、终止块和整个 trailer 区（含最终 CRLF），不含解码后的 payload。累计量超过上限返回 413；下一次请求重新计数。单行、trailer 头部和 body 限额同时生效。
 
 ## 代理信任
 
@@ -86,6 +89,8 @@ const app = createApp({
   },
 });
 ```
+
+HTTP/1.0 忽略 Expect，不调用该策略，也不发送 100 Continue。HTTP/1.1 仅在有请求体且收到合法 100-continue 时调用策略；CONNECT 在此之前被拒绝。
 
 `checkContinue` 是同步策略函数，返回 `true` 允许继续，或返回 4xx/5xx 状态与 message 拒绝。默认允许；不支持异步返回。示例 token 仅说明接口，真实授权由应用实现。
 
