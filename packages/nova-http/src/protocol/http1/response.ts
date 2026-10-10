@@ -18,10 +18,12 @@ export function resolveResponsePlan(
   source: ResponseHeaders,
 ): Http1ResponsePlan {
   const headers = new Map(source);
-  let reusable = !requestClose;
+  const connectSuccess = method === "CONNECT" && status >= 200 && status < 300;
+  let reusable = !requestClose && !connectSuccess && status !== 101;
   let mode: Http1ResponseBodyMode;
   let contentLength: number | null = null;
   const bodyAllowed =
+    !connectSuccess &&
     method !== "HEAD" &&
     !(status >= 100 && status < 200) &&
     status !== 204 &&
@@ -30,7 +32,10 @@ export function resolveResponsePlan(
 
   if (!bodyAllowed) {
     mode = "none";
-    if (method !== "HEAD" && (status === 204 || (status >= 100 && status < 200))) {
+    if (connectSuccess) {
+      headers.delete("content-length");
+      headers.delete("transfer-encoding");
+    } else if (method !== "HEAD" && (status === 204 || (status >= 100 && status < 200))) {
       headers.delete("content-length");
     } else if (status === 205) {
       headers.set("content-length", "0");

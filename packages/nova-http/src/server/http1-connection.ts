@@ -55,6 +55,7 @@ type InputState =
       phase: "size" | "data" | "data-cr" | "data-lf" | "trailers";
       chunkRemaining: number;
       decodedBytes: number;
+      metadataBytes: number;
       line: number[];
       sawLineCr: boolean;
       trailerScanner: HeadScanState;
@@ -176,6 +177,17 @@ export class Http1ConnectionCoordinator {
               http1Error("limit", "HPE_BODY_TOO_LARGE", 413, "body", "Payload Too Large"),
             );
           }
+          if (head.connection.connect) {
+            return this._fatal(
+              http1Error(
+                "unsupported",
+                "HPE_UNSUPPORTED_CONNECT",
+                501,
+                "headers",
+                "CONNECT tunnels are not supported",
+              ),
+            );
+          }
           const clientIp = this._resolveClientIp(head);
           if (clientIp === undefined) return;
           if (!this._handleExpect(head)) return;
@@ -226,6 +238,7 @@ export class Http1ConnectionCoordinator {
       method: head.method,
       clientIp,
       rawTarget: head.rawTarget,
+      authority: head.authority,
       path: head.path,
       version: head.version,
       headers: head.headers,
@@ -249,6 +262,7 @@ export class Http1ConnectionCoordinator {
         phase: "size",
         chunkRemaining: 0,
         decodedBytes: 0,
+        metadataBytes: 0,
         line: [],
         sawLineCr: false,
         trailerScanner: createHeadScanState(),
@@ -378,12 +392,16 @@ export class Http1ConnectionCoordinator {
         );
         return false;
       }
+      if (!this._addChunkMetadata(state, 1)) return false;
       this._input.consume(1);
       state.phase = state.phase === "data-cr" ? "data-lf" : "size";
       return true;
     }
 
+    const previousOffset = state.trailerScanner.scanOffset;
     const scan = scanHead(this._input, state.trailerScanner, this._limits, true);
+    if (!this._addChunkMetadata(state, state.trailerScanner.scanOffset - previousOffset))
+      return false;
     if (scan.type === "error") return (this._fatal(scan.error), false);
     if (scan.type === "need-data") return false;
     const trailers = parseTrailers(takeScannedBlock(this._input, scan.length), this._limits);
@@ -398,6 +416,7 @@ export class Http1ConnectionCoordinator {
   ): Buffer | Http1Error | null {
     while (this._input.available > 0) {
       const byte = this._input.front()![0];
+      if (!this._addChunkMetadata(state, 1)) return null;
       this._input.consume(1);
       if (state.sawLineCr) {
         state.sawLineCr = false;
@@ -418,7 +437,7 @@ export class Http1ConnectionCoordinator {
         state.sawLineCr = true;
         continue;
       }
-      if (byte === 0x0a || byte < 0x20 || byte > 0x7e) {
+      if (byte === 0x0a || (byte < 0x20 && byte !== 0x09) || byte === 0x7f) {
         return http1Error(
           "syntax",
           "HPE_INVALID_CHUNK_SIZE",
@@ -441,6 +460,24 @@ export class Http1ConnectionCoordinator {
     return null;
   }
 
+  private _addChunkMetadata(
+    state: Extract<InputState, { kind: "chunked" }>,
+    bytes: number,
+  ): boolean {
+    state.metadataBytes += bytes;
+    if (state.metadataBytes <= (this._limits.maxChunkMetadataBytes ?? 64 * 1024)) return true;
+    this._fatal(
+      http1Error(
+        "limit",
+        "HPE_CHUNK_METADATA_TOO_LARGE",
+        413,
+        state.phase === "trailers" ? "trailers" : "body",
+        "Chunk metadata is too large",
+      ),
+    );
+    return false;
+  }
+
   private _completeMessage(): void {
     this._parsedRequest?.body._complete();
     this._inputState = { kind: "message-complete" };
@@ -448,6 +485,7 @@ export class Http1ConnectionCoordinator {
   }
 
   private _handleExpect(head: RequestHead): boolean {
+    if (head.version === "1.0") return true;
     const values = head.headers.getAll("expect");
     if (values.length === 0) return true;
     const valid = values.length === 1 && values[0].toLowerCase() === "100-continue";
@@ -499,7 +537,6 @@ export class Http1ConnectionCoordinator {
       this._inputState.kind === "message-complete" &&
       request.body.fullyConsumed &&
       !request.connection.close &&
-      !request.connection.upgrade &&
       !request.connection.connect &&
       response._canReuseConnection &&
       (!this._input.ended || this._input.available > 0) &&

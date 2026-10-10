@@ -41,7 +41,7 @@ headers.getAll("x-tag"); // ["a", "b"]
 
 ## 请求元数据
 
-`IncomingRequestMeta` 包含 method、clientIp、rawTarget、path、version、headers、body、trailers、connection 与 peer。字符串路径由适配器提取，内核不重新判断 HTTP 消息定界。
+`IncomingRequestMeta` 包含 method、clientIp、rawTarget、可选 authority、path、version、headers、body、trailers、connection 与 peer。字符串路径由适配器提取，内核不重新判断 HTTP 消息定界。
 
 `ParsedRequest` 是其已弃用别名。`HttpMethod` 为 string；协议层的 HttpVersion 则限定为 1.0/1.1。
 

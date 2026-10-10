@@ -11,6 +11,8 @@ export interface IncomingRequestMeta {
   readonly clientIp: string;
   /** 原始 request-target，不解码或规范化 */
   readonly rawTarget: string;
+  /** 有效目标主机信息，绝对形式和 CONNECT 使用请求目标，其他形式使用 Host */
+  readonly authority?: string;
   /** 协议适配层提取的应用路径及查询字符串 */
   readonly path: string;
   readonly version: string;

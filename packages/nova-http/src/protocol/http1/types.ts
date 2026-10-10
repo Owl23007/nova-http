@@ -19,6 +19,8 @@ export type RequestTarget =
 export interface ParsedHead {
   readonly method: string;
   readonly rawTarget: string;
+  /** 有效目标主机信息，绝对形式和 CONNECT 使用请求目标，其他形式使用 Host */
+  readonly authority?: string;
   readonly target: RequestTarget;
   readonly path: string;
   readonly version: HttpVersion;

@@ -11,6 +11,8 @@ export interface ParserLimits {
   maxHeadBytes: number;
   maxHeaderCount: number;
   maxChunkLineBytes: number;
+  /** 每请求的分块大小行、分隔符和尾部字段累计字节数，不含有效载荷 */
+  maxChunkMetadataBytes?: number;
 }
 
 export const DEFAULT_PARSER_LIMITS: ParserLimits = {
@@ -20,6 +22,7 @@ export const DEFAULT_PARSER_LIMITS: ParserLimits = {
   maxHeadBytes: 64 * 1024,
   maxHeaderCount: 200,
   maxChunkLineBytes: 1024,
+  maxChunkMetadataBytes: 64 * 1024,
 };
 
 export interface HeadScanState {
@@ -260,7 +263,13 @@ export function parseHead(buffer: Buffer, limits: ParserLimits): ParsedHead | Ht
       "HTTP/1.1 requires exactly one non-empty Host field",
     );
   }
-  return { method, rawTarget, target, path: applicationPath(target), version, headers };
+  const authority =
+    target.form === "absolute"
+      ? target.authority
+      : target.form === "authority"
+        ? target.raw
+        : headers.get("host");
+  return { method, rawTarget, target, path: applicationPath(target), authority, version, headers };
 }
 
 export function parseTrailers(buffer: Buffer, limits: ParserLimits): HeaderBlock | Http1Error {
@@ -306,8 +315,11 @@ export function resolveFraming(head: ParsedHead): BodyPlan | Http1Error {
   }
 
   if (transferEncodings.length > 0) {
-    const rawCodings = splitFramingValues(transferEncodings);
-    if (rawCodings === null) {
+    const codings = parseTransferCodings(transferEncodings);
+    if (
+      codings === null ||
+      codings.some((coding) => coding.name === "chunked" && coding.parameters)
+    ) {
       return http1Error(
         "framing",
         "HPE_INVALID_TRANSFER_ENCODING",
@@ -316,14 +328,13 @@ export function resolveFraming(head: ParsedHead): BodyPlan | Http1Error {
         "Invalid Transfer-Encoding",
       );
     }
-    const codings = rawCodings.map((value) => asciiLower(value));
-    if (codings.some((coding) => !isTokenString(coding))) {
+    if (codings.slice(0, -1).some((coding) => coding.name === "chunked")) {
       return http1Error(
         "framing",
         "HPE_INVALID_TRANSFER_ENCODING",
         400,
         "headers",
-        "Invalid Transfer-Encoding",
+        "Chunked must occur once and be the final transfer coding",
       );
     }
     if (head.version !== "1.1") {
@@ -335,7 +346,7 @@ export function resolveFraming(head: ParsedHead): BodyPlan | Http1Error {
         "Transfer-Encoding requires HTTP/1.1",
       );
     }
-    if (codings[codings.length - 1] !== "chunked") {
+    if (codings[codings.length - 1].name !== "chunked") {
       return http1Error(
         "framing",
         "HPE_FINAL_TRANSFER_CODING",
@@ -400,8 +411,11 @@ export function resolveConnectionIntent(head: ParsedHead): ConnectionIntent {
   const close =
     head.version === "1.1"
       ? connectionTokens.includes("close")
-      : !connectionTokens.includes("keep-alive");
-  const upgrade = connectionTokens.includes("upgrade") ? head.headers.get("upgrade") : undefined;
+      : connectionTokens.includes("close") || !connectionTokens.includes("keep-alive");
+  const upgrade =
+    head.version === "1.1" && connectionTokens.includes("upgrade")
+      ? head.headers.get("upgrade")
+      : undefined;
   return { close, connect: head.method === "CONNECT", ...(upgrade ? { upgrade } : {}) };
 }
 
@@ -412,22 +426,10 @@ export function buildRequestHead(head: ParsedHead): RequestHead | Http1Error {
 }
 
 export function parseChunkSize(line: Buffer): number | Http1Error {
-  const semicolon = line.indexOf(0x3b);
-  const end = semicolon === -1 ? line.length : semicolon;
-  if (end === 0)
-    return http1Error("syntax", "HPE_INVALID_CHUNK_SIZE", 400, "body", "Chunk size is empty");
+  let index = 0;
   let size = 0;
-  for (let i = 0; i < end; i++) {
-    const nibble = hexValue(line[i]);
-    if (nibble < 0)
-      return http1Error(
-        "syntax",
-        "HPE_INVALID_CHUNK_SIZE",
-        400,
-        "body",
-        "Chunk size is not valid hexadecimal",
-      );
-    size = size * 16 + nibble;
+  while (index < line.length && hexValue(line[index]) >= 0) {
+    size = size * 16 + hexValue(line[index++]);
     if (!Number.isSafeInteger(size))
       return http1Error(
         "limit",
@@ -437,7 +439,107 @@ export function parseChunkSize(line: Buffer): number | Http1Error {
         "Chunk size exceeds the safe integer range",
       );
   }
+  if (index === 0)
+    return http1Error(
+      "syntax",
+      "HPE_INVALID_CHUNK_SIZE",
+      400,
+      "body",
+      "Chunk size is not valid hexadecimal",
+    );
+  if (index === line.length) return size;
+  const value = line.toString("latin1");
+  while (index < value.length) {
+    index = skipOws(value, index);
+    if (value[index++] !== ";") return invalidChunkExtension();
+    index = skipOws(value, index);
+    const nameEnd = tokenEnd(value, index);
+    if (nameEnd === index) return invalidChunkExtension();
+    index = nameEnd;
+    const next = skipOws(value, index);
+    if (value[next] === "=") {
+      index = parameterValueEnd(value, skipOws(value, next + 1));
+      if (index < 0) return invalidChunkExtension();
+    }
+  }
   return size;
+}
+
+function invalidChunkExtension(): Http1Error {
+  return http1Error(
+    "syntax",
+    "HPE_INVALID_CHUNK_EXTENSION",
+    400,
+    "body",
+    "Invalid chunk extension grammar",
+  );
+}
+
+/** 列表最多允许 16 个空成员，重复字段合并后累计计数 */
+function parseTransferCodings(
+  values: readonly string[],
+): { name: string; parameters: boolean }[] | null {
+  const value = values.join(",");
+  const codings: { name: string; parameters: boolean }[] = [];
+  let index = 0;
+  let emptyMembers = 0;
+  while (true) {
+    index = skipOws(value, index);
+    if (index === value.length || value[index] === ",") {
+      if (++emptyMembers > 16) return null;
+      if (index === value.length) break;
+      index++;
+      continue;
+    }
+    const end = tokenEnd(value, index);
+    if (end === index) return null;
+    const name = asciiLower(value.slice(index, end));
+    index = skipOws(value, end);
+    let parameters = false;
+    while (value[index] === ";") {
+      parameters = true;
+      index = skipOws(value, index + 1);
+      const parameterEnd = tokenEnd(value, index);
+      if (parameterEnd === index) return null;
+      index = skipOws(value, parameterEnd);
+      if (value[index++] !== "=") return null;
+      index = parameterValueEnd(value, skipOws(value, index));
+      if (index < 0) return null;
+      index = skipOws(value, index);
+    }
+    codings.push({ name, parameters });
+    if (index === value.length) break;
+    if (value[index++] !== ",") return null;
+  }
+  return codings.length === 0 ? null : codings;
+}
+
+function skipOws(value: string, index: number): number {
+  while (index < value.length && isOws(value.charCodeAt(index))) index++;
+  return index;
+}
+
+function tokenEnd(value: string, index: number): number {
+  while (index < value.length && isTokenByte(value.charCodeAt(index))) index++;
+  return index;
+}
+
+function parameterValueEnd(value: string, index: number): number {
+  if (value[index] !== '"') {
+    const end = tokenEnd(value, index);
+    return end === index ? -1 : end;
+  }
+  index++;
+  while (index < value.length) {
+    const byte = value.charCodeAt(index++);
+    if (byte === 0x22) return index;
+    if (byte === 0x5c) {
+      if (index === value.length) return -1;
+      const escaped = value.charCodeAt(index++);
+      if (escaped !== 0x09 && (escaped < 0x20 || escaped === 0x7f)) return -1;
+    } else if (byte !== 0x09 && (byte < 0x20 || byte === 0x7f)) return -1;
+  }
+  return -1;
 }
 
 export function isHttp1Error(value: unknown): value is Http1Error {
@@ -536,7 +638,8 @@ function resolveTarget(method: string, raw: string): RequestTarget | Http1Error 
       );
     return { form: "authority", raw };
   }
-  if (raw.startsWith("/")) return { form: "origin", raw };
+  if (raw.startsWith("/"))
+    return isValidPathQuery(raw) ? { form: "origin", raw } : invalidPathQuery();
   if (/^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(raw)) return resolveAbsoluteTarget(raw);
   return http1Error(
     "syntax",
@@ -563,13 +666,45 @@ function resolveAbsoluteTarget(raw: string): RequestTarget | Http1Error {
     );
   }
   const remainder = boundary === -1 ? "" : suffix.slice(boundary);
+  const path = remainder === "" ? "/" : remainder.startsWith("?") ? `/${remainder}` : remainder;
+  if (!isValidPathQuery(path)) return invalidPathQuery();
   return {
     form: "absolute",
     raw,
     scheme: raw.slice(0, schemeEnd),
     authority,
-    path: remainder === "" ? "/" : remainder.startsWith("?") ? `/${remainder}` : remainder,
+    path,
   };
+}
+
+function invalidPathQuery(): Http1Error {
+  return http1Error(
+    "syntax",
+    "HPE_INVALID_TARGET",
+    400,
+    "request-line",
+    "Invalid request target path or query",
+  );
+}
+
+function isValidPathQuery(value: string): boolean {
+  for (let index = 0; index < value.length; index++) {
+    const byte = value.charCodeAt(index);
+    if (byte === 0x3f) {
+      continue;
+    } else if (byte === 0x25) {
+      if (
+        index + 2 >= value.length ||
+        hexValue(value.charCodeAt(index + 1)) < 0 ||
+        hexValue(value.charCodeAt(index + 2)) < 0
+      )
+        return false;
+      index += 2;
+    } else if (!isUnreserved(byte) && !"!$&'()*+,;=:@/".includes(value[index])) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function isAuthorityForm(value: string): boolean {
@@ -732,12 +867,6 @@ function trimOwsString(value: string): string {
 function isToken(buffer: Buffer, start: number, end: number): boolean {
   if (start >= end) return false;
   for (let i = start; i < end; i++) if (!isTokenByte(buffer[i])) return false;
-  return true;
-}
-
-function isTokenString(value: string): boolean {
-  if (value.length === 0) return false;
-  for (let i = 0; i < value.length; i++) if (!isTokenByte(value.charCodeAt(i))) return false;
   return true;
 }
 

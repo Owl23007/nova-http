@@ -14,6 +14,7 @@ description: 按错误阶段定位响应失败、输入解析失败和业务错�
 | `ERR_STREAM_WRITE_AFTER_END`       | 请求结束后继续写入           | 检查重复出口与异步任务       |
 | `ERR_RESPONSE_NOT_ENDED`           | 手动流处理器返回但未请求结束 | 等待写入并调用 end           |
 | `ERR_HTTP_CONTENT_LENGTH_MISMATCH` | 定长响应字节不足或超出       | 按实际字节计算或省略长度     |
+| `ERR_HTTP_CONNECT_UNSUPPORTED`     | 输出端口收到 CONNECT 2xx     | 当前 server 不支持 tunnel    |
 | `ERR_MANAGED_RESPONSE_HEADER`      | 手工设置 Transfer-Encoding   | 让输出端口管理定界           |
 | `ERR_STREAM_PREMATURE_CLOSE`       | 完成前连接断开               | 取消上游并释放资源           |
 | `ERR_REQUEST_TIMEOUT`              | 普通处理阶段超过时限         | 检查外部依赖、输入消费和配置 |

@@ -31,6 +31,8 @@ export class NovaRequest {
   readonly httpVersion: string;
   /** 原始 request-target */
   readonly rawTarget: string;
+  /** 协议适配层选取的有效目标主机信息，不做规范化 */
+  readonly authority: string | undefined;
   /** 请求头（键全小写） */
   readonly headers: HeaderBlock;
   /** 流式请求体 */
@@ -65,6 +67,7 @@ export class NovaRequest {
     this.method = parsed.method;
     this.ip = parsed.clientIp;
     this.rawTarget = parsed.rawTarget;
+    this.authority = parsed.authority;
     this.path = parsed.path;
     this.httpVersion = parsed.version;
     this.headers = parsed.headers;
@@ -85,6 +88,7 @@ export class NovaRequest {
         method: this.method,
         clientIp: this.ip,
         rawTarget: this.rawTarget,
+        authority: this.authority,
         path,
         version: this.httpVersion,
         headers: this.headers,
