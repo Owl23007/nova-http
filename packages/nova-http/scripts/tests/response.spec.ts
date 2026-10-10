@@ -1,6 +1,7 @@
 import { Application } from "../../src/core";
 import type { ResponseSink } from "../../src/message/response-sink";
 import { EventEmitter } from "events";
+import { Readable } from "stream";
 import type { Socket } from "net";
 import { describe, expect, it, vi } from "vitest";
 import { HeaderBlock, IncomingBody, NovaRequest, NovaResponse } from "../../src/core";
@@ -57,6 +58,7 @@ function createResponse(
   response: NovaResponse;
   request: NovaRequest;
   socket: FakeSocket;
+  sink: Http1ResponseSink;
   controller: AbortController;
 } {
   const socket = new FakeSocket();
@@ -96,6 +98,7 @@ function createResponse(
     controller,
     request,
     socket,
+    sink,
   };
 }
 
@@ -574,4 +577,295 @@ describe("取消权限与失败通知", () => {
     expect(controller.signal.aborted).toBe(false);
     expect(onFailure).not.toHaveBeenCalled();
   });
+});
+
+describe("定长响应一次提交", () => {
+  it.each(["send", "json", "html"] as const)("%s 通过输出端口一次提交并同步完成", async (mode) => {
+    const { response, sink, socket } = createResponse();
+    const fixed = vi.spyOn(sink, "sendFixed");
+    const commit = vi.spyOn(sink, "commit");
+    const write = vi.spyOn(sink, "write");
+    const end = vi.spyOn(sink, "end");
+    const cork = vi.spyOn(socket, "cork");
+    const uncork = vi.spyOn(socket, "uncork");
+    const body = mode === "json" ? '{"text":"中文"}' : mode === "html" ? "<p>中文</p>" : "中文";
+    if (mode === "json") response.json({ text: "中文" });
+    else if (mode === "html") response.html(body);
+    else response.send(body);
+    expect(response.headersSent).toBe(true);
+    expect(response.writableEnded).toBe(true);
+    expect(response._canReuseConnection).toBe(true);
+    expect(response.bodyBytesWritten).toBe(Buffer.byteLength(body));
+    expect(fixed).toHaveBeenCalledTimes(1);
+    expect(commit).not.toHaveBeenCalled();
+    expect(write).not.toHaveBeenCalled();
+    expect(end).not.toHaveBeenCalled();
+    expect(cork).toHaveBeenCalledTimes(1);
+    expect(uncork).toHaveBeenCalledTimes(1);
+    expect(socket.output()).toContain(`content-length: ${Buffer.byteLength(body)}\r\n`);
+    expect(socket.output()).not.toContain("transfer-encoding");
+    expect(socket.output().endsWith("\r\n\r\n" + body)).toBe(true);
+    await expect(response._waitForFinish()).resolves.toBeUndefined();
+  });
+
+  it.each([Buffer.from([0, 255, 128]), Buffer.alloc(0)])(
+    "一次提交保留二进制与空正文",
+    async (body) => {
+      const { response, socket } = createResponse();
+      response.send(body);
+      await response._waitForFinish();
+      const output = Buffer.concat(socket.chunks);
+      const start = output.indexOf("\r\n\r\n") + 4;
+      expect(output.subarray(start)).toEqual(body);
+      expect(response.bodyBytesWritten).toBe(body.length);
+    },
+  );
+
+  it.each(["1.0", "1.1"] as const)("HTTP/%s 一次提交保持连接与定界规则", (version) => {
+    for (const keepAlive of [false, true]) {
+      const { response, socket } = createResponse({ httpVersion: version, keepAlive });
+      response.send("fixed");
+      expect(response._canReuseConnection).toBe(keepAlive);
+      expect(socket.output()).toContain(`HTTP/${version} 200 OK`);
+      if (!keepAlive) expect(socket.output()).toContain("connection: close\r\n");
+      else if (version === "1.0") expect(socket.output()).toContain("connection: keep-alive\r\n");
+      expect(socket.output()).toContain("content-length: 5\r\n");
+      expect(socket.output()).not.toContain("transfer-encoding");
+    }
+  });
+
+  it.each([100, 101, 204, 205, 304])("一次提交抑制状态 %s 的正文", (status) => {
+    const { response, socket } = createResponse();
+    response.status(status).send("ignored");
+    expect(socket.output().endsWith("\r\n\r\n")).toBe(true);
+    expect(socket.output()).not.toContain("ignored");
+    expect(socket.output()).not.toContain("transfer-encoding");
+    expect(response.bodyBytesWritten).toBe(0);
+    if (status === 205) expect(socket.output()).toContain("content-length: 0\r\n");
+    else if (status === 304) expect(socket.output()).toContain("content-length: 7\r\n");
+    else expect(socket.output()).not.toContain("content-length");
+    if (status === 101) expect(response._canReuseConnection).toBe(false);
+  });
+
+  it("HEAD 一次提交保留表示长度而不输出正文", () => {
+    const { response, socket } = createResponse({ method: "HEAD" });
+    response.json({ value: "中文" });
+    expect(socket.output()).toContain(
+      `content-length: ${Buffer.byteLength('{"value":"中文"}')}\r\n`,
+    );
+    expect(socket.output().endsWith("\r\n\r\n")).toBe(true);
+    expect(response.bodyBytesWritten).toBe(0);
+  });
+
+  it("一次提交拒绝不匹配的长度并保持输入头不变", () => {
+    const { sink, socket } = createResponse();
+    const headers = new Map([["content-length", "2"]]);
+    expect(() => sink.sendFixed(200, headers, Buffer.from("bad"))).toThrow(
+      expect.objectContaining({ code: "ERR_HTTP_CONTENT_LENGTH_MISMATCH" }),
+    );
+    expect(socket.output()).toBe("");
+    expect(sink.sendFixed(200, headers, Buffer.from("ok"))).toBeUndefined();
+    expect(headers).toEqual(new Map([["content-length", "2"]]));
+    expect(() => sink.sendFixed(200, headers, Buffer.from("ok"))).toThrow(
+      expect.objectContaining({ code: "ERR_HTTP_HEADERS_SENT" }),
+    );
+  });
+
+  it("一次提交不能生成不支持的 CONNECT 成功响应", async () => {
+    const { response, socket } = createResponse({ method: "CONNECT" });
+    response.send("tunnel");
+    await expect(response._waitForFinish()).rejects.toMatchObject({
+      code: "ERR_HTTP_CONNECT_UNSUPPORTED",
+    });
+    expect(socket.output()).toBe("");
+    expect(response.writableEnded).toBe(false);
+  });
+
+  it("重复发送与末尾操作不重写一次提交的响应", async () => {
+    const { response, sink, socket } = createResponse();
+    const fixed = vi.spyOn(sink, "sendFixed");
+    response.send("first");
+    const output = socket.output();
+    response.json({ late: true });
+    response.html("late");
+    await response.end();
+    await response.flushHeaders();
+    await expect(response.write("late")).rejects.toMatchObject({
+      code: "ERR_STREAM_WRITE_AFTER_END",
+    });
+    expect(() => response.status(500)).toThrow(
+      expect.objectContaining({ code: "ERR_HTTP_HEADERS_SENT" }),
+    );
+    expect(fixed).toHaveBeenCalledTimes(1);
+    expect(socket.output()).toBe(output);
+  });
+
+  it("一次提交有背压时等待 drain 并清理监听器", async () => {
+    const { response, socket } = createResponse();
+    socket.backpressureNextWrite = true;
+    response.send("fixed");
+    const finished = response._waitForFinish();
+    let settled = false;
+    void finished.then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    expect(response.writableEnded).toBe(false);
+    expect(response._canReuseConnection).toBe(false);
+    expect(socket.listenerCount("drain")).toBe(1);
+    socket.releaseDrain();
+    await finished;
+    expect(response.writableEnded).toBe(true);
+    expect(response.bodyBytesWritten).toBe(5);
+    expect(response._canReuseConnection).toBe(true);
+    for (const event of ["drain", "error", "close"]) expect(socket.listenerCount(event)).toBe(0);
+  });
+
+  it.each(["abort", "close", "error"])("一次提交等待 drain 时的 %s 不得恢复成功", async (event) => {
+    const { response, socket, controller } = createResponse();
+    socket.backpressureNextWrite = true;
+    response.send("fixed");
+    const reason = new Error("输出中断");
+    const finished = response._waitForFinish();
+    const rejected =
+      event === "close"
+        ? expect(finished).rejects.toMatchObject({ code: "ERR_STREAM_PREMATURE_CLOSE" })
+        : expect(finished).rejects.toBe(reason);
+    if (event === "abort") controller.abort(reason);
+    else if (event === "error") socket.emit("error", reason);
+    else socket.emit("close");
+    await rejected;
+    const output = socket.output();
+    socket.releaseDrain();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(response.writableEnded).toBe(false);
+    expect(response._canReuseConnection).toBe(false);
+    expect(socket.output()).toBe(output);
+    for (const name of ["drain", "error", "close"]) expect(socket.listenerCount(name)).toBe(0);
+  });
+
+  it("写响应头时发生取消，不继续写正文", async () => {
+    const { response, socket, controller } = createResponse();
+    const reason = new Error("写头时取消");
+    const write = socket.write.bind(socket);
+    vi.spyOn(socket, "write").mockImplementation((chunk) => {
+      const accepted = write(chunk);
+      controller.abort(reason);
+      return accepted;
+    });
+    const uncork = vi.spyOn(socket, "uncork");
+    response.send("cancelled-body");
+    await expect(response._waitForFinish()).rejects.toBe(reason);
+    expect(socket.chunks).toHaveLength(1);
+    expect(socket.output()).not.toContain("cancelled-body");
+    expect(response.writableEnded).toBe(false);
+    expect(uncork).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([false, true])("一次提交的输出失败仅通知一次，异步=%s", async (asyncFailure) => {
+    const { sink, controller } = createResponse();
+    const reason = new Error("一次提交失败");
+    const onFailure = vi.fn();
+    vi.spyOn(sink, "sendFixed").mockImplementation(() => {
+      if (asyncFailure) return Promise.reject(reason);
+      throw reason;
+    });
+    const response = new NovaResponse(sink, { signal: controller.signal, onFailure });
+    response.send("body");
+    await expect(response._waitForFinish()).rejects.toBe(reason);
+    response._fail(new Error("迟到失败"));
+    expect(onFailure).toHaveBeenCalledExactlyOnceWith(reason);
+    expect(controller.signal.aborted).toBe(false);
+    expect(response.writableEnded).toBe(false);
+  });
+
+  it("等待异步一次提交完成时取消，不反向上报失败", async () => {
+    const { sink, controller } = createResponse();
+    let release!: () => void;
+    vi.spyOn(sink, "sendFixed").mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    );
+    const onFailure = vi.fn();
+    const response = new NovaResponse(sink, { signal: controller.signal, onFailure });
+    response.send("body");
+    const reason = new Error("协调层取消");
+    const rejection = expect(response._waitForFinish()).rejects.toBe(reason);
+    controller.abort(reason);
+    release();
+    await rejection;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(response.writableEnded).toBe(false);
+    expect(onFailure).not.toHaveBeenCalled();
+  });
+
+  it("完成前已创建的等待与同步一次提交共同完成", async () => {
+    const { response } = createResponse();
+    const finished = response._waitForFinish();
+    response.send("done");
+    await expect(finished).resolves.toBeUndefined();
+  });
+
+  it("旧输出适配器继续使用完整异步链路", async () => {
+    const calls: string[] = [];
+    const sink: ResponseSink = {
+      reusable: true,
+      bodyBytesWritten: 4,
+      assertHeaderAllowed() {},
+      async commit(_status, headers) {
+        calls.push("commit:" + headers.get("content-length"));
+      },
+      async write(body) {
+        calls.push("write:" + body.toString());
+      },
+      async end() {
+        calls.push("end");
+      },
+    };
+    const response = new NovaResponse(sink, {
+      signal: new AbortController().signal,
+      onFailure: vi.fn(),
+    });
+    response.send("body");
+    expect(response.writableEnded).toBe(false);
+    await response._waitForFinish();
+    expect(calls).toEqual(["commit:4", "write:body", "end"]);
+    expect(response.writableEnded).toBe(true);
+  });
+
+  it.each(["incremental", "fixed-stream", "iterable", "readable"])(
+    "%s 保留异步 pipeline",
+    async (mode) => {
+      const { response, sink, socket } = createResponse();
+      const fixed = vi.spyOn(sink, "sendFixed");
+      const commit = vi.spyOn(sink, "commit");
+      const write = vi.spyOn(sink, "write");
+      const end = vi.spyOn(sink, "end");
+      if (mode === "fixed-stream") response.setHeader("content-length", "2");
+      if (mode === "readable") await response.stream(Readable.from(["a", "b"]));
+      else if (mode === "iterable")
+        await response.stream(
+          (async function* () {
+            yield "a";
+            yield "b";
+          })(),
+        );
+      else {
+        await response.write("a");
+        await response.end("b");
+      }
+      expect(fixed).not.toHaveBeenCalled();
+      expect(commit).toHaveBeenCalledTimes(1);
+      expect(write).toHaveBeenCalledTimes(2);
+      expect(end).toHaveBeenCalledTimes(1);
+      expect(response.bodyBytesWritten).toBe(2);
+      expect(response.writableEnded).toBe(true);
+      expect(socket.output()).toContain(
+        mode === "fixed-stream" ? "\r\n\r\nab" : "1\r\na\r\n1\r\nb\r\n0\r\n\r\n",
+      );
+    },
+  );
 });

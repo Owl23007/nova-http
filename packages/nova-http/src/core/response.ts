@@ -274,6 +274,30 @@ export class NovaResponse {
     this._markStreamingResponse();
     if (this._options.signal.aborted) return;
     this._ensureFinished();
+    if (this._sink.sendFixed) {
+      this._headersCommitted = true;
+      this._state = "streaming";
+      try {
+        this._assertActive();
+        const pending = this._sink.sendFixed(this._statusCode, this._headers, body);
+        if (pending === undefined) {
+          this._complete();
+        } else {
+          const guarded = pending
+            .then(() => this._complete())
+            .catch((error: unknown) => {
+              const writeError = toError(error);
+              this._fail(writeError);
+              throw writeError;
+            });
+          void guarded.catch(() => undefined);
+          this._writeTail = guarded;
+        }
+      } catch (error: unknown) {
+        this._fail(toError(error));
+      }
+      return;
+    }
     const committed = this._flushHeaders();
     this._enqueueWrite(async () => {
       await committed;
