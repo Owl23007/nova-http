@@ -34,18 +34,14 @@ if (target.adapter === "nova") {
   app[scenario.method.toLowerCase()](route, (req, res) => {
     let value = scenario.expected;
     if (name === "params-query") value = { id: req.params.id, q: req.query.get("q") };
-    if (name === "json-echo")
-      value =
-        target.bodyAPI === "legacy"
-          ? req.bodyParsed
-          : (req.context.bodyParserData?.body ?? req.bodyParsed);
+    if (name === "json-echo") value = req.context.bodyParserData?.body ?? req.bodyParsed;
     if (name === "middleware-5") value = req.context.benchmark;
     res.setHeader("content-type", scenario.type);
     if (typeof value === "string") res.send(value);
     else res.json(value);
   });
   if (typeof app.address !== "function") {
-    // 旧版没有公开 address 方法，先申请空闲端口再通过公开 listen 启动
+    // baseline 可能没有公开 address 方法，先申请空闲端口再通过公开 listen 启动
     const probe = net.createServer();
     await new Promise((resolve) => probe.listen(0, "127.0.0.1", () => resolve(undefined)));
     const address = probe.address();

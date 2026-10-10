@@ -1,23 +1,12 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { validateBatch, validatePullRequest, validateArchiveSet } from "./archive.js";
-import { createGitHubAPI, loadVerifiedBatch, selectArchiveBatches } from "./remote.js";
+import { validateBatch, validatePullRequest } from "./archive.js";
+import { createGitHubAPI, loadVerifiedBatch } from "./remote.js";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const repository = process.env.GITHUB_REPOSITORY;
 const api = createGitHubAPI(repository, process.env.GITHUB_TOKEN);
-const archivedManifests = async (master) => {
-  if (master.truncated) throw new Error("无法完整读取 master");
-  const archived = [];
-  for (const entry of master.tree.filter((item) =>
-    /^\.benchmark\/http-v1\/[1-9]\d*-[1-9]\d*\/manifest\.json$/.test(item.path),
-  )) {
-    const blob = await api("/git/blobs/" + entry.sha);
-    archived.push(JSON.parse(Buffer.from(blob.content, "base64").toString("utf8")));
-  }
-  return archived;
-};
 const event = JSON.parse(await fs.readFile(process.env.GITHUB_EVENT_PATH, "utf8"));
 if (process.argv[2] === "check") {
   const number = event.pull_request?.number;
@@ -55,7 +44,7 @@ if (process.argv[2] === "check") {
       group.files[name] = Buffer.from(blob.content, "base64").toString("utf8");
       group.changes.push(change);
     }
-    if (groups.size > 2) throw new Error("归档批次数量无效");
+    if (groups.size !== 1) throw new Error("归档只能包含一个批次");
     const batches = [...groups.values()].map((group) => ({
       ...group,
       manifest: validateBatch(group.files),
@@ -63,13 +52,6 @@ if (process.argv[2] === "check") {
     const master = await api("/git/trees/master?recursive=1");
     const head = await api("/git/trees/" + pr.head.sha + "?recursive=1");
     if (master.truncated || head.truncated) throw new Error("无法完整读取 Git 树");
-    const archived = batches.some((batch) => batch.manifest.kind === "historical-initialization")
-      ? await archivedManifests(master)
-      : [];
-    const anchor = validateArchiveSet(
-      batches.map((batch) => batch.manifest),
-      archived,
-    );
     for (const change of changes)
       if (
         !head.tree.some(
@@ -97,7 +79,6 @@ if (process.argv[2] === "check") {
         batch.files,
         verified.files,
         manifest,
-        anchor,
       );
     }
     if ((await api("/pulls/" + number)).head.sha !== pr.head.sha)
@@ -124,44 +105,17 @@ if (process.argv[2] === "check") {
   );
   const master = await api("/git/trees/master?recursive=1");
   if (master.truncated) throw new Error("无法完整读取 master");
-  const historical = current.manifest.kind === "historical-initialization";
-  const archived = historical ? await archivedManifests(master) : [];
-  const selection = await selectArchiveBatches(current, archived, (runId, attempt) =>
-    loadVerifiedBatch(repository, runId, attempt, api),
-  );
-  if (!selection.ready) {
-    if (process.env.GITHUB_OUTPUT) await fs.appendFile(process.env.GITHUB_OUTPUT, "ready=false\n");
-    console.log("历史首批已验证，等待 no-pipeline 引用本批次后统一创建归档 PR");
-  } else {
-    const { batches, anchor } = selection;
-    // 全部批次验证完成后才写入，任一证据缺失都不创建归档 PR
-    for (const { manifest } of batches) {
-      const prefix =
-        ".benchmark/" + manifest.suite + "/" + manifest.runId + "-" + manifest.runAttempt + "/";
-      if (master.tree.some((entry) => entry.path.startsWith(prefix))) throw new Error("批次已存在");
-    }
-    for (const { manifest, files } of batches) {
-      const destination = path.join(
-        root,
-        ".benchmark",
-        manifest.suite,
-        manifest.runId + "-" + manifest.runAttempt,
-      );
-      await fs.mkdir(path.dirname(destination), { recursive: true });
-      await fs.mkdir(destination);
-      for (const [name, content] of Object.entries(files))
-        await fs.writeFile(path.join(destination, name), content, { flag: "wx" });
-    }
-    if (process.env.GITHUB_OUTPUT)
-      await fs.appendFile(
-        process.env.GITHUB_OUTPUT,
-        "ready=true\nbranch=benchmark/" +
-          anchor.runId +
-          "-" +
-          anchor.runAttempt +
-          "\nartifact-id=" +
-          batches.map((batch) => batch.artifact.id).join(",") +
-          "\narchive-path=.benchmark/http-v1\n",
-      );
-  }
+  const { manifest, files, artifact } = current;
+  const prefix = `.benchmark/${manifest.suite}/${manifest.runId}-${manifest.runAttempt}/`;
+  if (master.tree.some((entry) => entry.path.startsWith(prefix))) throw new Error("批次已存在");
+  const destination = path.join(root, prefix);
+  await fs.mkdir(path.dirname(destination), { recursive: true });
+  await fs.mkdir(destination);
+  for (const [name, content] of Object.entries(files))
+    await fs.writeFile(path.join(destination, name), content, { flag: "wx" });
+  if (process.env.GITHUB_OUTPUT)
+    await fs.appendFile(
+      process.env.GITHUB_OUTPUT,
+      `ready=true\nbranch=benchmark/${manifest.runId}-${manifest.runAttempt}\nartifact-id=${artifact.id}\narchive-path=${prefix}\n`,
+    );
 } else throw new Error("使用 check 或 promote");

@@ -1,11 +1,5 @@
 import { decodeArtifact } from "./artifact.js";
-import {
-  validateBatch,
-  verifyProvenance,
-  validateHistoricalBase,
-  validateInitialization,
-  validateArchiveSet,
-} from "./archive.js";
+import { validateBatch, verifyProvenance } from "./archive.js";
 
 export function createGitHubAPI(repository, token) {
   if (!/^[\w.-]+\/[\w.-]+$/.test(repository ?? "") || !token)
@@ -27,25 +21,6 @@ export function createGitHubAPI(repository, token) {
 export async function downloadArtifact(api, artifact) {
   if (artifact.size_in_bytes > 30_000_000) throw new Error("Artifact 超过大小限制");
   return decodeArtifact(await api(`/actions/artifacts/${artifact.id}/zip`, true));
-}
-
-export async function selectArchiveBatches(current, archived, loadBatch) {
-  const manifest = current.manifest;
-  if (manifest.kind === "historical-initialization" && manifest.profile === "fastify") {
-    validateHistoricalBase(manifest);
-    validateInitialization(manifest, archived);
-    return { ready: false, batches: [], anchor: null };
-  }
-  const batches = [current];
-  if (manifest.kind === "historical-initialization") {
-    const reference = manifest.initialization?.previousBatch;
-    batches.unshift(await loadBatch(reference?.runId, reference?.runAttempt));
-  }
-  const anchor = validateArchiveSet(
-    batches.map((batch) => batch.manifest),
-    archived,
-  );
-  return { ready: true, batches, anchor };
 }
 
 export async function loadVerifiedBatch(

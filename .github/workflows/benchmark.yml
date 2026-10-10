@@ -19,12 +19,8 @@ on:
     - cron: "0 3 * * 1"
   workflow_dispatch:
     inputs:
-      historical:
-        description: 正式归档链路验证后才启用历史初始化
-        type: boolean
-        default: false
       profile:
-        description: 历史初始化先运行 fastify，再引用首批运行 no-pipeline
+        description: 正式测量负载
         type: choice
         options: [fastify, no-pipeline]
         default: fastify
@@ -32,14 +28,6 @@ on:
         type: choice
         options: [json-small, text, params-query, json-echo, middleware-5]
         default: json-small
-      historical_base_run:
-        description: 历史 no-pipeline 必填，成功 fastify 首批的 run ID
-        type: string
-        default: ""
-      historical_base_attempt:
-        description: 历史 no-pipeline 必填，首批确切 run attempt
-        type: string
-        default: ""
   repository_dispatch:
     types: [benchmark-archive]
 
@@ -136,9 +124,6 @@ jobs:
           BENCH_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           BENCH_PR_NUMBER: ${{ github.event.pull_request.number }}
           EVENT: ${{ github.event_name }}
-          HISTORICAL: ${{ inputs.historical || false }}
-          BENCH_HISTORY_BASE_RUN: ${{ inputs.historical_base_run }}
-          BENCH_HISTORY_BASE_ATTEMPT: ${{ inputs.historical_base_attempt }}
           BASE: ${{ github.event.pull_request.base.sha }}
         shell: bash
         run: |
@@ -148,8 +133,6 @@ jobs:
               export BENCH_METHODOLOGY_CHANGED=true
             fi
             pnpm --filter @nova-http/benchmarks bench --profile pr --scenario "$SCENARIO" --baseline-root "$GITHUB_WORKSPACE/.tmp/benchmark/work/baseline"
-          elif [ "$HISTORICAL" = true ]; then
-            pnpm --filter @nova-http/benchmarks bench --profile "$PROFILE" --scenario "$SCENARIO" --historical
           else
             pnpm --filter @nova-http/benchmarks bench --profile "$PROFILE" --scenario "$SCENARIO"
           fi

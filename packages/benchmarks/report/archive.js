@@ -1,11 +1,6 @@
 import { validateRecord, digest } from "./results.js";
 import { profiles, orderForRound } from "../config/profiles.js";
 import { scenarios } from "../suites/http/scenarios.js";
-import { readFileSync } from "node:fs";
-const historical = JSON.parse(
-  readFileSync(new URL("../config/historical.json", import.meta.url), "utf8"),
-);
-
 export const workflowPath = ".github/workflows/benchmark.yml";
 const assert = (condition, message) => {
   if (!condition) throw new Error(message);
@@ -16,6 +11,7 @@ export function validateBatch(files) {
   assert(files && Object.hasOwn(files, "manifest.json"), "缺少 manifest");
   const manifest = JSON.parse(files["manifest.json"]);
   assert(manifest.schemaVersion === 1 && manifest.suite === "http-v1", "套件身份无效");
+  assert(manifest.kind === "current", "仅接受当前版本测量归档");
   assert(
     ["fastify", "no-pipeline"].includes(manifest.profile) &&
       Object.hasOwn(scenarios, manifest.scenario),
@@ -49,8 +45,6 @@ export function validateBatch(files) {
     "批次文件集合不完整",
   );
   const identities = [];
-  const history = manifest.kind === "historical-initialization";
-  assert(!history || manifest.scenario === "json-small", "历史场景无效");
   let environmentDigest;
   for (const name of manifest.files) {
     const record = validateRecord(JSON.parse(files[name]));
@@ -132,40 +126,13 @@ export function validateBatch(files) {
         record.rounds.every((r, i) => r.status === "success" && r.round === i),
       "存在失败或重复轮次",
     );
-    if (record.target.adapter === "nova" && !history)
+    if (record.target.adapter === "nova")
       assert(
         record.target.source === "checkout" &&
           record.target.sha === manifest.commitSha &&
           record.target.dirty === false,
         "被测源码身份无效",
       );
-    if (record.target.adapter === "nova" && history) {
-      const pinned = historical.targets.find((item) => item.version === record.target.version);
-      assert(
-        pinned &&
-          record.target.source === "npm" &&
-          record.target.id === `nova-${pinned.version.replaceAll(".", "-")}` &&
-          record.target.integrity === pinned.integrity &&
-          record.target.tarball === pinned.tarball &&
-          record.target.publishedAt === pinned.publishedAt &&
-          record.target.sha === null,
-        "历史包身份无效",
-      );
-      assert(
-        record.metadata.historicalPreflight?.length === 15 &&
-          historical.targets.every((item) =>
-            Object.keys(scenarios).every((scenario) =>
-              record.metadata.historicalPreflight.some(
-                (check) =>
-                  check.target === `nova-${item.version.replaceAll(".", "-")}` &&
-                  check.scenario === scenario &&
-                  check.status === "success",
-              ),
-            ),
-          ),
-        "历史 smoke 不完整",
-      );
-    }
     for (const r of record.rounds)
       assert(
         Array.isArray(r.order) &&
@@ -187,45 +154,10 @@ export function validateBatch(files) {
   }
   assert(
     JSON.stringify(identities.toSorted()) ===
-      JSON.stringify(
-        history
-          ? [
-              "fastify-no-schema",
-              "fastify-schema",
-              "node-http",
-              "nova-0-1-1",
-              "nova-0-2-0",
-              "nova-0-2-1",
-            ]
-          : ["fastify-no-schema", "fastify-schema", "node-http", "nova-current"],
-      ),
+      JSON.stringify(["fastify-no-schema", "fastify-schema", "node-http", "nova-current"]),
     "正式目标集合无效",
   );
   return manifest;
-}
-
-export function validateInitialization(manifest, archived) {
-  if (manifest.kind !== "historical-initialization") return;
-  const previous = archived.filter(
-    (item) =>
-      item.kind === "historical-initialization" &&
-      item.suite === "http-v1" &&
-      item.scenario === "json-small" &&
-      item.status === "success",
-  );
-  assert(!previous.some((item) => item.profile === manifest.profile), "历史组合已归档");
-  const completed = [
-    ...new Set([
-      ...previous.map((item) => `http-v1/json-small/${item.profile}`),
-      `http-v1/json-small/${manifest.profile}`,
-    ]),
-  ].toSorted();
-  assert(
-    digest(manifest.initialization?.completed?.toSorted()) === digest(completed),
-    "历史完成状态不匹配",
-  );
-  const status = completed.length === 2 ? "complete" : "incomplete";
-  assert(manifest.initialization?.status === status, "历史初始化状态不匹配");
 }
 
 export async function verifyProvenance(manifest, api) {
@@ -265,15 +197,7 @@ export async function verifyProvenance(manifest, api) {
   return artifact;
 }
 
-export function validatePullRequest(
-  pr,
-  changes,
-  masterPaths,
-  files,
-  artifactFiles,
-  manifest,
-  anchor = manifest,
-) {
+export function validatePullRequest(pr, changes, masterPaths, files, artifactFiles, manifest) {
   assert(
     pr.user?.login === "github-actions[bot]" && pr.user?.id === 41898282 && pr.user?.type === "Bot",
     "仅允许 Action 机器人归档",
@@ -282,7 +206,7 @@ export function validatePullRequest(
     pr.base.ref === "master" &&
       pr.base.repo.full_name === manifest.repository &&
       pr.head.repo?.full_name === manifest.repository &&
-      pr.head.ref === `benchmark/${anchor.runId}-${anchor.runAttempt}`,
+      pr.head.ref === `benchmark/${manifest.runId}-${manifest.runAttempt}`,
     "归档 PR 来源无效",
   );
   const prefix = `.benchmark/${manifest.suite}/${manifest.runId}-${manifest.runAttempt}/`;
@@ -304,47 +228,4 @@ export function validatePullRequest(
   );
   for (const [name, content] of Object.entries(files))
     assert(content === artifactFiles[name], "Artifact 内容不一致");
-}
-
-export function validateHistoricalBase(manifest) {
-  assert(
-    manifest.kind === "historical-initialization" &&
-      manifest.profile === "fastify" &&
-      manifest.initialization?.status === "incomplete" &&
-      !manifest.initialization?.previousBatch,
-    "历史首批引用无效",
-  );
-  validateInitialization(manifest, []);
-}
-
-export function validateArchiveSet(manifests, archived) {
-  assert(manifests.length > 0, "缺少归档批次");
-  if (manifests[0].kind !== "historical-initialization") {
-    assert(manifests.length === 1, "普通归档只能包含一个批次");
-    return manifests[0];
-  }
-  assert(
-    manifests.length === 2 && manifests.every((item) => item.kind === "historical-initialization"),
-    "历史初始化必须同时归档两个批次",
-  );
-  const first = manifests.find((item) => item.profile === "fastify");
-  const second = manifests.find((item) => item.profile === "no-pipeline");
-  assert(
-    first &&
-      second &&
-      first.runId !== second.runId &&
-      first.repository === second.repository &&
-      first.suite === second.suite &&
-      first.scenario === second.scenario,
-    "历史批次组合无效",
-  );
-  validateHistoricalBase(first);
-  assert(
-    second.initialization?.previousBatch?.runId === first.runId &&
-      second.initialization.previousBatch.runAttempt === first.runAttempt,
-    "历史批次引用不匹配",
-  );
-  validateInitialization(first, archived);
-  validateInitialization(second, [...archived, first]);
-  return first;
 }
