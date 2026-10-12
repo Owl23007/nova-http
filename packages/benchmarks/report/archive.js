@@ -14,6 +14,39 @@ const legacyLoads = {
   fastify: "pipeline-10",
   "no-pipeline": "pipeline-1",
 };
+const historicalVersions = Object.freeze({
+  "nova-0-1-1": "0.1.1",
+  "nova-0-2-0": "0.2.0",
+  "nova-0-2-1": "0.2.1",
+});
+
+function validateHistoricalInitialization(manifest, resolved) {
+  if (manifest.kind !== "historical-initialization") return false;
+  assert(
+    manifest.workflowPath === workflowPath &&
+      manifest.scenario === "json-small" &&
+      resolved.legacy &&
+      manifest.initialization?.status ===
+        (manifest.profile === "no-pipeline" ? "complete" : "incomplete"),
+    "Invalid historical initialization",
+  );
+  const expectedCompleted =
+    manifest.profile === "no-pipeline"
+      ? ["http-v1/json-small/fastify", "http-v1/json-small/no-pipeline"]
+      : ["http-v1/json-small/fastify"];
+  assert(
+    JSON.stringify(manifest.initialization.completed) === JSON.stringify(expectedCompleted),
+    "Invalid historical initialization",
+  );
+  if (manifest.profile === "no-pipeline")
+    assert(
+      numericId(String(manifest.initialization.previousBatch?.runId)) &&
+        /^[1-9]\d*$/.test(String(manifest.initialization.previousBatch?.runAttempt)),
+      "Invalid historical initialization",
+    );
+  else assert(manifest.initialization.previousBatch === null, "Invalid historical initialization");
+  return true;
+}
 
 function archiveConfig(manifest) {
   const legacyLoad = legacyLoads[manifest.profile];
@@ -36,9 +69,13 @@ export function validateBatch(files) {
   assert(files && Object.hasOwn(files, "manifest.json"), "Missing manifest");
   const manifest = JSON.parse(files["manifest.json"]);
   assert(manifest.schemaVersion === 1 && manifest.suite === "http-v1", "Invalid suite identity");
-  assert(manifest.kind === "current", "Only current-version measurements can be archived");
   assert(Object.hasOwn(scenarios, manifest.scenario), "Invalid official scenario");
   const resolved = archiveConfig(manifest);
+  const historicalInitialization = validateHistoricalInitialization(manifest, resolved);
+  assert(
+    manifest.kind === "current" || historicalInitialization,
+    "Only supported measurements can be archived",
+  );
   assert(numericId(manifest.runId) && numericId(manifest.runAttempt), "Invalid run identity");
   assert(
     /^[\da-f]{40}$/.test(manifest.commitSha) &&
@@ -87,6 +124,24 @@ export function validateBatch(files) {
           target.source === "lockfile" &&
           target.schema === (target.id === "fastify-schema"),
         "Invalid Fastify reference identity",
+      );
+    else if (Object.hasOwn(historicalVersions, target.id))
+      assert(
+        historicalInitialization &&
+          target.adapter === "nova" &&
+          target.package === "nova-http" &&
+          target.source === "npm" &&
+          target.version === historicalVersions[target.id] &&
+          target.sha === null &&
+          /^[\da-f]{40}$/.test(target.tagSha) &&
+          (target.npmGitHead === null || /^[\da-f]{40}$/.test(target.npmGitHead)) &&
+          target.integrity?.startsWith("sha512-") &&
+          target.tarball ===
+            `https://registry.npmjs.org/nova-http/-/nova-http-${target.version}.tgz` &&
+          Number.isFinite(Date.parse(target.publishedAt)) &&
+          target.shaUnavailableReason === "npm tarball 不以标签 SHA 证明源码身份" &&
+          target.bodyAPI === "legacy",
+        "Invalid historical Nova identity",
       );
     else
       assert(target.adapter === "nova" && target.package === "nova-http", "Invalid Nova identity");
@@ -155,7 +210,7 @@ export function validateBatch(files) {
         record.rounds.every((r, i) => r.status === "success" && r.round === i),
       "Batch contains failed or duplicate rounds",
     );
-    if (record.target.adapter === "nova") {
+    if (record.target.adapter === "nova" && record.target.source !== "npm") {
       const current = record.target.id === "nova-current";
       const baseline = record.target.id === "nova-baseline";
       assert(
@@ -194,7 +249,9 @@ export function validateBatch(files) {
       );
   }
   const expected = ["fastify-no-schema", "fastify-schema", "node-http", "nova-current"];
-  if (manifest.workflowPath === rcWorkflowPath) expected.push("nova-baseline");
+  if (historicalInitialization)
+    expected.splice(expected.indexOf("nova-current"), 1, ...Object.keys(historicalVersions));
+  else if (manifest.workflowPath === rcWorkflowPath) expected.push("nova-baseline");
   assert(
     JSON.stringify(identities.toSorted()) === JSON.stringify(expected.toSorted()),
     "Invalid official target set",
