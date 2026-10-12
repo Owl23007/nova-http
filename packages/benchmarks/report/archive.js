@@ -3,57 +3,13 @@ import { profiles, orderForRound } from "../config/profiles.js";
 import { loads } from "../config/loads.js";
 import { scenarios } from "../suites/http/scenarios.js";
 import { archiveBatchPath } from "./archive-layout.js";
-export const workflowPath = ".github/workflows/benchmark.yml";
 export const rcWorkflowPath = ".github/workflows/benchmark-rc.yml";
-export const workflowPaths = new Set([workflowPath, rcWorkflowPath]);
 const assert = (condition, message) => {
   if (!condition) throw new Error(message);
 };
 const numericId = (value) => typeof value === "string" && /^[1-9]\d*$/.test(value);
-const legacyLoads = {
-  fastify: "pipeline-10",
-  "no-pipeline": "pipeline-1",
-};
-const historicalVersions = Object.freeze({
-  "nova-0-1-1": "0.1.1",
-  "nova-0-2-0": "0.2.0",
-  "nova-0-2-1": "0.2.1",
-});
-
-function validateHistoricalInitialization(manifest, resolved) {
-  if (manifest.kind !== "historical-initialization") return false;
-  assert(
-    manifest.workflowPath === workflowPath &&
-      manifest.scenario === "json-small" &&
-      resolved.legacy &&
-      manifest.initialization?.status ===
-        (manifest.profile === "no-pipeline" ? "complete" : "incomplete"),
-    "Invalid historical initialization",
-  );
-  const expectedCompleted =
-    manifest.profile === "no-pipeline"
-      ? ["http-v1/json-small/fastify", "http-v1/json-small/no-pipeline"]
-      : ["http-v1/json-small/fastify"];
-  assert(
-    JSON.stringify(manifest.initialization.completed) === JSON.stringify(expectedCompleted),
-    "Invalid historical initialization",
-  );
-  if (manifest.profile === "no-pipeline")
-    assert(
-      numericId(String(manifest.initialization.previousBatch?.runId)) &&
-        /^[1-9]\d*$/.test(String(manifest.initialization.previousBatch?.runAttempt)),
-      "Invalid historical initialization",
-    );
-  else assert(manifest.initialization.previousBatch === null, "Invalid historical initialization");
-  return true;
-}
 
 function archiveConfig(manifest) {
-  const legacyLoad = legacyLoads[manifest.profile];
-  if (legacyLoad) {
-    const config = { ...loads[legacyLoad], ...profiles.full };
-    return { config, digestInput: { profile: config }, legacy: true };
-  }
   assert(
     manifest.profile === "full" && Object.hasOwn(loads, manifest.load),
     "Invalid official load",
@@ -61,7 +17,6 @@ function archiveConfig(manifest) {
   return {
     config: { ...loads[manifest.load], ...profiles.full },
     digestInput: { profile: profiles.full, load: loads[manifest.load] },
-    legacy: false,
   };
 }
 
@@ -69,17 +24,13 @@ export function validateBatch(files) {
   assert(files && Object.hasOwn(files, "manifest.json"), "Missing manifest");
   const manifest = JSON.parse(files["manifest.json"]);
   assert(manifest.schemaVersion === 1 && manifest.suite === "http-v1", "Invalid suite identity");
+  assert(manifest.kind === "current", "Only current-version measurements can be archived");
   assert(Object.hasOwn(scenarios, manifest.scenario), "Invalid official scenario");
   const resolved = archiveConfig(manifest);
-  const historicalInitialization = validateHistoricalInitialization(manifest, resolved);
-  assert(
-    manifest.kind === "current" || historicalInitialization,
-    "Only supported measurements can be archived",
-  );
   assert(numericId(manifest.runId) && numericId(manifest.runAttempt), "Invalid run identity");
   assert(
     /^[\da-f]{40}$/.test(manifest.commitSha) &&
-      workflowPaths.has(manifest.workflowPath) &&
+      manifest.workflowPath === rcWorkflowPath &&
       Number.isInteger(manifest.workflowId),
     "Invalid workflow identity",
   );
@@ -125,24 +76,6 @@ export function validateBatch(files) {
           target.schema === (target.id === "fastify-schema"),
         "Invalid Fastify reference identity",
       );
-    else if (Object.hasOwn(historicalVersions, target.id))
-      assert(
-        historicalInitialization &&
-          target.adapter === "nova" &&
-          target.package === "nova-http" &&
-          target.source === "npm" &&
-          target.version === historicalVersions[target.id] &&
-          target.sha === null &&
-          /^[\da-f]{40}$/.test(target.tagSha) &&
-          (target.npmGitHead === null || /^[\da-f]{40}$/.test(target.npmGitHead)) &&
-          target.integrity?.startsWith("sha512-") &&
-          target.tarball ===
-            `https://registry.npmjs.org/nova-http/-/nova-http-${target.version}.tgz` &&
-          Number.isFinite(Date.parse(target.publishedAt)) &&
-          target.shaUnavailableReason === "npm tarball 不以标签 SHA 证明源码身份" &&
-          target.bodyAPI === "legacy",
-        "Invalid historical Nova identity",
-      );
     else
       assert(target.adapter === "nova" && target.package === "nova-http", "Invalid Nova identity");
     identities.push(record.target.id);
@@ -150,7 +83,7 @@ export function validateBatch(files) {
       name === `${record.target.id}.json` &&
         record.suite === manifest.suite &&
         record.load.profile === manifest.profile &&
-        (resolved.legacy || record.load.load === manifest.load) &&
+        record.load.load === manifest.load &&
         record.load.scenario === manifest.scenario,
       "Target does not match batch",
     );
@@ -183,12 +116,7 @@ export function validateBatch(files) {
         source.workflowSha === manifest.commitSha,
       "Record provenance does not match",
     );
-    assert(
-      manifest.workflowPath === rcWorkflowPath
-        ? source.event === "workflow_dispatch"
-        : ["push", "schedule", "workflow_dispatch"].includes(source.event),
-      "Unsupported measurement event",
-    );
+    assert(source.event === "workflow_dispatch", "Unsupported measurement event");
     const env = record.metadata.environment;
     environmentDigest ??= digest(env);
     assert(environmentDigest === digest(env), "Batch environments do not match");
@@ -210,7 +138,7 @@ export function validateBatch(files) {
         record.rounds.every((r, i) => r.status === "success" && r.round === i),
       "Batch contains failed or duplicate rounds",
     );
-    if (record.target.adapter === "nova" && record.target.source !== "npm") {
+    if (record.target.adapter === "nova") {
       const current = record.target.id === "nova-current";
       const baseline = record.target.id === "nova-baseline";
       assert(
@@ -248,10 +176,13 @@ export function validateBatch(files) {
         "Execution order was not rotated by round",
       );
   }
-  const expected = ["fastify-no-schema", "fastify-schema", "node-http", "nova-current"];
-  if (historicalInitialization)
-    expected.splice(expected.indexOf("nova-current"), 1, ...Object.keys(historicalVersions));
-  else if (manifest.workflowPath === rcWorkflowPath) expected.push("nova-baseline");
+  const expected = [
+    "fastify-no-schema",
+    "fastify-schema",
+    "node-http",
+    "nova-current",
+    "nova-baseline",
+  ];
   assert(
     JSON.stringify(identities.toSorted()) === JSON.stringify(expected.toSorted()),
     "Invalid official target set",
@@ -260,7 +191,7 @@ export function validateBatch(files) {
 }
 
 export async function verifyProvenance(manifest, api) {
-  assert(workflowPaths.has(manifest.workflowPath), "Workflow is not allowed");
+  assert(manifest.workflowPath === rcWorkflowPath, "Workflow is not allowed");
   const workflowName = manifest.workflowPath.slice(manifest.workflowPath.lastIndexOf("/") + 1);
   const workflow = await api(`/actions/workflows/${workflowName}`);
   assert(
@@ -282,9 +213,7 @@ export async function verifyProvenance(manifest, api) {
       run.head_sha === manifest.commitSha &&
       run.workflow_id === workflow.id &&
       run.path === manifest.workflowPath &&
-      (manifest.workflowPath === rcWorkflowPath
-        ? run.event === "workflow_dispatch"
-        : ["push", "schedule", "workflow_dispatch"].includes(run.event)),
+      run.event === "workflow_dispatch",
     "Untrusted measurement provenance",
   );
   const artifacts = await api(`/actions/runs/${manifest.runId}/artifacts?per_page=100`);
@@ -346,35 +275,4 @@ export function validatePullRequest(
   );
   for (const [name, content] of Object.entries(files))
     assert(content === artifactFiles[name], "Artifact content does not match");
-}
-
-export function validateLegacyCleanup(changes, masterTree) {
-  const archiveChanges = changes.filter(
-    (change) =>
-      change.filename.startsWith(".benchmark/") ||
-      change.previous_filename?.startsWith(".benchmark/"),
-  );
-  const legacyEntries = masterTree.filter(
-    (entry) => entry.path.startsWith(".benchmark/http-v1/") && entry.type === "blob",
-  );
-  assert(archiveChanges.length > 0, "Legacy cleanup is empty");
-  assert(
-    archiveChanges.length === legacyEntries.length &&
-      archiveChanges.every((change) => {
-        const match = change.filename.match(
-          /^\.benchmark\/http-v1\/([1-9]\d*-[1-9]\d*)\/([a-z0-9-]+\.json)$/,
-        );
-        if (change.status !== "removed" || !match || change.previous_filename) return false;
-        const source = legacyEntries.find((entry) => entry.path === change.filename);
-        const destination = masterTree.find(
-          (entry) =>
-            entry.path === `.benchmark/historical/http-v1/${match[1]}/${match[2]}` &&
-            entry.type === "blob",
-        );
-        return (
-          source?.mode === "100644" && source.sha === change.sha && destination?.sha === source.sha
-        );
-      }),
-    "Legacy cleanup must remove complete byte-identical migrated archives",
-  );
 }

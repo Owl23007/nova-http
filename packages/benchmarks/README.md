@@ -365,7 +365,7 @@ Benchmark 区分临时结果与长期归档，以一次完整测量 **Batch** �
 - **可比较**：仅直接比较方法与负载相同的结果。
 - **原始数据优先**：原始 JSON 为事实来源，报告由数据生成。
 
-`.benchmark/http-v1/` 是历史遗留目录，仅用于兼容读取，新归档使用 `.benchmark/historical/http-v1/` 或 `.benchmark/releases/<tag>/http-v1/`。
+正式归档统一使用 `.benchmark/historical/<suite>/` 或 `.benchmark/releases/<tag>/<suite>/`。
 
 ### 报告生成
 

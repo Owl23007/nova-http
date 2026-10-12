@@ -19,9 +19,6 @@ on:
         description: Optional release tag; empty stores the batch under historical
         type: string
         required: false
-  repository_dispatch:
-    types: [benchmark-archive]
-
 permissions:
   contents: read
   actions: read
@@ -54,7 +51,7 @@ jobs:
 
   promote:
     name: Promote verified candidate
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -62,7 +59,7 @@ jobs:
       contents: write
       pull-requests: write
     concurrency:
-      group: benchmark-archive-${{ inputs.run_id || github.event.client_payload.runId }}-${{ inputs.run_attempt || github.event.client_payload.runAttempt }}
+      group: benchmark-archive-${{ inputs.run_id }}-${{ inputs.run_attempt }}
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
@@ -77,9 +74,9 @@ jobs:
         run: node packages/benchmarks/report/archive-cli.js promote
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          BENCH_SOURCE_RUN_ID: ${{ inputs.run_id || github.event.client_payload.runId }}
-          BENCH_SOURCE_RUN_ATTEMPT: ${{ inputs.run_attempt || github.event.client_payload.runAttempt }}
-          BENCH_RELEASE_TAG: ${{ inputs.release_tag || github.event.client_payload.releaseTag }}
+          BENCH_SOURCE_RUN_ID: ${{ inputs.run_id }}
+          BENCH_SOURCE_RUN_ATTEMPT: ${{ inputs.run_attempt }}
+          BENCH_RELEASE_TAG: ${{ inputs.release_tag }}
       - name: Create archive pull request
         if: steps.promote.outputs.ready == 'true'
         env:

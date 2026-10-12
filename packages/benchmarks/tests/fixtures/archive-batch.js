@@ -1,12 +1,13 @@
 import { loads } from "../../config/loads.js";
 import { profiles, orderForRound } from "../../config/profiles.js";
 import { digest, metrics, summarize } from "../../report/results.js";
-import { workflowPath } from "../../report/archive.js";
+import { rcWorkflowPath } from "../../report/archive.js";
 import { scenarios } from "../../suites/http/scenarios.js";
 
 export function archiveBatchFixture() {
-  const ids = ["nova-current", "fastify-schema", "fastify-no-schema", "node-http"];
+  const ids = ["nova-current", "fastify-schema", "fastify-no-schema", "node-http", "nova-baseline"];
   const sha = "a".repeat(40);
+  const baselineSha = "b".repeat(40);
   const repository = "owner/repo";
   const manifest = {
     schemaVersion: 1,
@@ -19,7 +20,7 @@ export function archiveBatchFixture() {
     runId: "123",
     runAttempt: "2",
     workflowId: 7,
-    workflowPath,
+    workflowPath: rcWorkflowPath,
     commitSha: sha,
     artifactName: "benchmark-123-2",
     files: ids.map((id) => `${id}.json`),
@@ -62,14 +63,16 @@ export function archiveBatchFixture() {
         version: id === "node-http" ? "v24.21.0" : id.startsWith("fastify") ? "5.6.1" : "1",
         package: id === "node-http" ? "node" : id.startsWith("fastify") ? "fastify" : "nova-http",
         schema: id === "fastify-schema",
-        adapter: id === "nova-current" ? "nova" : id === "node-http" ? "node" : "fastify",
+        adapter: id.startsWith("nova-") ? "nova" : id === "node-http" ? "node" : "fastify",
         source: id === "node-http" ? "runtime" : id.startsWith("fastify") ? "lockfile" : "checkout",
-        sha,
+        sha: id === "nova-baseline" ? baselineSha : sha,
         dirty: false,
+        ...(id === "nova-baseline" ? { baseline: true } : {}),
       },
       metadata: {
         driverSha: sha,
         dirty: false,
+        baseline: { id: "nova-baseline", sha: baselineSha },
         environment: {
           node: "v24.21.0",
           autocannon: "8.0.0",
@@ -88,7 +91,7 @@ export function archiveBatchFixture() {
           runId: "123",
           runAttempt: "2",
           workflowSha: sha,
-          event: "push",
+          event: "workflow_dispatch",
         },
       },
       load: {

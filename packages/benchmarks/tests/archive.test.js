@@ -1,10 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   validateBatch,
-  validateLegacyCleanup,
   verifyProvenance,
   validatePullRequest,
-  workflowPath,
   rcWorkflowPath,
 } from "../report/archive.js";
 import { digest, metrics, summarize } from "../report/results.js";
@@ -17,7 +15,8 @@ import { archiveBatchPath, parseArchiveFile } from "../report/archive-layout.js"
 const sha = "a".repeat(40);
 const repository = "owner/repo";
 function fixture() {
-  const ids = ["nova-current", "fastify-schema", "fastify-no-schema", "node-http"];
+  const ids = ["nova-current", "nova-baseline", "fastify-schema", "fastify-no-schema", "node-http"];
+  const baselineSha = "b".repeat(40);
   const manifest = {
     schemaVersion: 1,
     kind: "current",
@@ -29,7 +28,7 @@ function fixture() {
     runId: "123",
     runAttempt: "2",
     workflowId: 7,
-    workflowPath,
+    workflowPath: rcWorkflowPath,
     commitSha: sha,
     artifactName: "benchmark-123-2",
     files: ids.map((id) => `${id}.json`),
@@ -69,14 +68,16 @@ function fixture() {
         version: id === "node-http" ? "v24.21.0" : id.startsWith("fastify") ? "5.6.1" : "1",
         package: id === "node-http" ? "node" : id.startsWith("fastify") ? "fastify" : "nova-http",
         schema: id === "fastify-schema",
-        adapter: id === "nova-current" ? "nova" : id === "node-http" ? "node" : "fastify",
+        adapter: id.startsWith("nova-") ? "nova" : id === "node-http" ? "node" : "fastify",
         source: id === "node-http" ? "runtime" : id.startsWith("fastify") ? "lockfile" : "checkout",
-        sha,
+        sha: id === "nova-baseline" ? baselineSha : sha,
         dirty: false,
+        ...(id === "nova-baseline" ? { baseline: true } : {}),
       },
       metadata: {
         driverSha: sha,
         dirty: false,
+        baseline: { id: "nova-baseline", sha: baselineSha },
         environment: {
           node: "v24.21.0",
           autocannon: "8.0.0",
@@ -95,7 +96,7 @@ function fixture() {
           runId: "123",
           runAttempt: "2",
           workflowSha: sha,
-          event: "push",
+          event: "workflow_dispatch",
         },
       },
       load: {
@@ -126,8 +127,8 @@ function fixture() {
     head_branch: "master",
     head_sha: sha,
     workflow_id: 7,
-    path: workflowPath,
-    event: "push",
+    path: rcWorkflowPath,
+    event: "workflow_dispatch",
   };
   const artifact = {
     id: 4,
@@ -137,7 +138,7 @@ function fixture() {
   };
   const api = async (endpoint) =>
     endpoint.includes("/workflows/")
-      ? { id: 7, path: workflowPath }
+      ? { id: 7, path: rcWorkflowPath }
       : endpoint.includes("/artifacts?")
         ? { total_count: 1, artifacts: [artifact] }
         : run;
@@ -151,103 +152,6 @@ function fixture() {
     filename: `.benchmark/historical/http-v1/123-2/${name}`,
   }));
   return { manifest, files, run, artifact, api, pr, changes };
-}
-
-function legacyFixture(profile) {
-  const f = fixture();
-  const loadName = profile === "fastify" ? "pipeline-10" : "pipeline-1";
-  const legacyProfile = { ...loads[loadName], ...profiles.full };
-  f.manifest.profile = profile;
-  delete f.manifest.load;
-  f.files["manifest.json"] = JSON.stringify(f.manifest);
-  for (const name of f.manifest.files) {
-    const record = JSON.parse(f.files[name]);
-    Object.assign(record.load, legacyProfile, {
-      profile,
-      configDigest: digest({
-        profile: legacyProfile,
-        scenario: scenarios[record.load.scenario],
-      }),
-    });
-    delete record.load.load;
-    f.files[name] = JSON.stringify(record);
-  }
-  return f;
-}
-
-function historicalFixture(profile = "fastify") {
-  const f = legacyFixture(profile);
-  const versions = {
-    "nova-0-1-1": "0.1.1",
-    "nova-0-2-0": "0.2.0",
-    "nova-0-2-1": "0.2.1",
-  };
-  const ids = [...Object.keys(versions), "fastify-schema", "fastify-no-schema", "node-http"];
-  const current = JSON.parse(f.files["nova-current.json"]);
-  delete f.files["nova-current.json"];
-  for (const [id, version] of Object.entries(versions)) {
-    const record = structuredClone(current);
-    record.target = {
-      id,
-      version,
-      package: "nova-http",
-      source: "npm",
-      adapter: "nova",
-      entry: `/tmp/nova-http-${version}/dist/src/index.js`,
-      sha: null,
-      tagSha: "b".repeat(40),
-      npmGitHead: "c".repeat(40),
-      integrity: "sha512-valid",
-      tarball: `https://registry.npmjs.org/nova-http/-/nova-http-${version}.tgz`,
-      publishedAt: "2026-01-01T00:00:00.000Z",
-      shaUnavailableReason: "npm tarball 不以标签 SHA 证明源码身份",
-      bodyAPI: "legacy",
-    };
-    f.files[`${id}.json`] = JSON.stringify(record);
-  }
-  f.manifest.kind = "historical-initialization";
-  f.manifest.files = ids.map((id) => `${id}.json`);
-  f.manifest.initialization = {
-    previousBatch: profile === "no-pipeline" ? { runId: "122", runAttempt: "1" } : null,
-    completed:
-      profile === "no-pipeline"
-        ? ["http-v1/json-small/fastify", "http-v1/json-small/no-pipeline"]
-        : ["http-v1/json-small/fastify"],
-    status: profile === "no-pipeline" ? "complete" : "incomplete",
-  };
-  for (const name of f.manifest.files) {
-    const record = JSON.parse(f.files[name]);
-    for (const round of record.rounds) round.order = orderForRound(ids, round.round);
-    f.files[name] = JSON.stringify(record);
-  }
-  f.files["manifest.json"] = JSON.stringify(f.manifest);
-  return f;
-}
-
-function rcFixture() {
-  const f = fixture();
-  const baselineId = "nova-baseline";
-  const baselineSha = "b".repeat(40);
-  const ids = [...f.manifest.files.map((name) => name.slice(0, -5)), baselineId];
-  f.manifest.workflowPath = rcWorkflowPath;
-  f.manifest.files.push(`${baselineId}.json`);
-  for (const name of f.manifest.files.slice(0, -1)) {
-    const record = JSON.parse(f.files[name]);
-    record.metadata.baseline = { id: baselineId, sha: baselineSha };
-    record.metadata.source.event = "workflow_dispatch";
-    for (const round of record.rounds) round.order = orderForRound(ids, round.round);
-    f.files[name] = JSON.stringify(record);
-  }
-  const baseline = JSON.parse(f.files["nova-current.json"]);
-  baseline.target = {
-    ...baseline.target,
-    id: baselineId,
-    sha: baselineSha,
-    baseline: true,
-  };
-  f.files[`${baselineId}.json`] = JSON.stringify(baseline);
-  f.files["manifest.json"] = JSON.stringify(f.manifest);
-  return f;
 }
 
 describe("归档拒绝不完整来源", () => {
@@ -291,7 +195,9 @@ describe("归档拒绝不完整来源", () => {
       const f = fixture();
       f.manifest.kind = kind;
       f.files["manifest.json"] = JSON.stringify(f.manifest);
-      expect(() => validateBatch(f.files)).toThrow("Only supported measurements can be archived");
+      expect(() => validateBatch(f.files)).toThrow(
+        "Only current-version measurements can be archived",
+      );
     });
   it("仅接受成功批次与相同 Artifact", async () => {
     const f = fixture();
@@ -314,51 +220,22 @@ describe("归档拒绝不完整来源", () => {
       }),
     ).not.toThrow();
   });
-  it("仅允许完整删除与 historical 字节一致的 legacy 归档", () => {
-    const changes = [
-      {
-        status: "removed",
-        filename: ".benchmark/http-v1/123-2/manifest.json",
-        sha: "c".repeat(40),
-      },
-    ];
-    const masterTree = [
-      {
-        path: changes[0].filename,
-        type: "blob",
-        mode: "100644",
-        sha: changes[0].sha,
-      },
-      {
-        path: ".benchmark/historical/http-v1/123-2/manifest.json",
-        type: "blob",
-        mode: "100644",
-        sha: changes[0].sha,
-      },
-    ];
-    expect(() => validateLegacyCleanup(changes, masterTree)).not.toThrow();
-
-    masterTree[1].sha = "d".repeat(40);
-    expect(() => validateLegacyCleanup(changes, masterTree)).toThrow(
-      "Legacy cleanup must remove complete byte-identical migrated archives",
-    );
-  });
   it("RC 候选必须包含 Previous Release 基线", () => {
     const f = fixture();
-    f.manifest.workflowPath = rcWorkflowPath;
+    f.manifest.files = f.manifest.files.filter((name) => name !== "nova-baseline.json");
+    delete f.files["nova-baseline.json"];
+    const ids = f.manifest.files.map((name) => name.slice(0, -5));
     for (const name of f.manifest.files) {
       const record = JSON.parse(f.files[name]);
-      record.metadata.source.event = "workflow_dispatch";
+      for (const round of record.rounds) round.order = orderForRound(ids, round.round);
       f.files[name] = JSON.stringify(record);
     }
     f.files["manifest.json"] = JSON.stringify(f.manifest);
     expect(() => validateBatch(f.files)).toThrow("Invalid official target set");
-    expect(validateBatch(rcFixture().files).workflowPath).toBe(rcWorkflowPath);
+    expect(validateBatch(fixture().files).workflowPath).toBe(rcWorkflowPath);
   });
   it("按 manifest 中声明的 RC workflow 验证来源", async () => {
-    const f = rcFixture();
-    f.run.path = rcWorkflowPath;
-    f.run.event = "workflow_dispatch";
+    const f = fixture();
     const api = async (endpoint) =>
       endpoint.includes("/workflows/")
         ? { id: 7, path: rcWorkflowPath }
@@ -367,21 +244,6 @@ describe("归档拒绝不完整来源", () => {
           : f.run;
     await expect(verifyProvenance(f.manifest, api)).resolves.toBe(f.artifact);
   });
-  for (const profile of ["fastify", "no-pipeline"])
-    it(`保留旧归档 profile ${profile} 的只读校验兼容`, () => {
-      const f = legacyFixture(profile);
-      expect(validateBatch(f.files)).toEqual(f.manifest);
-    });
-  for (const profile of ["fastify", "no-pipeline"])
-    it(`仅迁移固定身份的历史初始化批次 ${profile}`, () => {
-      const f = historicalFixture(profile);
-      expect(validateBatch(f.files)).toEqual(f.manifest);
-
-      const record = JSON.parse(f.files["nova-0-1-1.json"]);
-      record.target.version = "9.9.9";
-      f.files["nova-0-1-1.json"] = JSON.stringify(record);
-      expect(() => validateBatch(f.files)).toThrow("Invalid historical Nova identity");
-    });
   for (const [field, value] of [
     ["status", "in_progress"],
     ["conclusion", "failure"],

@@ -108,17 +108,6 @@ export async function discoverArchiveBatches(root) {
         );
   }
 
-  // 第一版归档位于 .benchmark/<suite>/<batch>。它是只读兼容来源，新的写入不再使用该路径
-  for (const suite of await directoryEntries(archive))
-    if (suite.isDirectory() && suitePattern.test(suite.name))
-      batches.push(
-        ...(await batchesIn(path.join(archive, suite.name), {
-          collection: "legacy",
-          releaseTag: null,
-          suite: suite.name,
-        })),
-      );
-
   return batches.toSorted((left, right) =>
     `${left.collection}/${left.releaseTag ?? ""}/${left.suite}/${left.batch}`.localeCompare(
       `${right.collection}/${right.releaseTag ?? ""}/${right.suite}/${right.batch}`,
