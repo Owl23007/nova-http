@@ -8,7 +8,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { validateBatch, validatePullRequest } from "./archive.js";
+import { validateBatch, validateLegacyCleanup, validatePullRequest } from "./archive.js";
 import { archiveBatchPath, parseArchiveFile } from "./archive-layout.js";
 import { writeArchiveReport } from "./archive-report.js";
 import { createGitHubAPI, loadVerifiedBatch } from "./remote.js";
@@ -38,72 +38,94 @@ if (process.argv[2] === "check") {
   ) {
     console.log("Pull request does not modify benchmark archives");
   } else {
-    const groups = new Map();
-    for (const change of changes) {
-      const location = parseArchiveFile(change.filename);
-      if (change.status !== "added" || !location)
-        throw new Error("Archive changes must only add JSON files through an archive pull request");
-      const directory = path.posix.dirname(change.filename);
-      if (!groups.has(directory)) groups.set(directory, { files: {}, changes: [], location });
-      const group = groups.get(directory);
-      if (
-        group.location.collection !== location.collection ||
-        group.location.releaseTag !== location.releaseTag ||
-        group.location.suite !== location.suite ||
-        group.location.batch !== location.batch
-      )
-        throw new Error("Archive path identities do not match");
-      const blob = await api("/git/blobs/" + change.sha);
-      if (blob.size > 10_000_000 || blob.encoding !== "base64")
-        throw new Error("Invalid file size or encoding");
-      const name = path.posix.basename(change.filename);
-      if (Object.hasOwn(group.files, name)) throw new Error("Duplicate file");
-      group.files[name] = Buffer.from(blob.content, "base64").toString("utf8");
-      group.changes.push(change);
-    }
-    if (groups.size !== 1) throw new Error("An archive must contain exactly one batch");
-    const batches = [...groups.values()].map((group) => ({
-      ...group,
-      manifest: validateBatch(group.files),
-    }));
-    const master = await api("/git/trees/master?recursive=1");
-    const head = await api("/git/trees/" + pr.head.sha + "?recursive=1");
-    if (master.truncated || head.truncated) throw new Error("Could not read the complete Git tree");
-    for (const change of changes)
-      if (
-        !head.tree.some(
-          (entry) =>
-            entry.path === change.filename &&
-            entry.mode === "100644" &&
-            entry.type === "blob" &&
-            entry.sha === change.sha,
+    const archiveChanges = changes.filter(
+      (change) =>
+        change.filename.startsWith(".benchmark/") ||
+        change.previous_filename?.startsWith(".benchmark/"),
+    );
+    const legacyCleanup = archiveChanges.every(
+      (change) => change.status === "removed" && change.filename.startsWith(".benchmark/http-v1/"),
+    );
+    if (legacyCleanup) {
+      const master = await api("/git/trees/master?recursive=1");
+      if (master.truncated) throw new Error("Could not read the complete Git tree");
+      validateLegacyCleanup(changes, master.tree);
+      if ((await api("/pulls/" + number)).head.sha !== pr.head.sha)
+        throw new Error("Pull request changed during validation");
+      if ((await api("/git/trees/master")).sha !== master.sha)
+        throw new Error("Master changed during validation");
+      console.log(`Legacy archive cleanup validation passed: ${archiveChanges.length} file(s)`);
+    } else {
+      const groups = new Map();
+      for (const change of changes) {
+        const location = parseArchiveFile(change.filename);
+        if (change.status !== "added" || !location)
+          throw new Error(
+            "Archive changes must only add JSON files through an archive pull request",
+          );
+        const directory = path.posix.dirname(change.filename);
+        if (!groups.has(directory)) groups.set(directory, { files: {}, changes: [], location });
+        const group = groups.get(directory);
+        if (
+          group.location.collection !== location.collection ||
+          group.location.releaseTag !== location.releaseTag ||
+          group.location.suite !== location.suite ||
+          group.location.batch !== location.batch
         )
-      )
-        throw new Error("Symbolic links and special files are not allowed");
-    for (const batch of batches) {
-      const manifest = batch.manifest;
-      if (manifest.repository !== repository) throw new Error("Repository does not match");
-      const verified = await loadVerifiedBatch(
-        repository,
-        manifest.runId,
-        manifest.runAttempt,
-        api,
-      );
-      validatePullRequest(
-        pr,
-        batch.changes,
-        master.tree.map((entry) => entry.path),
-        batch.files,
-        verified.files,
-        manifest,
-        batch.location,
-      );
+          throw new Error("Archive path identities do not match");
+        const blob = await api("/git/blobs/" + change.sha);
+        if (blob.size > 10_000_000 || blob.encoding !== "base64")
+          throw new Error("Invalid file size or encoding");
+        const name = path.posix.basename(change.filename);
+        if (Object.hasOwn(group.files, name)) throw new Error("Duplicate file");
+        group.files[name] = Buffer.from(blob.content, "base64").toString("utf8");
+        group.changes.push(change);
+      }
+      if (groups.size !== 1) throw new Error("An archive must contain exactly one batch");
+      const batches = [...groups.values()].map((group) => ({
+        ...group,
+        manifest: validateBatch(group.files),
+      }));
+      const master = await api("/git/trees/master?recursive=1");
+      const head = await api("/git/trees/" + pr.head.sha + "?recursive=1");
+      if (master.truncated || head.truncated)
+        throw new Error("Could not read the complete Git tree");
+      for (const change of changes)
+        if (
+          !head.tree.some(
+            (entry) =>
+              entry.path === change.filename &&
+              entry.mode === "100644" &&
+              entry.type === "blob" &&
+              entry.sha === change.sha,
+          )
+        )
+          throw new Error("Symbolic links and special files are not allowed");
+      for (const batch of batches) {
+        const manifest = batch.manifest;
+        if (manifest.repository !== repository) throw new Error("Repository does not match");
+        const verified = await loadVerifiedBatch(
+          repository,
+          manifest.runId,
+          manifest.runAttempt,
+          api,
+        );
+        validatePullRequest(
+          pr,
+          batch.changes,
+          master.tree.map((entry) => entry.path),
+          batch.files,
+          verified.files,
+          manifest,
+          batch.location,
+        );
+      }
+      if ((await api("/pulls/" + number)).head.sha !== pr.head.sha)
+        throw new Error("Pull request changed during validation");
+      if ((await api("/git/trees/master")).sha !== master.sha)
+        throw new Error("Master changed during validation");
+      console.log(`Archive validation passed: ${batches.length} batch(es)`);
     }
-    if ((await api("/pulls/" + number)).head.sha !== pr.head.sha)
-      throw new Error("Pull request changed during validation");
-    if ((await api("/git/trees/master")).sha !== master.sha)
-      throw new Error("Master changed during validation");
-    console.log(`Archive validation passed: ${batches.length} batch(es)`);
   }
 } else if (process.argv[2] === "promote") {
   const source = {

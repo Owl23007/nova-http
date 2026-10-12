@@ -347,3 +347,34 @@ export function validatePullRequest(
   for (const [name, content] of Object.entries(files))
     assert(content === artifactFiles[name], "Artifact content does not match");
 }
+
+export function validateLegacyCleanup(changes, masterTree) {
+  const archiveChanges = changes.filter(
+    (change) =>
+      change.filename.startsWith(".benchmark/") ||
+      change.previous_filename?.startsWith(".benchmark/"),
+  );
+  const legacyEntries = masterTree.filter(
+    (entry) => entry.path.startsWith(".benchmark/http-v1/") && entry.type === "blob",
+  );
+  assert(archiveChanges.length > 0, "Legacy cleanup is empty");
+  assert(
+    archiveChanges.length === legacyEntries.length &&
+      archiveChanges.every((change) => {
+        const match = change.filename.match(
+          /^\.benchmark\/http-v1\/([1-9]\d*-[1-9]\d*)\/([a-z0-9-]+\.json)$/,
+        );
+        if (change.status !== "removed" || !match || change.previous_filename) return false;
+        const source = legacyEntries.find((entry) => entry.path === change.filename);
+        const destination = masterTree.find(
+          (entry) =>
+            entry.path === `.benchmark/historical/http-v1/${match[1]}/${match[2]}` &&
+            entry.type === "blob",
+        );
+        return (
+          source?.mode === "100644" && source.sha === change.sha && destination?.sha === source.sha
+        );
+      }),
+    "Legacy cleanup must remove complete byte-identical migrated archives",
+  );
+}

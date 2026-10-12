@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   validateBatch,
+  validateLegacyCleanup,
   verifyProvenance,
   validatePullRequest,
   workflowPath,
@@ -312,6 +313,35 @@ describe("归档拒绝不完整来源", () => {
         releaseTag: "v1.2.3",
       }),
     ).not.toThrow();
+  });
+  it("仅允许完整删除与 historical 字节一致的 legacy 归档", () => {
+    const changes = [
+      {
+        status: "removed",
+        filename: ".benchmark/http-v1/123-2/manifest.json",
+        sha: "c".repeat(40),
+      },
+    ];
+    const masterTree = [
+      {
+        path: changes[0].filename,
+        type: "blob",
+        mode: "100644",
+        sha: changes[0].sha,
+      },
+      {
+        path: ".benchmark/historical/http-v1/123-2/manifest.json",
+        type: "blob",
+        mode: "100644",
+        sha: changes[0].sha,
+      },
+    ];
+    expect(() => validateLegacyCleanup(changes, masterTree)).not.toThrow();
+
+    masterTree[1].sha = "d".repeat(40);
+    expect(() => validateLegacyCleanup(changes, masterTree)).toThrow(
+      "Legacy cleanup must remove complete byte-identical migrated archives",
+    );
   });
   it("RC 候选必须包含 Previous Release 基线", () => {
     const f = fixture();
