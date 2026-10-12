@@ -1,48 +1,70 @@
 import { validateRecord, digest } from "./results.js";
 import { profiles, orderForRound } from "../config/profiles.js";
+import { loads } from "../config/loads.js";
 import { scenarios } from "../suites/http/scenarios.js";
+import { archiveBatchPath } from "./archive-layout.js";
 export const workflowPath = ".github/workflows/benchmark.yml";
+export const rcWorkflowPath = ".github/workflows/benchmark-rc.yml";
+export const workflowPaths = new Set([workflowPath, rcWorkflowPath]);
 const assert = (condition, message) => {
   if (!condition) throw new Error(message);
 };
 const numericId = (value) => typeof value === "string" && /^[1-9]\d*$/.test(value);
+const legacyLoads = {
+  fastify: "pipeline-10",
+  "no-pipeline": "pipeline-1",
+};
+
+function archiveConfig(manifest) {
+  const legacyLoad = legacyLoads[manifest.profile];
+  if (legacyLoad) {
+    const config = { ...loads[legacyLoad], ...profiles.full };
+    return { config, digestInput: { profile: config }, legacy: true };
+  }
+  assert(
+    manifest.profile === "full" && Object.hasOwn(loads, manifest.load),
+    "Invalid official load",
+  );
+  return {
+    config: { ...loads[manifest.load], ...profiles.full },
+    digestInput: { profile: profiles.full, load: loads[manifest.load] },
+    legacy: false,
+  };
+}
 
 export function validateBatch(files) {
-  assert(files && Object.hasOwn(files, "manifest.json"), "缺少 manifest");
+  assert(files && Object.hasOwn(files, "manifest.json"), "Missing manifest");
   const manifest = JSON.parse(files["manifest.json"]);
-  assert(manifest.schemaVersion === 1 && manifest.suite === "http-v1", "套件身份无效");
-  assert(manifest.kind === "current", "仅接受当前版本测量归档");
-  assert(
-    ["fastify", "no-pipeline"].includes(manifest.profile) &&
-      Object.hasOwn(scenarios, manifest.scenario),
-    "正式负载无效",
-  );
-  assert(numericId(manifest.runId) && numericId(manifest.runAttempt), "运行身份无效");
+  assert(manifest.schemaVersion === 1 && manifest.suite === "http-v1", "Invalid suite identity");
+  assert(manifest.kind === "current", "Only current-version measurements can be archived");
+  assert(Object.hasOwn(scenarios, manifest.scenario), "Invalid official scenario");
+  const resolved = archiveConfig(manifest);
+  assert(numericId(manifest.runId) && numericId(manifest.runAttempt), "Invalid run identity");
   assert(
     /^[\da-f]{40}$/.test(manifest.commitSha) &&
-      manifest.workflowPath === workflowPath &&
+      workflowPaths.has(manifest.workflowPath) &&
       Number.isInteger(manifest.workflowId),
-    "workflow 身份无效",
+    "Invalid workflow identity",
   );
   assert(
     manifest.artifactName === `benchmark-${manifest.runId}-${manifest.runAttempt}` &&
       manifest.status === "success",
-    "批次未成功或 Artifact 名称无效",
+    "Batch did not succeed or has an invalid artifact name",
   );
   assert(
     Array.isArray(manifest.files) &&
       manifest.files.length > 0 &&
       new Set(manifest.files).size === manifest.files.length,
-    "目标文件列表无效",
+    "Invalid target file list",
   );
   assert(
     manifest.files.every((name) => /^[a-z0-9-]+\.json$/.test(name) && name !== "manifest.json"),
-    "目标文件路径无效",
+    "Invalid target file path",
   );
   assert(
     JSON.stringify(Object.keys(files).toSorted()) ===
       JSON.stringify(["manifest.json", ...manifest.files].toSorted()),
-    "批次文件集合不完整",
+    "Incomplete batch file set",
   );
   const identities = [];
   let environmentDigest;
@@ -55,7 +77,7 @@ export function validateBatch(files) {
           target.package === "node" &&
           target.version === "v24.21.0" &&
           target.source === "runtime",
-        "Node 对照身份无效",
+        "Invalid Node reference identity",
       );
     else if (target.id.startsWith("fastify-"))
       assert(
@@ -64,36 +86,38 @@ export function validateBatch(files) {
           target.version === "5.6.1" &&
           target.source === "lockfile" &&
           target.schema === (target.id === "fastify-schema"),
-        "Fastify 对照身份无效",
+        "Invalid Fastify reference identity",
       );
-    else assert(target.adapter === "nova" && target.package === "nova-http", "Nova 身份无效");
+    else
+      assert(target.adapter === "nova" && target.package === "nova-http", "Invalid Nova identity");
     identities.push(record.target.id);
     assert(
       name === `${record.target.id}.json` &&
         record.suite === manifest.suite &&
         record.load.profile === manifest.profile &&
+        (resolved.legacy || record.load.load === manifest.load) &&
         record.load.scenario === manifest.scenario,
-      "目标与批次不匹配",
-    );
-    const profile = profiles[manifest.profile];
-    assert(
-      Object.entries(profile).every(([key, value]) => record.load[key] === value),
-      "负载参数不一致",
+      "Target does not match batch",
     );
     assert(
-      record.load.configDigest === digest({ profile, scenario: scenarios[manifest.scenario] }),
-      "场景摘要不一致",
+      Object.entries(resolved.config).every(([key, value]) => record.load[key] === value),
+      "Load parameters do not match",
+    );
+    assert(
+      record.load.configDigest ===
+        digest({ ...resolved.digestInput, scenario: scenarios[manifest.scenario] }),
+      "Scenario digest does not match",
     );
     assert(
       record.load.method === scenarios[manifest.scenario].method &&
         record.load.bodyBytes === Buffer.byteLength(scenarios[manifest.scenario].body ?? ""),
-      "请求负载描述不一致",
+      "Request payload description does not match",
     );
     assert(
       record.adapterVersion === 1 &&
         record.metadata.driverSha === manifest.commitSha &&
         record.metadata.dirty === false,
-      "驱动身份无效",
+      "Invalid driver identity",
     );
     const source = record.metadata.source;
     assert(
@@ -102,12 +126,17 @@ export function validateBatch(files) {
         source.runId === manifest.runId &&
         source.runAttempt === manifest.runAttempt &&
         source.workflowSha === manifest.commitSha,
-      "记录来源不匹配",
+      "Record provenance does not match",
     );
-    assert(["push", "schedule", "workflow_dispatch"].includes(source.event), "非正式测量事件");
+    assert(
+      manifest.workflowPath === rcWorkflowPath
+        ? source.event === "workflow_dispatch"
+        : ["push", "schedule", "workflow_dispatch"].includes(source.event),
+      "Unsupported measurement event",
+    );
     const env = record.metadata.environment;
     environmentDigest ??= digest(env);
-    assert(environmentDigest === digest(env), "同批次环境不一致");
+    assert(environmentDigest === digest(env), "Batch environments do not match");
     assert(
       env.node === "v24.21.0" &&
         env.autocannon === "8.0.0" &&
@@ -119,26 +148,38 @@ export function validateBatch(files) {
         env.cpu &&
         env.cores > 0 &&
         env.memory > 0,
-      "正式环境字段不完整或不一致",
+      "Official environment fields are incomplete or inconsistent",
     );
     assert(
-      record.rounds.length === profile.rounds &&
+      record.rounds.length === resolved.config.rounds &&
         record.rounds.every((r, i) => r.status === "success" && r.round === i),
-      "存在失败或重复轮次",
+      "Batch contains failed or duplicate rounds",
     );
-    if (record.target.adapter === "nova")
+    if (record.target.adapter === "nova") {
+      const current = record.target.id === "nova-current";
+      const baseline = record.target.id === "nova-baseline";
       assert(
         record.target.source === "checkout" &&
-          record.target.sha === manifest.commitSha &&
-          record.target.dirty === false,
-        "被测源码身份无效",
+          record.target.dirty === false &&
+          ((current && record.target.sha === manifest.commitSha) ||
+            (baseline &&
+              record.target.baseline === true &&
+              /^[\da-f]{40}$/.test(record.target.sha))),
+        "Invalid measured source identity",
       );
+      if (baseline)
+        assert(
+          record.metadata.baseline?.id === record.target.id &&
+            record.metadata.baseline?.sha === record.target.sha,
+          "Invalid baseline source identity",
+        );
+    }
     for (const r of record.rounds)
       assert(
         Array.isArray(r.order) &&
           new Set(r.order).size === manifest.files.length &&
           r.order.every((id) => manifest.files.includes(`${id}.json`)),
-        "执行顺序不完整",
+        "Incomplete execution order",
       );
     for (const r of record.rounds)
       assert(
@@ -149,22 +190,25 @@ export function validateBatch(files) {
               r.round,
             ),
           ),
-        "未按轮次轮换顺序",
+        "Execution order was not rotated by round",
       );
   }
+  const expected = ["fastify-no-schema", "fastify-schema", "node-http", "nova-current"];
+  if (manifest.workflowPath === rcWorkflowPath) expected.push("nova-baseline");
   assert(
-    JSON.stringify(identities.toSorted()) ===
-      JSON.stringify(["fastify-no-schema", "fastify-schema", "node-http", "nova-current"]),
-    "正式目标集合无效",
+    JSON.stringify(identities.toSorted()) === JSON.stringify(expected.toSorted()),
+    "Invalid official target set",
   );
   return manifest;
 }
 
 export async function verifyProvenance(manifest, api) {
-  const workflow = await api(`/actions/workflows/benchmark.yml`);
+  assert(workflowPaths.has(manifest.workflowPath), "Workflow is not allowed");
+  const workflowName = manifest.workflowPath.slice(manifest.workflowPath.lastIndexOf("/") + 1);
+  const workflow = await api(`/actions/workflows/${workflowName}`);
   assert(
-    workflow.id === manifest.workflowId && workflow.path === workflowPath,
-    "不允许的 workflow",
+    workflow.id === manifest.workflowId && workflow.path === manifest.workflowPath,
+    "Workflow is not allowed",
   );
   const run = await api(`/actions/runs/${manifest.runId}/attempts/${manifest.runAttempt}`);
   assert(
@@ -172,7 +216,7 @@ export async function verifyProvenance(manifest, api) {
       String(run.run_attempt) === manifest.runAttempt &&
       run.status === "completed" &&
       run.conclusion === "success",
-    "测量未成功完成",
+    "Measurement did not complete successfully",
   );
   assert(
     run.repository?.full_name === manifest.repository &&
@@ -180,37 +224,54 @@ export async function verifyProvenance(manifest, api) {
       run.head_branch === "master" &&
       run.head_sha === manifest.commitSha &&
       run.workflow_id === workflow.id &&
-      run.path === workflowPath &&
-      ["push", "schedule", "workflow_dispatch"].includes(run.event),
-    "测量来源不可信",
+      run.path === manifest.workflowPath &&
+      (manifest.workflowPath === rcWorkflowPath
+        ? run.event === "workflow_dispatch"
+        : ["push", "schedule", "workflow_dispatch"].includes(run.event)),
+    "Untrusted measurement provenance",
   );
   const artifacts = await api(`/actions/runs/${manifest.runId}/artifacts?per_page=100`);
   const matches = artifacts.artifacts.filter(
     (artifact) => artifact.name === manifest.artifactName && !artifact.expired,
   );
-  assert(matches.length === 1 && artifacts.total_count <= 100, "Artifact 缺失、过期或不唯一");
+  assert(
+    matches.length === 1 && artifacts.total_count <= 100,
+    "Artifact is missing, expired, or not unique",
+  );
   const artifact = matches[0];
   assert(
     artifact.workflow_run?.id === run.id && artifact.workflow_run?.head_sha === run.head_sha,
-    "Artifact 来源无效",
+    "Invalid artifact provenance",
   );
   return artifact;
 }
 
-export function validatePullRequest(pr, changes, masterPaths, files, artifactFiles, manifest) {
+export function validatePullRequest(
+  pr,
+  changes,
+  masterPaths,
+  files,
+  artifactFiles,
+  manifest,
+  archive = { releaseTag: null },
+) {
   assert(
     pr.user?.login === "github-actions[bot]" && pr.user?.id === 41898282 && pr.user?.type === "Bot",
-    "仅允许 Action 机器人归档",
+    "Only the GitHub Actions bot may create archives",
   );
   assert(
     pr.base.ref === "master" &&
       pr.base.repo.full_name === manifest.repository &&
       pr.head.repo?.full_name === manifest.repository &&
-      pr.head.ref === `benchmark/${manifest.runId}-${manifest.runAttempt}`,
-    "归档 PR 来源无效",
+      pr.head.ref ===
+        `benchmark/${archive.releaseTag ? `${archive.releaseTag}-` : ""}${manifest.runId}-${manifest.runAttempt}`,
+    "Invalid archive pull request provenance",
   );
-  const prefix = `.benchmark/${manifest.suite}/${manifest.runId}-${manifest.runAttempt}/`;
-  assert(!masterPaths.some((name) => name.startsWith(prefix)), "批次已存在");
+  const prefix = archiveBatchPath(
+    manifest,
+    archive.releaseTag ? { releaseTag: archive.releaseTag } : {},
+  );
+  assert(!masterPaths.some((name) => name.startsWith(prefix)), "Batch already exists");
   assert(
     changes.length === Object.keys(files).length &&
       changes.every(
@@ -219,13 +280,13 @@ export function validatePullRequest(pr, changes, masterPaths, files, artifactFil
           change.filename.startsWith(prefix) &&
           !masterPaths.includes(change.filename),
       ),
-    "归档只能追加新批次",
+    "An archive may only append a new batch",
   );
   assert(
     JSON.stringify(Object.keys(files).toSorted()) ===
       JSON.stringify(Object.keys(artifactFiles).toSorted()),
-    "Artifact 文件集合不一致",
+    "Artifact file set does not match",
   );
   for (const [name, content] of Object.entries(files))
-    assert(content === artifactFiles[name], "Artifact 内容不一致");
+    assert(content === artifactFiles[name], "Artifact content does not match");
 }

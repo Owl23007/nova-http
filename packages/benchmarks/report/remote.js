@@ -3,7 +3,7 @@ import { validateBatch, verifyProvenance } from "./archive.js";
 
 export function createGitHubAPI(repository, token) {
   if (!/^[\w.-]+\/[\w.-]+$/.test(repository ?? "") || !token)
-    throw new Error("缺少 GitHub 来源配置");
+    throw new Error("Missing GitHub provenance configuration");
   return async (endpoint, raw = false) => {
     const response = await fetch(`https://api.github.com/repos/${repository}${endpoint}`, {
       headers: {
@@ -19,7 +19,7 @@ export function createGitHubAPI(repository, token) {
 }
 
 export async function downloadArtifact(api, artifact) {
-  if (artifact.size_in_bytes > 30_000_000) throw new Error("Artifact 超过大小限制");
+  if (artifact.size_in_bytes > 30_000_000) throw new Error("Artifact exceeds the size limit");
   return decodeArtifact(await api(`/actions/artifacts/${artifact.id}/zip`, true));
 }
 
@@ -31,13 +31,14 @@ export async function loadVerifiedBatch(
   download = downloadArtifact,
 ) {
   if (![runId, runAttempt].every((value) => typeof value === "string" && /^[1-9]\d*$/.test(value)))
-    throw new Error("批次引用无效");
+    throw new Error("Invalid batch reference");
   const run = await api(`/actions/runs/${runId}/attempts/${runAttempt}`);
   const identity = {
     repository,
     runId,
     runAttempt,
     workflowId: run.workflow_id,
+    workflowPath: run.path,
     commitSha: run.head_sha,
     artifactName: `benchmark-${runId}-${runAttempt}`,
   };
@@ -51,6 +52,6 @@ export async function loadVerifiedBatch(
     manifest.commitSha !== run.head_sha ||
     manifest.workflowId !== run.workflow_id
   )
-    throw new Error("Artifact 与引用批次不匹配");
+    throw new Error("Artifact does not match the referenced batch");
   return { manifest, files, artifact };
 }

@@ -4,11 +4,14 @@ import {
   verifyProvenance,
   validatePullRequest,
   workflowPath,
+  rcWorkflowPath,
 } from "../report/archive.js";
 import { digest, metrics, summarize } from "../report/results.js";
 import { profiles, orderForRound } from "../config/profiles.js";
+import { loads } from "../config/loads.js";
 import { scenarios } from "../suites/http/scenarios.js";
 import { loadVerifiedBatch } from "../report/remote.js";
+import { archiveBatchPath, parseArchiveFile } from "../report/archive-layout.js";
 
 const sha = "a".repeat(40);
 const repository = "owner/repo";
@@ -18,7 +21,8 @@ function fixture() {
     schemaVersion: 1,
     kind: "current",
     suite: "http-v1",
-    profile: "fastify",
+    profile: "full",
+    load: "pipeline-10",
     scenario: "json-small",
     repository,
     runId: "123",
@@ -94,12 +98,18 @@ function fixture() {
         },
       },
       load: {
-        ...profiles.fastify,
+        ...loads["pipeline-10"],
+        ...profiles.full,
         method: "GET",
         bodyBytes: 0,
-        profile: "fastify",
+        profile: "full",
+        load: "pipeline-10",
         scenario: "json-small",
-        configDigest: digest({ profile: profiles.fastify, scenario: scenarios["json-small"] }),
+        configDigest: digest({
+          profile: profiles.full,
+          load: loads["pipeline-10"],
+          scenario: scenarios["json-small"],
+        }),
       },
       rounds,
       statistics: summarize(rounds),
@@ -137,12 +147,72 @@ function fixture() {
   };
   const changes = Object.keys(files).map((name) => ({
     status: "added",
-    filename: `.benchmark/http-v1/123-2/${name}`,
+    filename: `.benchmark/historical/http-v1/123-2/${name}`,
   }));
   return { manifest, files, run, artifact, api, pr, changes };
 }
 
+function legacyFixture(profile) {
+  const f = fixture();
+  const loadName = profile === "fastify" ? "pipeline-10" : "pipeline-1";
+  const legacyProfile = { ...loads[loadName], ...profiles.full };
+  f.manifest.profile = profile;
+  delete f.manifest.load;
+  f.files["manifest.json"] = JSON.stringify(f.manifest);
+  for (const name of f.manifest.files) {
+    const record = JSON.parse(f.files[name]);
+    Object.assign(record.load, legacyProfile, {
+      profile,
+      configDigest: digest({
+        profile: legacyProfile,
+        scenario: scenarios[record.load.scenario],
+      }),
+    });
+    delete record.load.load;
+    f.files[name] = JSON.stringify(record);
+  }
+  return f;
+}
+
+function rcFixture() {
+  const f = fixture();
+  const baselineId = "nova-baseline";
+  const baselineSha = "b".repeat(40);
+  const ids = [...f.manifest.files.map((name) => name.slice(0, -5)), baselineId];
+  f.manifest.workflowPath = rcWorkflowPath;
+  f.manifest.files.push(`${baselineId}.json`);
+  for (const name of f.manifest.files.slice(0, -1)) {
+    const record = JSON.parse(f.files[name]);
+    record.metadata.baseline = { id: baselineId, sha: baselineSha };
+    record.metadata.source.event = "workflow_dispatch";
+    for (const round of record.rounds) round.order = orderForRound(ids, round.round);
+    f.files[name] = JSON.stringify(record);
+  }
+  const baseline = JSON.parse(f.files["nova-current.json"]);
+  baseline.target = {
+    ...baseline.target,
+    id: baselineId,
+    sha: baselineSha,
+    baseline: true,
+  };
+  f.files[`${baselineId}.json`] = JSON.stringify(baseline);
+  f.files["manifest.json"] = JSON.stringify(f.manifest);
+  return f;
+}
+
 describe("归档拒绝不完整来源", () => {
+  it("按 Historical 与 Release 模型生成和解析归档路径", () => {
+    expect(archiveBatchPath(fixture().manifest)).toBe(".benchmark/historical/http-v1/123-2/");
+    expect(archiveBatchPath({ ...fixture().manifest, releaseTag: "v1.2.3-rc.1" })).toBe(
+      ".benchmark/releases/v1.2.3-rc.1/http-v1/123-2/",
+    );
+    expect(parseArchiveFile(".benchmark/historical/http-v1/123-2/manifest.json")).toMatchObject({
+      collection: "historical",
+      suite: "http-v1",
+      batch: "123-2",
+    });
+    expect(parseArchiveFile(".benchmark/http-v1/123-2/manifest.json")).toBeNull();
+  });
   it("按确切 run 与 attempt 获取并校验 Artifact", async () => {
     const f = fixture();
     const loaded = await loadVerifiedBatch(repository, "123", "2", f.api, async () => f.files);
@@ -171,7 +241,9 @@ describe("归档拒绝不完整来源", () => {
       const f = fixture();
       f.manifest.kind = kind;
       f.files["manifest.json"] = JSON.stringify(f.manifest);
-      expect(() => validateBatch(f.files)).toThrow("仅接受当前版本测量归档");
+      expect(() => validateBatch(f.files)).toThrow(
+        "Only current-version measurements can be archived",
+      );
     });
   it("仅接受成功批次与相同 Artifact", async () => {
     const f = fixture();
@@ -181,6 +253,48 @@ describe("归档拒绝不完整来源", () => {
       validatePullRequest(f.pr, f.changes, [], f.files, f.files, f.manifest),
     ).not.toThrow();
   });
+  it("发布归档使用 release 目录和独立机器人分支", () => {
+    const f = fixture();
+    f.pr.head.ref = "benchmark/v1.2.3-123-2";
+    f.changes = f.changes.map((change) => ({
+      ...change,
+      filename: change.filename.replace(".benchmark/historical/", ".benchmark/releases/v1.2.3/"),
+    }));
+    expect(() =>
+      validatePullRequest(f.pr, f.changes, [], f.files, f.files, f.manifest, {
+        releaseTag: "v1.2.3",
+      }),
+    ).not.toThrow();
+  });
+  it("RC 候选必须包含 Previous Release 基线", () => {
+    const f = fixture();
+    f.manifest.workflowPath = rcWorkflowPath;
+    for (const name of f.manifest.files) {
+      const record = JSON.parse(f.files[name]);
+      record.metadata.source.event = "workflow_dispatch";
+      f.files[name] = JSON.stringify(record);
+    }
+    f.files["manifest.json"] = JSON.stringify(f.manifest);
+    expect(() => validateBatch(f.files)).toThrow("Invalid official target set");
+    expect(validateBatch(rcFixture().files).workflowPath).toBe(rcWorkflowPath);
+  });
+  it("按 manifest 中声明的 RC workflow 验证来源", async () => {
+    const f = rcFixture();
+    f.run.path = rcWorkflowPath;
+    f.run.event = "workflow_dispatch";
+    const api = async (endpoint) =>
+      endpoint.includes("/workflows/")
+        ? { id: 7, path: rcWorkflowPath }
+        : endpoint.includes("/artifacts?")
+          ? { total_count: 1, artifacts: [f.artifact] }
+          : f.run;
+    await expect(verifyProvenance(f.manifest, api)).resolves.toBe(f.artifact);
+  });
+  for (const profile of ["fastify", "no-pipeline"])
+    it(`保留旧归档 profile ${profile} 的只读校验兼容`, () => {
+      const f = legacyFixture(profile);
+      expect(validateBatch(f.files)).toEqual(f.manifest);
+    });
   for (const [field, value] of [
     ["status", "in_progress"],
     ["conclusion", "failure"],
