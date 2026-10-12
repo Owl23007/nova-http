@@ -1,0 +1,106 @@
+name: Benchmark archive
+
+on:
+  pull_request_target:
+    branches: [master]
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Successful Benchmark RC candidate run ID
+        type: string
+        required: true
+      run_attempt:
+        description: Run attempt
+        type: string
+        required: true
+        default: "1"
+      release_tag:
+        description: Optional release tag; empty stores the batch under historical
+        type: string
+        required: false
+  repository_dispatch:
+    types: [benchmark-archive]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  validate:
+    name: Validate archive pull request
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    concurrency:
+      group: benchmark-data-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    steps:
+      # 只执行受保护分支的校验器，PR 文件仅通过 API 当作数据读取
+      - uses: actions/checkout@v7
+        with:
+          ref: master
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.21.0
+      - run: node packages/benchmarks/report/archive-cli.js check
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+  promote:
+    name: Promote verified candidate
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'repository_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: write
+      pull-requests: write
+    concurrency:
+      group: benchmark-archive-${{ inputs.run_id || github.event.client_payload.runId }}-${{ inputs.run_attempt || github.event.client_payload.runAttempt }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: master
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.21.0
+      - name: Verify and promote candidate
+        id: promote
+        run: node packages/benchmarks/report/archive-cli.js promote
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          BENCH_SOURCE_RUN_ID: ${{ inputs.run_id || github.event.client_payload.runId }}
+          BENCH_SOURCE_RUN_ATTEMPT: ${{ inputs.run_attempt || github.event.client_payload.runAttempt }}
+          BENCH_RELEASE_TAG: ${{ inputs.release_tag || github.event.client_payload.releaseTag }}
+      - name: Create archive pull request
+        if: steps.promote.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ steps.promote.outputs.branch }}
+          ARCHIVE_PATH: ${{ steps.promote.outputs.archive-path }}
+          PR_BODY_PATH: ${{ steps.promote.outputs.body-path }}
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          git checkout -b "$BRANCH"
+          git add -- "$ARCHIVE_PATH"
+          git commit -m 'chore(benchmark): 归档基准测试数据'
+
+          gh auth setup-git
+          git push origin "$BRANCH"
+
+          gh pr create \
+            --base master \
+            --head "$BRANCH" \
+            --title 'chore(benchmark): 归档基准测试数据' \
+            --body-file "$PR_BODY_PATH"

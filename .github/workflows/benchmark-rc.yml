@@ -1,0 +1,70 @@
+name: Benchmark RC candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      baseline_ref:
+        description: Previous release tag or immutable commit SHA
+        type: string
+        required: true
+      scenario:
+        description: HTTP scenario for this candidate batch
+        type: choice
+        options: [json-small, text, params-query, json-echo, middleware-5]
+        default: json-small
+      load:
+        description: HTTP load for this candidate batch
+        type: choice
+        options: [pipeline-1, pipeline-10]
+        default: pipeline-10
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  http:
+    name: HTTP full · ${{ inputs.scenario }} · ${{ inputs.load }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    concurrency:
+      group: benchmark-rc-http-${{ inputs.scenario }}-${{ inputs.load }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.21.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Checkout previous release
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.baseline_ref }}
+          path: .tmp/benchmark/work/baseline
+          persist-credentials: false
+      - name: Install previous release
+        working-directory: .tmp/benchmark/work/baseline
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Measure candidate batch
+        id: bench
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BENCH_WORKFLOW_PATH: .github/workflows/benchmark-rc.yml
+        shell: bash
+        run: |
+          export BENCH_WORKFLOW_ID=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/benchmark-rc.yml" --jq .id)
+          pnpm --filter @nova-http/benchmarks bench --profile full --load "${{ inputs.load }}" --scenario "${{ inputs.scenario }}" --baseline-root "$GITHUB_WORKSPACE/.tmp/benchmark/work/baseline"
+      - name: Upload candidate batch
+        if: always() && steps.bench.outputs.results != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: benchmark-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.bench.outputs.results }}/*.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 30

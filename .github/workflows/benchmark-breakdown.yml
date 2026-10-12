@@ -1,0 +1,61 @@
+name: Benchmark breakdown
+
+on:
+  workflow_dispatch:
+    inputs:
+      preset:
+        description: Diagnostic duration (smoke checks functionality only)
+        type: choice
+        options: [smoke, diagnostic, full]
+        default: diagnostic
+      scenarios:
+        description: Comma-separated scenarios
+        type: string
+        default: json-small
+      loads:
+        description: Comma-separated concurrency/pipeline cells
+        type: string
+        default: c100-p1,c100-p10
+      cpu_profile:
+        description: Capture server CPU profiles (adds overhead)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  breakdown:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.21.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Run diagnostic matrix
+        id: breakdown
+        env:
+          PRESET: ${{ inputs.preset }}
+          SCENARIOS: ${{ inputs.scenarios }}
+          LOADS: ${{ inputs.loads }}
+          CPU_PROFILE: ${{ inputs.cpu_profile }}
+        shell: bash
+        run: |
+          args=(--preset "$PRESET" --scenarios "$SCENARIOS" --loads "$LOADS")
+          if [ "$CPU_PROFILE" = true ]; then args+=(--cpu-profile); fi
+          pnpm --filter @nova-http/benchmarks bench:breakdown "${args[@]}"
+      - name: Upload diagnostic evidence
+        if: always() && steps.breakdown.outputs.results != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: breakdown-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.breakdown.outputs.results }}/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 30
