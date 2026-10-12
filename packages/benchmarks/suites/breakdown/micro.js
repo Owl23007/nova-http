@@ -7,15 +7,10 @@ const require = createRequire(import.meta.url);
 
 export function microCases() {
   // 延迟加载构建产物，确保命令先构建 Nova，再读取当前实现
-  const protocol = require("nova-http/protocol/http1");
-  const {
-    Router,
-    Application,
-    NovaRequest,
-    NovaResponse,
-    HeaderBlock,
-    IncomingBody,
-  } = require("nova-http/core");
+  const protocol = require(["nova-http", "protocol", "http1"].join("/"));
+  const { Router, Application, NovaRequest, NovaResponse, HeaderBlock, IncomingBody } = require(
+    ["nova-http", "core"].join("/"),
+  );
   const expected = { hello: "world" };
   const body = JSON.stringify(expected);
   const bytes = Buffer.from("GET / HTTP/1.1\r\nHost: localhost\r\nConnection: keep-alive\r\n\r\n");
