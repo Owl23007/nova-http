@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "kind": "historical-initialization",
+  "suite": "http-v1",
+  "profile": "no-pipeline",
+  "scenario": "json-small",
+  "repository": "Owl23007/nova-http",
+  "runId": "37576143582",
+  "runAttempt": "1",
+  "workflowId": 373080062,
+  "workflowPath": ".github/workflows/benchmark.yml",
+  "commitSha": "313a45b25953aa4658227dbee36b848b8400f069",
+  "artifactName": "benchmark-37576143582-1",
+  "files": [
+    "nova-0-1-1.json",
+    "nova-0-2-0.json",
+    "nova-0-2-1.json",
+    "fastify-schema.json",
+    "fastify-no-schema.json",
+    "node-http.json"
+  ],
+  "status": "success",
+  "replaces": null,
+  "initialization": {
+    "previousBatch": {
+      "runId": "37574028418",
+      "runAttempt": "1"
+    },
+    "completed": [
+      "http-v1/json-small/fastify",
+      "http-v1/json-small/no-pipeline"
+    ],
+    "status": "complete"
+  }
+}
