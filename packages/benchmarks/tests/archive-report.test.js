@@ -34,10 +34,10 @@ describe("benchmark archive report", () => {
     expect(report).toContain("```mermaid\nxychart-beta");
     expect(report).toContain('title "Relative throughput (Node HTTP = 100%)"');
     expect(report).toContain(
-      'x-axis ["Nova", "Fastify (Schema)", "Fastify (No Schema)", "Node HTTP"]',
+      'x-axis ["Nova", "Fastify (Schema)", "Fastify (No Schema)", "Node HTTP", "Nova (Previous Release)"]',
     );
-    expect(report).toContain('y-axis "Relative QPS (%)" 0 --> 110');
-    expect(report).toContain("bar [77.1, 84.73, 92.37, 100]");
+    expect(report).toContain('y-axis "Relative QPS (%)" 0 --> 120');
+    expect(report).toContain("bar [77.1, 84.73, 92.37, 100, 107.63]");
     expect(report).toContain(
       "| Target | Median QPS | vs Node HTTP | Median p99 | QPS CV | Valid rounds |",
     );
@@ -61,9 +61,9 @@ describe("benchmark archive report", () => {
     expect(report).toContain("## Run Configuration");
     expect(report).toContain("## Results");
     expect(report).toContain(
-      "| Target | Median QPS | vs Node HTTP | Median p99 | QPS CV | Valid rounds |",
+      "| Target | Median QPS | vs Nova (Previous Release) | Median p99 | QPS CV | Valid rounds |",
     );
-    expect(report).toContain("| Nova | 1,010 | -22.9% | 4 ms | 0.81% | 3/3 |");
+    expect(report).toContain("| Nova | 1,010 | -28.37% | 4 ms | 0.81% | 3/3 |");
     expect(report).toContain("<summary><strong>Round details</strong></summary>");
     expect(report).toContain("## Interpretation Notes");
     expect(report).not.toMatch(/\p{Script=Han}/u);

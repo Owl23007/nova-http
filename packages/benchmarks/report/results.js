@@ -162,7 +162,7 @@ export function summary(records, { heading = "#" } = {}) {
     "| :--- | :--- |",
     `| Measured at | ${first?.measuredAt ? `\`${first.measuredAt}\`` : "n/a"} |`,
     `| Scenario | \`${load.scenario ?? "n/a"}\` · ${load.method ?? "n/a"} |`,
-    `| Workload | ${load.connections ?? "n/a"} connections · pipeline ${load.pipelining ?? "n/a"} · \`${load.load ?? "legacy"}\` |`,
+    `| Workload | ${load.connections ?? "n/a"} connections · pipeline ${load.pipelining ?? "n/a"} · \`${load.load ?? load.profile ?? "n/a"}\` |`,
     `| Timing | ${load.warmup ?? "n/a"} s warm-up · ${load.rounds ?? "n/a"} × ${load.duration ?? "n/a"} s measured rounds |`,
     `| Runtime | Node ${environment.node ?? "n/a"} · ${environment.os ?? "n/a"}/${environment.arch ?? "n/a"} |`,
     `| Runner | ${markdownCell(environment.cpu ?? "n/a")} · ${environment.cores ?? "n/a"} cores · ${environment.memory ? `${display(environment.memory / 1024 ** 3)} GiB` : "memory n/a"} |`,

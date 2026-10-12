@@ -24,7 +24,7 @@ HTTP、parser、production 使用独立 suite，不合并排行榜。所有本�
 
 HTTP 的 Smoke 默认只运行 Nova 当前构建；PR Compare 和 Full Compare 运行 Fastify schema、Fastify 无 schema、node:http 等完整对照目标。各目标逐轮重启、轮换执行顺序、统一预热与负载，校验状态码、类型、正文及流水线完整性，保存原始轮次、失败原因、来源与环境元数据。失败轮次不计分，缺失指标不填零。
 
-PR baseline 与实际构建版本在同一 job 使用同一驱动测量，只生成 Summary 和 Artifact；Master push 仅运行 Smoke。RC 候选由 `benchmark-rc.yml` 手动运行，归档由 `benchmark-archive.yml` 根据候选 Run ID 独立提升，不会在日常 push 后自动发生。正式 `.benchmark/historical/http-v1/` 和 `.benchmark/releases/<tag>/http-v1/` 仅接受成功 Action 的归档 PR，通过来源、Artifact 一致性及只追加校验后进入 master；旧 `.benchmark/http-v1/` 仅作兼容读取。使用 `node packages/benchmarks/report/render.js` 从 JSON 重建展示文件，未有归档时明确显示无正式数据。
+PR baseline 与实际构建版本在同一 job 使用同一驱动测量，只生成 Summary 和 Artifact；Master push 仅运行 Smoke。RC 候选由 `benchmark-rc.yml` 手动运行，归档由 `benchmark-archive.yml` 根据候选 Run ID 独立提升，不会在日常 push 后自动发生。正式 `.benchmark/historical/http-v1/` 和 `.benchmark/releases/<tag>/http-v1/` 仅接受成功 Action 的归档 PR，通过来源、Artifact 一致性及只追加校验后进入 master。使用 `node packages/benchmarks/report/render.js` 从 JSON 重建展示文件，未有归档时明确显示无正式数据。
 
 历史版本的一次性初始化已完成，归档数据保留供汇总展示，后续测量只使用当前构建、所需 baseline 和对照。归档依赖必需数据检查、CODEOWNERS 审核和允许 Actions 创建 PR 等远端设置，仓库本地测试不代表这些设置已经生效。
 
