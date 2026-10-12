@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 
+// 解码归档 ZIP 文件，返回 JSON 对象
 export function decodeArtifact(zip) {
   // 仅读取白名单普通 JSON，不向磁盘解压不可信路径
   const python = `import sys,io,zipfile,json,stat,re
