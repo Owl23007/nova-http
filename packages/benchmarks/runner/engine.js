@@ -10,6 +10,8 @@ export async function run({
   scenarioName,
   profile,
   profileName,
+  loadConfig = {},
+  loadName,
   metadata,
   signal,
   onRecord = async (_record) => {},
@@ -18,6 +20,7 @@ export async function run({
   pipeline = validatePipeline,
   load = measure,
 }) {
+  const benchmarkConfig = { ...loadConfig, ...profile };
   const records = targets.map((target) => ({
     schemaVersion: 1,
     suite: "http-v1",
@@ -26,12 +29,13 @@ export async function run({
     metadata,
     measuredAt: new Date().toISOString(),
     load: {
-      ...profile,
+      ...benchmarkConfig,
       profile: profileName,
+      ...(loadName ? { load: loadName } : {}),
       scenario: scenarioName,
       method: scenario.method,
       bodyBytes: Buffer.byteLength(scenario.body ?? ""),
-      configDigest: digest({ profile, scenario }),
+      configDigest: digest({ profile, load: loadConfig, scenario }),
     },
     rounds: [],
     statistics: summarize([]),
@@ -58,7 +62,7 @@ export async function run({
           after: false,
           pipelineAfter: false,
         };
-        const warmup = await load(server.port, scenario, profile, profile.warmup, {
+        const warmup = await load(server.port, scenario, benchmarkConfig, profile.warmup, {
           signal,
           child: server.child,
         });
@@ -72,7 +76,7 @@ export async function run({
           throw new Error("预热失败");
         Object.assign(
           result,
-          await load(server.port, scenario, profile, profile.duration, {
+          await load(server.port, scenario, benchmarkConfig, profile.duration, {
             signal,
             child: server.child,
           }),
