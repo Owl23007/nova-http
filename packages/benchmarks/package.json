@@ -4,6 +4,8 @@
   "type": "module",
   "scripts": {
     "bench": "node runner/cli.js",
+    "bench:breakdown": "node suites/breakdown/cli.js",
+    "bench:compare-results": "node suites/breakdown/compare-cli.js",
     "test": "pnpm --filter nova-http build && vitest run",
     "typecheck": "tsc --noEmit",
     "archive:check": "node report/archive-cli.js",

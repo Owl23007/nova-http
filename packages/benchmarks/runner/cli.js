@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 import { execFileSync } from "node:child_process";
 import { parseArgs } from "node:util";
 import { profiles } from "../config/profiles.js";
+import { defaultLoads, loads } from "../config/loads.js";
 import { scenarios } from "../suites/http/scenarios.js";
 import { metadata, git } from "../report/metadata.js";
 import { summary } from "../report/results.js";
@@ -15,14 +16,16 @@ const root = fileURLToPath(new URL("../../../", import.meta.url));
 const { values } = parseArgs({
   options: {
     profile: { type: "string", default: "smoke" },
+    load: { type: "string" },
     scenario: { type: "string", default: "json-small" },
     "baseline-root": { type: "string" },
     "target-root": { type: "string" },
     targets: { type: "string" },
   },
 });
-if (!profiles[values.profile] || !scenarios[values.scenario])
-  throw new Error("未知 profile 或场景");
+const loadName = values.load ?? defaultLoads[values.profile];
+if (!profiles[values.profile] || !loads[loadName] || !scenarios[values.scenario])
+  throw new Error("未知 profile、load 或场景");
 const build = (cwd) => {
   if (!process.env.npm_execpath)
     throw new Error("请通过 pnpm --filter @nova-http/benchmarks bench 运行");
@@ -86,6 +89,8 @@ if (values.targets) {
   )
     throw new Error("目标列表无效");
   targets = targets.filter((t) => selected.includes(t.id));
+} else if (values.profile === "smoke" && !values["baseline-root"]) {
+  targets = targets.filter((t) => t.id === "nova-current");
 }
 const meta = metadata(root);
 meta.baseline = targets.find((target) => target.baseline) ?? null;
@@ -103,6 +108,8 @@ const records = await run({
   scenarioName: values.scenario,
   profile: profiles[values.profile],
   profileName: values.profile,
+  loadConfig: loads[loadName],
+  loadName,
   metadata: meta,
   signal: abort.signal,
   onRecord: async (record) => {
@@ -123,12 +130,13 @@ const manifest = {
   kind: "current",
   suite: "http-v1",
   profile: values.profile,
+  load: loadName,
   scenario: values.scenario,
   repository: meta.source.repository,
   runId: meta.source.runId,
   runAttempt: meta.source.runAttempt,
   workflowId: process.env.BENCH_WORKFLOW_ID ? Number(process.env.BENCH_WORKFLOW_ID) : null,
-  workflowPath: ".github/workflows/benchmark.yml",
+  workflowPath: process.env.BENCH_WORKFLOW_PATH ?? ".github/workflows/benchmark.yml",
   commitSha: meta.source.workflowSha,
   artifactName: meta.source.runId
     ? `benchmark-${meta.source.runId}-${meta.source.runAttempt}`

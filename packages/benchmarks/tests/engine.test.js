@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { run } from "../runner/engine.js";
 import { orderForRound, profiles } from "../config/profiles.js";
+import { loads } from "../config/loads.js";
 import { metrics, stats, digest, summarize, validateRecord } from "../report/results.js";
 import { scenarios } from "../suites/http/scenarios.js";
 
@@ -34,6 +35,8 @@ describe("独立测量和统计", () => {
       scenarioName: "text",
       profile: { ...profiles.smoke, rounds: 2, warmup: 2 },
       profileName: "smoke",
+      loadConfig: loads["pipeline-1"],
+      loadName: "pipeline-1",
       metadata: {},
       start: async () => {
         starts++;
@@ -70,6 +73,8 @@ describe("独立测量和统计", () => {
       scenarioName: "text",
       profile: profiles.smoke,
       profileName: "smoke",
+      loadConfig: loads["pipeline-1"],
+      loadName: "pipeline-1",
       metadata: {},
       start: async () => ({
         port: 1,
@@ -105,7 +110,7 @@ describe("独立测量和统计", () => {
       measuredAt: "2026-10-02T00:00:00.000Z",
       target: { id: "node", version: "24" },
       metadata: { environment: { node: "24" }, source: {} },
-      load: { profile: "smoke", rounds: 1 },
+      load: { profile: "smoke", load: "pipeline-1", rounds: 1 },
       rounds: [round],
       statistics: summarize([round]),
     };

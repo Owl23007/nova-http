@@ -3,6 +3,7 @@ import { startTarget } from "../runner/process.js";
 import { measure } from "../suites/http/driver.js";
 import { scenarios } from "../suites/http/scenarios.js";
 import { profiles } from "../config/profiles.js";
+import { loads } from "../config/loads.js";
 
 it("启动超时会终止进程", async () => {
   await expect(
@@ -29,9 +30,15 @@ it("启动期间接受取消", async () => {
 it("测量期间服务退出不产生成绩", async () => {
   const server = await startTarget({ adapter: "node" }, "text");
   try {
-    const promise = measure(server.port, scenarios.text, profiles.smoke, 10, {
-      child: server.child,
-    });
+    const promise = measure(
+      server.port,
+      scenarios.text,
+      { ...loads["pipeline-1"], ...profiles.smoke },
+      10,
+      {
+        child: server.child,
+      },
+    );
     const assertion = expect(promise).rejects.toThrow("服务退出");
     await server.stop();
     await assertion;
