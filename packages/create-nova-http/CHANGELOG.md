@@ -1,5 +1,11 @@
 # create-nova-http
 
+## 0.3.0
+
+### Minor Changes
+
+- d0b3809: 将最低运行版本提升至 Node.js 20，并同步更新生成项目的运行声明及 TypeScript 模板使用的 Node.js 20 类型定义。
+
 ## 0.2.1
 
 ### Patch Changes

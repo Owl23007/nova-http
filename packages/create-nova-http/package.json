@@ -1,6 +1,6 @@
 {
   "name": "create-nova-http",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Initializer for Nova HTTP projects",
   "keywords": [
     "create",
