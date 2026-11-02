@@ -86,7 +86,7 @@
     "cli:init": "ts-node cli/create-nova.ts"
   },
   "devDependencies": {
-    "@types/node": "^26.6.5",
+    "@types/node": "^26.6.6",
     "@vitest/coverage-v8": "^5.0.5",
     "supertest": "^7.3.1",
     "ts-node": "^10.9.2",
